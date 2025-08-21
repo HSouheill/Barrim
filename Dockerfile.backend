@@ -10,7 +10,7 @@ RUN addgroup -g 1001 -S appuser && \
     adduser -S appuser -u 1001
 
 # Copy pre-built binary into the image
-COPY barrim_backend .
+COPY backend/barrim_backend .
 RUN chmod +x ./barrim_backend
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app
