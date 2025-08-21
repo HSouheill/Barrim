@@ -1,0 +1,122 @@
+// routes/serviceProviders_routes.go
+package routes
+
+import (
+	"log"
+
+	"github.com/HSouheill/barrim_backend/controllers"
+	"github.com/HSouheill/barrim_backend/middleware"
+	"github.com/labstack/echo/v4"
+	"go.mongodb.org/mongo-driver/mongo"
+)
+
+// RegisterServiceProviderRoutes sets up all service provider-related routes
+func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database) {
+	log.Println("Registering service provider routes...")
+
+	serviceProviderSubscriptionController := controllers.NewServiceProviderSubscriptionController(db)
+	salesPersonController := controllers.NewSalesPersonController(db.Client())
+	serviceProviderController := controllers.NewServiceProviderController(db.Client())
+
+	// Service provider routes group
+	serviceProvider := e.Group("/api/service-providers")
+
+	// Public route to get service provider data by ID
+	serviceProvider.GET("/:id/full-data", serviceProviderController.GetFullServiceProviderData)
+	log.Println("Created service provider group at /api/service-providers")
+
+	// Protected routes (require service provider authentication)
+	protected := serviceProvider.Group("")
+	protected.Use(middleware.JWTMiddleware())
+	protected.Use(middleware.RequireUserType("serviceProvider"))
+	log.Println("Added middleware to protected group")
+
+	// Subscription routes with debug logging
+	protected.GET("/subscription-plans", func(c echo.Context) error {
+		log.Printf("Received request for subscription plans from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.GetServiceProviderSubscriptionPlans(c)
+	})
+	log.Println("Registered /subscription-plans endpoint")
+
+	protected.GET("/subscription/current", func(c echo.Context) error {
+		log.Printf("Received request for current subscription from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.GetCurrentSubscription(c)
+	})
+	log.Println("Registered /subscription/current endpoint")
+
+	protected.GET("/subscription/remaining-time", func(c echo.Context) error {
+		log.Printf("Received request for subscription remaining time from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.GetSubscriptionTimeRemaining(c)
+	})
+	log.Println("Registered /subscription/remaining-time endpoint")
+
+	protected.POST("/subscription/cancel", func(c echo.Context) error {
+		log.Printf("Received request to cancel subscription from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.CancelSubscription(c)
+	})
+	log.Println("Registered /subscription/cancel endpoint")
+
+	protected.POST("/subscription-requests", func(c echo.Context) error {
+		log.Printf("Received subscription request from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.CreateServiceProviderSubscription(c)
+	})
+	log.Println("Registered /subscription-requests endpoint")
+
+	// Sponsorship routes for service providers
+	protected.POST("/sponsorship/request", func(c echo.Context) error {
+		log.Printf("Received sponsorship request from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.CreateServiceProviderSponsorshipRequest(c)
+	})
+	log.Println("Registered /sponsorship/request endpoint")
+
+	protected.GET("/sponsorship/remaining-time", func(c echo.Context) error {
+		log.Printf("Received request for sponsorship remaining time from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.GetServiceProviderSponsorshipRemainingTime(c)
+	})
+	log.Println("Registered /sponsorship/remaining-time endpoint")
+
+	// Service provider profile routes
+	protected.GET("/profile", func(c echo.Context) error {
+		log.Printf("Received request for service provider profile from %s", c.Request().RemoteAddr)
+		// TODO: Implement GetServiceProviderProfile
+		return c.JSON(501, map[string]string{"message": "Not implemented yet"})
+	})
+	log.Println("Registered /profile endpoint")
+
+	protected.PUT("/profile", func(c echo.Context) error {
+		log.Printf("Received request to update service provider profile from %s", c.Request().RemoteAddr)
+		// TODO: Implement UpdateServiceProviderProfile
+		return c.JSON(501, map[string]string{"message": "Not implemented yet"})
+	})
+	log.Println("Registered /profile update endpoint")
+
+	// Toggle status route - service providers can toggle their own status
+	protected.PUT("/toggle-status/:id", func(c echo.Context) error {
+		log.Printf("Received request to toggle service provider status from %s", c.Request().RemoteAddr)
+		return serviceProviderController.ToggleEntityStatus(c)
+	})
+	log.Println("Registered /toggle-status/:id endpoint")
+
+	// Public routes (no authentication required)
+	public := serviceProvider.Group("")
+
+	// Registration route (handled by sales person)
+	public.POST("/register", func(c echo.Context) error {
+		log.Printf("Received service provider registration request from %s", c.Request().RemoteAddr)
+		return salesPersonController.CreateServiceProvider(c)
+	})
+	log.Println("Registered /register endpoint")
+
+	// Admin/Manager routes for toggling any service provider status
+	adminGroup := serviceProvider.Group("/admin")
+	adminGroup.Use(middleware.JWTMiddleware())
+	adminGroup.Use(middleware.RequireUserType("admin", "manager", "sales_manager"))
+
+	adminGroup.PUT("/toggle-status/:id", func(c echo.Context) error {
+		log.Printf("Received admin request to toggle service provider status from %s", c.Request().RemoteAddr)
+		return serviceProviderController.ToggleEntityStatus(c)
+	})
+	log.Println("Registered admin /toggle-status/:id endpoint")
+
+	log.Println("Finished registering all service provider routes")
+}
