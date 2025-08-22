@@ -5,7 +5,7 @@ services:
     container_name: mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}
@@ -32,7 +32,7 @@ services:
     container_name: barrim-backend
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - MONGODB_URI=mongodb://admin:${MONGO_PASSWORD}@mongodb:27017/?authSource=admin
       - GIN_MODE=release
@@ -67,7 +67,7 @@ services:
     container_name: admin-dashboard
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
     networks:
