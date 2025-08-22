@@ -26,7 +26,5 @@ func SetupRoutes(e *echo.Echo, db *mongo.Client, hub *websocket.Hub, authControl
 
 	// Register existing route files
 	RegisterAdminRoutes(e, db.Database("barrim"))
-	RegisterServiceProviderRoutes(e, db.Database("barrim"))
-	RegisterWholesalerRoutes(e, db.Database("barrim"))
-	// Note: Company routes and Wholesaler referral routes are registered in main.go
+	// Note: Service provider routes, wholesaler routes, company routes, and wholesaler referral routes are registered in main.go
 }
