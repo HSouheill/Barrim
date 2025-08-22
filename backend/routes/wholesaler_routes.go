@@ -57,6 +57,7 @@ func RegisterWholesalerRoutes(e *echo.Echo, db *mongo.Database) {
 	wholesalerGroup.Use(middleware.JWTMiddleware())
 	wholesalerGroup.Use(middleware.RequireUserType("wholesaler"))
 	protected.Use(middleware.DebugMiddleware())
+	wholesalerGroup.Use(middleware.DebugMiddleware())
 
 	wholesalerGroup.POST("/subscription/:branchId/request", wholesalerBranchSubscriptionController.CreateBranchSubscriptionRequest)
 	wholesalerGroup.GET("/subscription/request/:branchId/status", wholesalerBranchSubscriptionController.GetBranchSubscriptionRequestStatus)
