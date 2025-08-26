@@ -134,9 +134,10 @@ type UpdateSocialLinksRequest struct {
 
 // AuthRequest models
 type LoginRequest struct {
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
-	Password string `json:"password"`
+	Email      string `json:"email,omitempty"`
+	Phone      string `json:"phone,omitempty"`
+	Password   string `json:"password"`
+	RememberMe bool   `json:"rememberMe,omitempty"`
 }
 
 type UpdateLocationRequest struct {

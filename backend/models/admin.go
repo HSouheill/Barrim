@@ -97,3 +97,25 @@ func (a *Admin) GetCompanyLocations() ([]Location, error) {
 	// Implementation for getting company locations
 	return nil, nil
 }
+
+// AdminWallet represents the actual money movements in the admin wallet
+type AdminWallet struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	Type        string             `bson:"type" json:"type"` // "subscription_income", "withdrawal_income", "commission_paid"
+	Amount      float64            `bson:"amount" json:"amount"`
+	Description string             `bson:"description" json:"description"`
+	EntityID    primitive.ObjectID `bson:"entityId,omitempty" json:"entityId,omitempty"`     // ID of the related entity (subscription, withdrawal, etc.)
+	EntityType  string             `bson:"entityType,omitempty" json:"entityType,omitempty"` // Type of entity
+	CreatedAt   time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt   time.Time          `bson:"updatedAt" json:"updatedAt"`
+}
+
+// AdminWalletBalance represents the current balance of the admin wallet
+type AdminWalletBalance struct {
+	ID                    primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	TotalIncome           float64            `bson:"totalIncome" json:"totalIncome"`
+	TotalWithdrawalIncome float64            `bson:"totalWithdrawalIncome" json:"totalWithdrawalIncome"`
+	TotalCommissionsPaid  float64            `bson:"totalCommissionsPaid" json:"totalCommissionsPaid"`
+	NetBalance            float64            `bson:"netBalance" json:"netBalance"`
+	LastUpdated           time.Time          `bson:"lastUpdated" json:"lastUpdated"`
+}

@@ -39,6 +39,9 @@ func main() {
 	// Initialize Firebase
 	config.InitFirebase()
 
+	// Connect to Redis
+	config.ConnectRedis()
+
 	// Connect to database
 	client := config.ConnectDB()
 	barrimDB := client.Database("barrim") // Ensure consistent database reference

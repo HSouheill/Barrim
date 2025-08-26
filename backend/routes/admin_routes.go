@@ -45,8 +45,9 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database) {
 	protected.DELETE("/users/:id", adminController.DeleteUser)
 	protected.GET("/companies", companyController.GetAllCompanies)
 
-	// Admin wallet route
+	// Admin wallet routes
 	protected.GET("/wallet", adminController.GetAdminWallet)
+	protected.GET("/wallet/transactions", adminController.GetAdminWalletTransactions)
 
 	// All entities route
 	protected.GET("/all-entities", adminController.GetAllEntities)

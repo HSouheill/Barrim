@@ -7,12 +7,13 @@ type SignupRequest struct {
 	Password        string    `json:"password"`
 	FullName        string    `json:"fullName"`
 	UserType        string    `json:"userType"` // "user", "company", "wholesaler", "serviceProvider"
-	DateOfBirth     string    `json:"dateOfBirth,omitempty"`
-	Gender          string    `json:"gender,omitempty"`
-	Phone           string    `json:"phone,omitempty"`
+	DateOfBirth     string    `json:"dateOfBirth"`
+	Gender          string    `json:"gender"`
+	Phone           string    `json:"phone"`
+	ProfilePic      string    `json:"profilePic,omitempty" bson:"profilePic,omitempty"`
 	ReferralCode    string    `json:"referralCode,omitempty"`
-	InterestedDeals []string  `json:"interestedDeals,omitempty" bson:"interestedDeals,omitempty"`
-	Location        *Location `json:"location,omitempty" bson:"location,omitempty"`
+	InterestedDeals []string  `json:"interestedDeals" bson:"interestedDeals"`
+	Location        *Location `json:"location" bson:"location"`
 	LogoPath        string    `json:"logoPath,omitempty" bson:"logoPath,omitempty"`
 	// Only for company signups
 	CompanyData *CompanySignupData `json:"companyData,omitempty"`

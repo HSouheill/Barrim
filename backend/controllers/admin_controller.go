@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"net/http"
 	"os"
@@ -3571,9 +3572,27 @@ func (ac *AdminController) GetAdminWallet(c echo.Context) error {
 		// Continue without breakdown rather than failing completely
 	}
 
+	// Get withdrawal income from admin wallet collection
+	var withdrawalIncome float64
+	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{"type": "withdrawal_income"})
+	if err == nil {
+		defer cursor.Close(ctx)
+		for cursor.Next(ctx) {
+			var transaction models.AdminWallet
+			if err := cursor.Decode(&transaction); err == nil {
+				withdrawalIncome += transaction.Amount
+			}
+		}
+	}
+
+	// Calculate total admin wallet balance including withdrawal income
+	totalAdminWallet := totalIncome + withdrawalIncome - totalCommissions
+
 	walletData := map[string]interface{}{
 		"totalIncome":         totalIncome,
 		"totalCommissions":    totalCommissions,
+		"withdrawalIncome":    withdrawalIncome,
+		"totalAdminWallet":    totalAdminWallet,
 		"netProfit":           netProfit,
 		"incomeBreakdown":     incomeBreakdown,
 		"commissionBreakdown": commissionBreakdown,
@@ -4874,6 +4893,94 @@ func (ac *AdminController) GetAllSalespersons(c echo.Context) error {
 		Data: map[string]interface{}{
 			"count":        len(enrichedSalespersons),
 			"salespersons": enrichedSalespersons,
+		},
+	})
+}
+
+// GetAdminWalletTransactions retrieves detailed transactions from the admin wallet
+func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins can access admin wallet transactions",
+		})
+	}
+
+	// Get pagination parameters
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	skip := (page - 1) * limit
+
+	// Get transactions from admin_wallet collection
+	cursor, err := ac.DB.Collection("admin_wallet").Find(
+		ctx,
+		bson.M{},
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}).SetSkip(int64(skip)).SetLimit(int64(limit)),
+	)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve admin wallet transactions",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	var transactions []models.AdminWallet
+	if err = cursor.All(ctx, &transactions); err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode admin wallet transactions",
+		})
+	}
+
+	// Get total count for pagination
+	totalCount, err := ac.DB.Collection("admin_wallet").CountDocuments(ctx, bson.M{})
+	if err != nil {
+		log.Printf("Error counting admin wallet transactions: %v", err)
+		totalCount = 0
+	}
+
+	// Calculate summary statistics
+	var totalIncome, totalWithdrawalIncome, totalCommissionsPaid float64
+	for _, transaction := range transactions {
+		switch transaction.Type {
+		case "subscription_income":
+			totalIncome += transaction.Amount
+		case "withdrawal_income":
+			totalWithdrawalIncome += transaction.Amount
+		case "commission_paid":
+			totalCommissionsPaid += transaction.Amount
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Admin wallet transactions retrieved successfully",
+		Data: map[string]interface{}{
+			"transactions": transactions,
+			"pagination": map[string]interface{}{
+				"page":       page,
+				"limit":      limit,
+				"totalCount": totalCount,
+				"totalPages": int(math.Ceil(float64(totalCount) / float64(limit))),
+			},
+			"summary": map[string]interface{}{
+				"totalIncome":           totalIncome,
+				"totalWithdrawalIncome": totalWithdrawalIncome,
+				"totalCommissionsPaid":  totalCommissionsPaid,
+			},
 		},
 	})
 }

@@ -30,6 +30,8 @@ func RegisterAuthRoutes(e *echo.Echo, db *mongo.Client, authController *controll
 	e.POST("/api/auth/google-auth-without-firebase", authController.GoogleAuthWithoutFirebase)
 	e.GET("/api/auth/validate-token", authController.ValidateToken)
 	e.POST("/api/auth/refresh-token", authController.RefreshToken)
+	e.POST("/api/auth/remember-me/get", authController.GetRememberedCredentials)
+	e.POST("/api/auth/remember-me/remove", authController.RemoveRememberedCredentials)
 	e.POST("/api/auth/forget-password", passwordController.ForgetPassword)
 	e.POST("/api/auth/verify-otp", passwordController.VerifyOTP)
 	e.POST("/api/auth/reset-password", passwordController.ResetPassword)

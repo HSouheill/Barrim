@@ -1,7 +1,7 @@
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests and curl for health checks
-RUN apk --no-cache add ca-certificates curl tzdata
+# Install ca-certificates for HTTPS requests, curl for health checks, and redis-cli for debugging
+RUN apk --no-cache add ca-certificates curl tzdata redis
 
 WORKDIR /app
 

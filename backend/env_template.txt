@@ -1,0 +1,34 @@
+# Database Configuration
+MONGO_PASSWORD=your_mongodb_password_here
+DB_NAME=barrim
+
+# JWT Configuration
+JWT_SECRET=your_very_secure_jwt_secret_key_here
+
+# Redis Configuration
+REDIS_ADDR=localhost:6379
+REDIS_PASSWORD=your_redis_password_here
+REDIS_DB=0
+
+# Remember Me Encryption Key (32 bytes recommended)
+# Generate a secure key: openssl rand -base64 32
+REMEMBER_ME_ENCRYPTION_KEY=your_32_byte_encryption_key_here
+
+# Twilio Configuration
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_PHONE_NUMBER=your_twilio_phone_number
+TWILIO_VERIFY_SERVICE_SID=your_twilio_verify_service_sid
+
+# Admin Configuration
+ADMIN_EMAIL=admin@barrim.com
+ADMIN_PASSWORD=your_admin_password
+SUPER_ADMIN_EMAIL=superadmin@barrim.com
+SUPER_ADMIN_PASSWORD=your_super_admin_password
+
+# Server Configuration
+PORT=8080
+GIN_MODE=release
+
+# Google Application Credentials
+GOOGLE_APPLICATION_CREDENTIALS=path_to_your_firebase_credentials.json

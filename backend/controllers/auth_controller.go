@@ -96,6 +96,7 @@ func NewAuthController(db *mongo.Client) *AuthController {
 	// Start the OTP cleanup routine
 	go ac.startOTPCleanupRoutine()
 	go ac.startLoginAttemptCleanupRoutine()
+	go ac.startRememberMeCleanupRoutine()
 
 	return ac
 }
@@ -208,10 +209,63 @@ func (ac *AuthController) Signup(c echo.Context) error {
 	// Sanitize other fields
 	req.FullName = utils.SanitizeInput(req.FullName)
 	req.UserType = utils.SanitizeInput(req.UserType)
+	req.DateOfBirth = utils.SanitizeInput(req.DateOfBirth)
+	req.Gender = utils.SanitizeInput(req.Gender)
+	// ProfilePic is optional, only sanitize if provided
+	if req.ProfilePic != "" {
+		req.ProfilePic = utils.SanitizeInput(req.ProfilePic)
+	}
 
 	// Ensure consistent user type for wholesalers
 	if strings.ToLower(req.UserType) == "wholesaler" {
 		req.UserType = "wholesaler"
+	}
+
+	// Validate required fields for regular users
+	if req.UserType == "user" {
+		if req.DateOfBirth == "" {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Date of birth is required",
+			})
+		}
+		if req.Gender == "" {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Gender is required",
+			})
+		}
+		// ProfilePic is optional, so no validation needed
+		if len(req.InterestedDeals) == 0 {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "At least one interested deal is required",
+			})
+		}
+		if req.Location == nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Location is required",
+			})
+		}
+		// Validate location fields
+		if req.Location.Country == "" || req.Location.City == "" || req.Location.Street == "" {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Country, city, and street are required in location",
+			})
+		}
+		// Sanitize location fields
+		req.Location.Country = utils.SanitizeInput(req.Location.Country)
+		req.Location.City = utils.SanitizeInput(req.Location.City)
+		req.Location.Street = utils.SanitizeInput(req.Location.Street)
+		req.Location.District = utils.SanitizeInput(req.Location.District)
+		req.Location.PostalCode = utils.SanitizeInput(req.Location.PostalCode)
+
+		// Sanitize interested deals
+		for i, deal := range req.InterestedDeals {
+			req.InterestedDeals[i] = utils.SanitizeInput(deal)
+		}
 	}
 
 	ctx := context.Background()
@@ -1035,15 +1089,53 @@ func (ac *AuthController) Login(c echo.Context) error {
 	user.Password = ""
 	user.OTPInfo = nil
 
+	// Handle "Remember Me" functionality
+	var rememberMeToken string
+	if loginReq.RememberMe {
+		// Get Redis client
+		redisClient := config.GetRedisClient()
+		if redisClient != nil {
+			// Generate remember me token
+			rememberMeToken, err = utils.GenerateRememberMeToken()
+			if err == nil {
+				// Create remembered credentials
+				credentials := utils.RememberedCredentials{
+					Email:      user.Email,
+					Phone:      user.Phone,
+					UserType:   user.UserType,
+					UserID:     user.ID.Hex(),
+					ExpiresAt:  time.Now().AddDate(0, 1, 0), // 1 month expiration
+					DeviceInfo: c.Request().UserAgent(),
+				}
+
+				// Store in Redis
+				err = utils.StoreRememberedCredentials(redisClient, rememberMeToken, credentials, 30*24*time.Hour) // 30 days
+				if err != nil {
+					ac.logger.Printf("Failed to store remember me credentials: %v", err)
+					// Don't fail login if remember me fails
+					rememberMeToken = ""
+				}
+			}
+		}
+	}
+
+	// Prepare response data
+	responseData := map[string]interface{}{
+		"token":        token,
+		"refreshToken": refreshToken,
+		"user":         user, // Return the full user object (without password and OTP)
+	}
+
+	// Add remember me token if available
+	if rememberMeToken != "" {
+		responseData["rememberMeToken"] = rememberMeToken
+	}
+
 	// Return the token and more complete user info
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Login successful",
-		Data: map[string]interface{}{
-			"token":        token,
-			"refreshToken": refreshToken,
-			"user":         user, // Return the full user object (without password and OTP)
-		},
+		Data:    responseData,
 	})
 }
 
@@ -1472,17 +1564,28 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 	// Generate referral code for all types
 	referralCode := generateReferralCode()
 
+	// If a referral code was provided, use it instead of generating a new one
+	if signupData.ReferralCode != "" {
+		referralCode = signupData.ReferralCode
+	}
+
 	user := models.User{
-		ID:            userID,
-		Email:         signupData.Email,
-		Password:      string(hashedPassword),
-		FullName:      signupData.FullName,
-		Phone:         signupData.Phone,
-		UserType:      signupData.UserType,
-		Status:        "pending", // Set to pending until manager approval
-		PhoneVerified: true,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:              userID,
+		Email:           signupData.Email,
+		Password:        string(hashedPassword),
+		FullName:        signupData.FullName,
+		Phone:           signupData.Phone,
+		UserType:        signupData.UserType,
+		DateOfBirth:     signupData.DateOfBirth,
+		Gender:          signupData.Gender,
+		ProfilePic:      signupData.ProfilePic, // Optional field
+		ReferralCode:    referralCode,
+		InterestedDeals: signupData.InterestedDeals,
+		Location:        signupData.Location,
+		Status:          "pending", // Set to pending until manager approval
+		PhoneVerified:   true,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	// If it's a company signup, create company record first
@@ -1904,6 +2007,31 @@ func (ac *AuthController) startLoginAttemptCleanupRoutine() {
 	}
 }
 
+func (ac *AuthController) startRememberMeCleanupRoutine() {
+	ticker := time.NewTicker(6 * time.Hour) // Run every 6 hours
+	defer ticker.Stop()
+
+	// Run cleanup immediately on startup
+	if err := ac.cleanupExpiredRememberMeTokens(); err != nil {
+		ac.logger.Printf("Initial remember me cleanup failed: %v", err)
+	}
+
+	for range ticker.C {
+		if err := ac.cleanupExpiredRememberMeTokens(); err != nil {
+			ac.logger.Printf("Remember me cleanup failed: %v", err)
+		}
+	}
+}
+
+func (ac *AuthController) cleanupExpiredRememberMeTokens() error {
+	redisClient := config.GetRedisClient()
+	if redisClient == nil {
+		return fmt.Errorf("Redis client not available")
+	}
+
+	return utils.CleanupExpiredRememberMeTokens(redisClient)
+}
+
 // CheckEmailOrPhoneExists checks if an email or phone exists in users, companies, wholesalers, or service providers
 func (ac *AuthController) CheckEmailOrPhoneExists(c echo.Context) error {
 	var req struct {
@@ -2012,6 +2140,101 @@ func (ac *AuthController) ValidateToken(c echo.Context) error {
 			},
 		})
 	}
+}
+
+// GetRememberedCredentials retrieves stored credentials using a remember me token
+func (ac *AuthController) GetRememberedCredentials(c echo.Context) error {
+	var req struct {
+		RememberMeToken string `json:"rememberMeToken"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request",
+		})
+	}
+
+	if req.RememberMeToken == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Remember me token is required",
+		})
+	}
+
+	// Get Redis client
+	redisClient := config.GetRedisClient()
+	if redisClient == nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Remember me service unavailable",
+		})
+	}
+
+	// Retrieve credentials from Redis
+	credentials, err := utils.RetrieveRememberedCredentials(redisClient, req.RememberMeToken)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid or expired remember me token",
+		})
+	}
+
+	// Return the remembered credentials (without sensitive data)
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Remembered credentials retrieved successfully",
+		Data: map[string]interface{}{
+			"email":    credentials.Email,
+			"phone":    credentials.Phone,
+			"userType": credentials.UserType,
+			"userId":   credentials.UserID,
+		},
+	})
+}
+
+// RemoveRememberedCredentials removes stored credentials
+func (ac *AuthController) RemoveRememberedCredentials(c echo.Context) error {
+	var req struct {
+		RememberMeToken string `json:"rememberMeToken"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request",
+		})
+	}
+
+	if req.RememberMeToken == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Remember me token is required",
+		})
+	}
+
+	// Get Redis client
+	redisClient := config.GetRedisClient()
+	if redisClient == nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Remember me service unavailable",
+		})
+	}
+
+	// Remove credentials from Redis
+	err := utils.RemoveRememberedCredentials(redisClient, req.RememberMeToken)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to remove remembered credentials",
+		})
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Remembered credentials removed successfully",
+	})
 }
 
 // RefreshToken refreshes a JWT token if it's still valid
