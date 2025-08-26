@@ -418,11 +418,10 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
       email: _emailController.text,
       password: _passwordController.text,
       phoneNumber: _phoneController.text,
-      territory: _territoryController.text, // Add territory
       status: 'active',
       createdBy: 'admin', // Replace with actual admin ID
       salespersons: [],
-      rolesAccess: [], // Add this line to fix the linter error
+      // rolesAccess: [], // Add this line to fix the linter error
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       commissionPercent: double.tryParse(_commissionPercentController.text) ?? 0.0,
@@ -912,13 +911,13 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
     }
 
     if (userType == 'Manager') {
-      if (_selectedPermissions.isEmpty) {
-        _showErrorSnackBar('At least one access role must be selected');
-        return;
-      }
-      final List<String> rolesAccess = _selectedPermissions
-          .map((label) => _permissionKeys[label] ?? label)
-          .toList();
+      // if (_selectedPermissions.isEmpty) {
+      //   _showErrorSnackBar('At least one access role must be selected');
+      //   return;
+      // }
+      // final List<String> rolesAccess = _selectedPermissions
+      //     .map((label) => _permissionKeys[label] ?? label)
+      //     .toList();
 
       // Call the new API for Manager
       try {
@@ -926,7 +925,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
           fullName: _nameController.text,
           email: _emailController.text,
           password: _passwordController.text,
-          rolesAccess: rolesAccess,
+          // rolesAccess: rolesAccess,
         );
         if (response.success) {
           _showSuccessSnackBar('Manager added successfully');
@@ -1001,13 +1000,13 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
     }
 
     // Handle Sales Manager creation (existing logic)
-    if (_selectedPermissions.isEmpty) {
-      _showErrorSnackBar('At least one access role must be selected');
-      return;
-    }
-    final List<String> rolesAccess = _selectedPermissions
-        .map((label) => _permissionKeys[label] ?? label)
-        .toList();
+    // if (_selectedPermissions.isEmpty) {
+    //   _showErrorSnackBar('At least one access role must be selected');
+    //   return;
+    // }
+    // final List<String> rolesAccess = _selectedPermissions
+    //     .map((label) => _permissionKeys[label] ?? label)
+    //     .toList();
 
     // Get the real admin ObjectID from AuthManager
     String? adminObjectId;
@@ -1039,7 +1038,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
         territory: _territoryController.text,
         status: 'active',
         createdBy: adminObjectId,
-        rolesAccess: rolesAccess,
+        // rolesAccess: rolesAccess,
         commissionPercent: userType == 'Manager' ? 1.0 : commissionPercent,
       );
       if (response.success) {
@@ -1064,7 +1063,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
     final nameController = TextEditingController(text: manager.fullName);
     final emailController = TextEditingController(text: manager.email);
     final passwordController = TextEditingController();
-    final Set<String> selectedRoles = {...manager.rolesAccess};
+    // final Set<String> selectedRoles = {...manager.rolesAccess};
     showDialog(
       context: context,
       builder: (context) {
@@ -1094,26 +1093,26 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                       alignment: Alignment.centerLeft,
                       child: Text('Roles', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
-                    Column(
-                      children: _permissions.map((role) {
-                        final key = _permissionKeys[role] ?? role;
-                        return CheckboxListTile(
-                          value: selectedRoles.contains(key),
-                          onChanged: (checked) {
-                            setState(() {
-                              if (checked == true) {
-                                selectedRoles.add(key);
-                              } else {
-                                selectedRoles.remove(key);
-                              }
-                            });
-                          },
-                          title: Text(role),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          dense: true,
-                        );
-                      }).toList(),
-                    ),
+                    // Column(
+                    //   children: _permissions.map((role) {
+                    //     final key = _permissionKeys[role] ?? role;
+                    //     return CheckboxListTile(
+                    //       value: selectedRoles.contains(key),
+                    //       onChanged: (checked) {
+                    //         setState(() {
+                    //           if (checked == true) {
+                    //             selectedRoles.add(key);
+                    //           } else {
+                    //             selectedRoles.remove(key);
+                    //           }
+                    //         });
+                    //       },
+                    //       title: Text(role),
+                    //       controlAffinity: ListTileControlAffinity.leading,
+                    //       dense: true,
+                    //     );
+                    //   }).toList(),
+                    // ),
                   ],
                 ),
               ),
@@ -1128,7 +1127,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                       id: manager.id,
                       fullName: nameController.text,
                       email: emailController.text,
-                      rolesAccess: selectedRoles.toList(),
+                      // rolesAccess: selectedRoles.toList(),
                       password: passwordController.text,
                     );
                     if (response.success) {
@@ -1382,9 +1381,8 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
     final nameController = TextEditingController(text: salesManager.fullName);
     final emailController = TextEditingController(text: salesManager.email);
     final phoneController = TextEditingController(text: salesManager.phoneNumber);
-    final territoryController = TextEditingController(text: salesManager.territory);
     final commissionController = TextEditingController(text: salesManager.commissionPercent != null ? salesManager.commissionPercent.toString() : '');
-    final Set<String> selectedRoles = {...salesManager.rolesAccess};
+    // final Set<String> selectedRoles = {...salesManager.rolesAccess};
     showDialog(
       context: context,
       builder: (context) {
@@ -1399,7 +1397,6 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Full Name')),
                     TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email')),
                     TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone Number')),
-                    TextField(controller: territoryController, decoration: const InputDecoration(labelText: 'Territory')),
                     TextField(
                       controller: commissionController, 
                       decoration: const InputDecoration(labelText: 'Commission Percent'), 
@@ -1408,26 +1405,26 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                     ),
                     const SizedBox(height: 12),
                     const Align(alignment: Alignment.centerLeft, child: Text('Roles', style: TextStyle(fontWeight: FontWeight.bold))),
-                    Column(
-                      children: _permissions.map((role) {
-                        final key = _permissionKeys[role] ?? role;
-                        return CheckboxListTile(
-                          value: selectedRoles.contains(key),
-                          onChanged: (checked) {
-                            setState(() {
-                              if (checked == true) {
-                                selectedRoles.add(key);
-                              } else {
-                                selectedRoles.remove(key);
-                              }
-                            });
-                          },
-                          title: Text(role),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          dense: true,
-                        );
-                      }).toList(),
-                    ),
+                    // Column(
+                    //   children: _permissions.map((role) {
+                    //     final key = _permissionKeys[role] ?? role;
+                    //     return CheckboxListTile(
+                    //       value: selectedRoles.contains(key),
+                    //       onChanged: (checked) {
+                    //         setState(() {
+                    //           if (checked == true) {
+                    //             selectedRoles.add(key);
+                    //           } else {
+                    //             selectedRoles.remove(key);
+                    //           }
+                    //         });
+                    //       },
+                    //       title: Text(role),
+                    //       controlAffinity: ListTileControlAffinity.leading,
+                    //       dense: true,
+                    //     );
+                    //   }).toList(),
+                    // ),
                   ],
                 ),
               ),
@@ -1443,9 +1440,8 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                       fullName: nameController.text,
                       email: emailController.text,
                       phoneNumber: phoneController.text,
-                      territory: territoryController.text,
                       commissionPercent: double.tryParse(commissionController.text),
-                      rolesAccess: selectedRoles.toList(),
+                      // rolesAccess: selectedRoles.toList(),
                     );
                     if (response.success) {
                       _showSuccessSnackBar('Sales Manager updated successfully');
@@ -1707,8 +1703,8 @@ class SalesManagerListTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(salesManager.email),
-            if (salesManager.rolesAccess.isNotEmpty)
-              Text('Roles: ' + salesManager.rolesAccess.join(', '), style: const TextStyle(fontSize: 12)),
+            // if (salesManager.rolesAccess.isNotEmpty)
+            //   Text('Roles: ' + salesManager.rolesAccess.join(', '), style: const TextStyle(fontSize: 12)),
             
             if (salesManager.salespersons.isNotEmpty)
               Row(
@@ -1786,7 +1782,7 @@ class ManagerListTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(manager.email),
-            Text('Roles: ' + manager.rolesAccess.join(', '), style: const TextStyle(fontSize: 12)),
+            // Text('Roles: ' + manager.rolesAccess.join(', '), style: const TextStyle(fontSize: 12)),
             // Text('Created: ' + manager.createdAt.toString().split(' ').first, style: const TextStyle(fontSize: 12)),
           ],
         ),

@@ -877,14 +877,14 @@ class ApiService {
     required String fullName,
     required String email,
     required String password,
-    required List<String> rolesAccess,
+    // required List<String> rolesAccess,
   }) async {
     final url = Uri.parse('$baseUrl${ApiConstants.createManager}');
     final body = jsonEncode({
       'fullName': fullName,
       'email': email,
       'password': password,
-      'rolesAccess': rolesAccess,
+      // 'rolesAccess': rolesAccess,
     });
     try {
       final token = await getToken();
@@ -935,14 +935,14 @@ class ApiService {
     required String id,
     required String fullName,
     required String email,
-    required List<String> rolesAccess,
+    // required List<String> rolesAccess,
     String? password,
   }) async {
     final url = Uri.parse('$baseUrl${ApiConstants.updateManager}$id');
     final body = {
       'fullName': fullName,
       'email': email,
-      'rolesAccess': rolesAccess,
+      // 'rolesAccess': rolesAccess,
     };
     if (password != null && password.isNotEmpty) {
       body['password'] = password;

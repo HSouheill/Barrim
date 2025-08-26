@@ -8,11 +8,10 @@ class SalesManager {
   String? password;
   final String phoneNumber;
   String? image;
-  final String territory; // Add this field
   final String status; // active, inactive
   final String createdBy; // Admin ID
   final List<String> salespersons;
-  final List<String> rolesAccess;
+  // final List<String> rolesAccess;
   final DateTime createdAt;
   final DateTime updatedAt;
   final double commissionPercent;
@@ -24,11 +23,10 @@ class SalesManager {
     this.password,
     required this.phoneNumber,
     this.image,
-    required this.territory, // Add this field
     required this.status,
     required this.createdBy,
     required this.salespersons,
-    required this.rolesAccess,
+    // required this.rolesAccess,
     required this.createdAt,
     required this.updatedAt,
     required this.commissionPercent,
@@ -42,15 +40,14 @@ class SalesManager {
       password: json['password'],
       phoneNumber: json['phoneNumber'] ?? '',
       image: json['image'],
-      territory: json['territory'] ?? '', // Add this field
       status: json['status'] ?? 'inactive',
       createdBy: json['createdBy'] ?? '',
       salespersons: json['salespersons'] != null
           ? List<String>.from(json['salespersons'])
           : [],
-      rolesAccess: json['rolesAccess'] != null
-          ? List<String>.from(json['rolesAccess'])
-          : [],
+        // rolesAccess: json['rolesAccess'] != null
+        //     ? List<String>.from(json['rolesAccess'])
+        //     : [],
       createdAt: json['createdAt'] != null
           ? json['createdAt'] is String
           ? DateTime.parse(json['createdAt'])
@@ -75,11 +72,10 @@ class SalesManager {
       if (password != null) 'password': password,
       'phoneNumber': phoneNumber,
       if (image != null) 'image': image,
-      'territory': territory, // Add this field
       'status': status,
       'createdBy': createdBy,
       'salespersons': salespersons,
-      'rolesAccess': rolesAccess,
+      // 'rolesAccess': rolesAccess,
       'commissionPercent': commissionPercent,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -99,11 +95,10 @@ class SalesManager {
     String? password,
     String? phoneNumber,
     String? image,
-    String? territory,
     String? status,
     String? createdBy,
     List<String>? salespersons,
-    List<String>? rolesAccess,
+    // List<String>? rolesAccess,
     DateTime? createdAt,
     DateTime? updatedAt,
     double? commissionPercent,
@@ -115,11 +110,10 @@ class SalesManager {
       password: password ?? this.password,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       image: image ?? this.image,
-      territory: territory ?? this.territory,
       status: status ?? this.status,
       createdBy: createdBy ?? this.createdBy,
       salespersons: salespersons ?? this.salespersons,
-      rolesAccess: rolesAccess ?? this.rolesAccess,
+      // rolesAccess: rolesAccess ?? this.rolesAccess,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       commissionPercent: commissionPercent ?? this.commissionPercent,
