@@ -1008,11 +1008,10 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 		// PhoneNumber       string   `json:"phoneNumber"`
-		Territory         string   `json:"territory"`
-		CommissionPercent float64  `json:"commissionPercent"`
-		Status            string   `json:"status"`
-		CreatedBy         string   `json:"createdBy"`
-		RolesAccess       []string `json:"rolesAccess"`
+		CommissionPercent float64 `json:"commissionPercent"`
+		Status            string  `json:"status"`
+		CreatedBy         string  `json:"createdBy"`
+		// RolesAccess       []string `json:"rolesAccess"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
@@ -1033,21 +1032,21 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 		})
 	}
 	// Validate rolesAccess
-	if len(req.RolesAccess) == 0 {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "At least one access role must be selected",
-		})
-	}
-	for _, key := range req.RolesAccess {
-		count, err := ac.DB.Collection("access_roles").CountDocuments(context.Background(), bson.M{"key": key})
-		if err != nil || count == 0 {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid access role: " + key,
-			})
-		}
-	}
+	// if len(req.RolesAccess) == 0 {
+	// 	return c.JSON(http.StatusBadRequest, models.Response{
+	// 		Status:  http.StatusBadRequest,
+	// 		Message: "At least one access role must be selected",
+	// 	})
+	// }
+	// for _, key := range req.RolesAccess {
+	// 	count, err := ac.DB.Collection("access_roles").CountDocuments(context.Background(), bson.M{"key": key})
+	// 	if err != nil || count == 0 {
+	// 		return c.JSON(http.StatusBadRequest, models.Response{
+	// 			Status:  http.StatusBadRequest,
+	// 			Message: "Invalid access role: " + key,
+	// 		})
+	// 	}
+	// }
 	var existingManager models.SalesManager
 	err := ac.DB.Collection("salesManagers").FindOne(context.Background(), bson.M{"email": req.Email}).Decode(&existingManager)
 	if err == nil {
@@ -1079,7 +1078,7 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 		Salespersons:      []primitive.ObjectID{},
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
-		RolesAccess:       req.RolesAccess,
+		// RolesAccess:       req.RolesAccess,
 	}
 	_, err = ac.DB.Collection("salesManagers").InsertOne(context.Background(), salesManager)
 	if err != nil {
@@ -1133,7 +1132,7 @@ func (ac *AdminController) GetAllSalesManagers(c echo.Context) error {
 			"createdBy":   sm.CreatedBy,
 			"createdAt":   sm.CreatedAt,
 			"updatedAt":   sm.UpdatedAt,
-			"rolesAccess": sm.RolesAccess,
+			// "rolesAccess": sm.RolesAccess,
 		})
 	}
 
@@ -1948,10 +1947,10 @@ func (ac *AdminController) CreateUserManager(c echo.Context) error {
 	}
 
 	var req struct {
-		FullName    string   `json:"fullName"`
-		Email       string   `json:"email"`
-		Password    string   `json:"password"`
-		RolesAccess []string `json:"rolesAccess"`
+		FullName string `json:"fullName"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		// RolesAccess []string `json:"rolesAccess"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
@@ -1969,22 +1968,22 @@ func (ac *AdminController) CreateUserManager(c echo.Context) error {
 	}
 
 	// Validate rolesAccess
-	if len(req.RolesAccess) == 0 {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "At least one access role must be selected",
-		})
-	}
-	// Check if all provided rolesAccess keys exist in AccessRole collection
-	for _, key := range req.RolesAccess {
-		count, err := ac.DB.Collection("access_roles").CountDocuments(context.Background(), bson.M{"key": key})
-		if err != nil || count == 0 {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid access role: " + key,
-			})
-		}
-	}
+	// if len(req.RolesAccess) == 0 {
+	// 	return c.JSON(http.StatusBadRequest, models.Response{
+	// 		Status:  http.StatusBadRequest,
+	// 		Message: "At least one access role must be selected",
+	// 	})
+	// }
+	// // Check if all provided rolesAccess keys exist in AccessRole collection
+	// for _, key := range req.RolesAccess {
+	// 	count, err := ac.DB.Collection("access_roles").CountDocuments(context.Background(), bson.M{"key": key})
+	// 	if err != nil || count == 0 {
+	// 		return c.JSON(http.StatusBadRequest, models.Response{
+	// 			Status:  http.StatusBadRequest,
+	// 			Message: "Invalid access role: " + key,
+	// 		})
+	// 	}
+	// }
 
 	// Check for existing user manager
 	var existingManager models.Manager
@@ -2006,13 +2005,13 @@ func (ac *AdminController) CreateUserManager(c echo.Context) error {
 	}
 
 	manager := models.Manager{
-		ID:          primitive.NewObjectID(),
-		FullName:    req.FullName,
-		Email:       req.Email,
-		Password:    string(hashedPassword),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-		RolesAccess: req.RolesAccess,
+		ID:        primitive.NewObjectID(),
+		FullName:  req.FullName,
+		Email:     req.Email,
+		Password:  string(hashedPassword),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		// RolesAccess: req.RolesAccess,
 	}
 
 	_, err = ac.DB.Collection("managers").InsertOne(context.Background(), manager)
