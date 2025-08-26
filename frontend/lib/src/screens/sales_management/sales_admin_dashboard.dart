@@ -69,7 +69,6 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _territoryController = TextEditingController();
   final TextEditingController _commissionPercentController = TextEditingController();
 
   File? _selectedImage;
@@ -128,7 +127,6 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
     _emailController.dispose();
     _passwordController.dispose();
     _phoneController.dispose();
-    _territoryController.dispose();
     _commissionPercentController.dispose();
 
     super.dispose();
@@ -576,7 +574,6 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
     _emailController.clear();
     _passwordController.clear();
     _phoneController.clear();
-    _territoryController.clear();
     _commissionPercentController.clear();
     
     setState(() {
@@ -792,29 +789,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                         ),
                       ),
                     ),
-                  // Territory field for Sales Manager
-                  if (userType == 'Sales Manager')
-                    Column(
-                      children: [
-                        if (userType != 'Manager') const SizedBox(height: 16),
-                        TextField(
-                          controller: _territoryController,
-                          decoration: const InputDecoration(
-                            labelText: 'Territory',
-                            labelStyle: TextStyle(
-                              color: Color(0xFF8A93AD),
-                              fontSize: 16,
-                            ),
-                            enabledBorder: UnderlineInputBorder(
-                              borderSide: BorderSide(color: Colors.grey),
-                            ),
-                            focusedBorder: UnderlineInputBorder(
-                              borderSide: BorderSide(color: Color(0xFF0A1747)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  
                   // Commission Percent for Sales Manager and Salesperson
                   if (userType != 'Manager')
                     Column(
@@ -1035,7 +1010,6 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
         email: _emailController.text,
         password: _passwordController.text,
         phoneNumber: _phoneController.text,
-        territory: _territoryController.text,
         status: 'active',
         createdBy: adminObjectId,
         // rolesAccess: rolesAccess,

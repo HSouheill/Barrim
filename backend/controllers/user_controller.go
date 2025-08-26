@@ -1212,6 +1212,7 @@ func (uc *UserController) ChangePassword(c echo.Context) error {
 }
 
 // GetUserData fetches the current user's data (for userType = "user")
+// This function retrieves ALL user profile data including DateOfBirth, gender, location, interestedDeals, etc.
 func (uc *UserController) GetUserData(c echo.Context) error {
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1237,11 +1238,20 @@ func (uc *UserController) GetUserData(c echo.Context) error {
 	}
 
 	// Define which fields to include in the response
+	// Using projection with 0 means exclude these specific fields, all others are included by default
+	// This ensures we get ALL user data including:
+	// - DateOfBirth, gender, phone, contactPerson, contactPhone
+	// - Location (city, country, district, street, postalCode, lat, lng)
+	// - InterestedDeals, profilePic, logoPath
+	// - FavoriteBranches, favoriteServiceProviders
+	// - CompanyID, wholesalerID, serviceProviderID
+	// - Points, referralCode, referrals
+	// - All timestamps and metadata
 	projection := bson.M{
-		"password":            0,
-		"resetPasswordToken":  0,
-		"resetTokenExpiresAt": 0,
-		"otpInfo":             0,
+		"password":            0, // Exclude for security
+		"resetPasswordToken":  0, // Exclude for security
+		"resetTokenExpiresAt": 0, // Exclude for security
+		"otpInfo":             0, // Exclude for security
 	}
 
 	// Set up options with projection
@@ -1262,6 +1272,10 @@ func (uc *UserController) GetUserData(c echo.Context) error {
 			Message: "Failed to find user data",
 		})
 	}
+
+	// Log the retrieved user data for debugging (remove in production)
+	log.Printf("Retrieved user data: ID=%s, FullName=%s, DateOfBirth=%s, Gender=%s, Phone=%s, Location=%+v, InterestedDeals=%v",
+		user.ID.Hex(), user.FullName, user.DateOfBirth, user.Gender, user.Phone, user.Location, user.InterestedDeals)
 
 	// Return user data
 	return c.JSON(http.StatusOK, models.Response{

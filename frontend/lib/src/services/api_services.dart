@@ -686,7 +686,6 @@ class ApiService {
     required String email,
     required String password,
     required String phoneNumber,
-    required String territory,
     required String status,
     String? createdBy,
     List<String>? rolesAccess,
@@ -699,7 +698,6 @@ class ApiService {
         'email': email,
         'password': password,
         'phoneNumber': phoneNumber,
-        'territory': territory,
         'status': status,
         'createdBy': createdBy,
       };
