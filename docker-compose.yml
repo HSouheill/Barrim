@@ -91,6 +91,7 @@ services:
       args:
         BUILD_DATE: ${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
         VERSION: ${VERSION:-latest}
+        BUILD_TIMESTAMP: ${BUILD_TIMESTAMP:-$(date +%s)}
     container_name: admin-dashboard
     restart: unless-stopped
     ports:
@@ -102,6 +103,7 @@ services:
     environment:
       - BUILD_DATE=${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
       - VERSION=${VERSION:-latest}
+      - BUILD_TIMESTAMP=${BUILD_TIMESTAMP:-$(date +%s)}
     # Health check removed - nginx:alpine doesn't have healthcheck.sh
     deploy:
       resources:
