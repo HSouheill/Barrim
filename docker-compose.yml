@@ -88,6 +88,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
+        VERSION: ${VERSION:-latest}
     container_name: admin-dashboard
     restart: unless-stopped
     ports:
@@ -96,6 +99,9 @@ services:
       - backend
     networks:
       - app-network
+    environment:
+      - BUILD_DATE=${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
+      - VERSION=${VERSION:-latest}
     # Health check removed - nginx:alpine doesn't have healthcheck.sh
     deploy:
       resources:
