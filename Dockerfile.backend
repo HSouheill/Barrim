@@ -1,6 +1,23 @@
 FROM golang:1.24-alpine AS builder
 
-# Install ca-certificates for HTTPS requests, curl for health checks, and redis-cli for debugging
+WORKDIR /app
+
+# Copy go mod files
+COPY backend/go.mod backend/go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY backend/ .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o barrim_backend .
+
+# Production stage
+FROM alpine:latest
+
+# Install runtime dependencies
 RUN apk --no-cache add ca-certificates curl tzdata redis
 
 WORKDIR /app
@@ -9,16 +26,14 @@ WORKDIR /app
 RUN addgroup -g 1001 -S appuser && \
     adduser -S appuser -u 1001
 
-# Copy pre-built binary into the image
-COPY backend/barrim_backend .
-RUN chmod +x ./barrim_backend
-# Change ownership to non-root user
+# Copy binary from builder stage
+COPY --from=builder /app/barrim_backend .
+
+# Change ownership
 RUN chown -R appuser:appuser /app
 
 USER appuser
 
-# Expose port 8080
 EXPOSE 8080
 
 CMD ["./barrim_backend"]
-
