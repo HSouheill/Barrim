@@ -67,6 +67,10 @@ class ApiConstants {
   // Utility endpoints
   static const String checkEmailOrPhoneExists = '/api/auth/check-exists';
   
+  // Review management endpoints
+  static const String getAllReviewsForAdmin = '/api/admin/reviews';
+  static const String deleteReview = '/api/admin/reviews';
+  
   // Sponsorship endpoints
   static const String createServiceProviderSponsorship = '/api/admin/sponsorships/service-provider';
   static const String createCompanyWholesalerSponsorship = '/api/admin/sponsorships/company-wholesaler';

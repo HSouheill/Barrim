@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/models"
@@ -16,6 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // BookingController handles booking-related API endpoints
@@ -882,5 +884,238 @@ func (bc *BookingController) GetPendingBookings(c echo.Context) error {
 		Status:  http.StatusOK,
 		Message: "Pending bookings retrieved successfully",
 		Data:    bookings,
+	})
+}
+
+// GetAllBookingsForAdmin allows admins to get all bookings with pagination and filtering
+func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
+	// Get admin user from JWT token
+	adminUser, err := utils.GetUserFromToken(c, bc.db)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
+	}
+
+	// Check if user is admin, super_admin, or manager
+	if adminUser.UserType != "admin" && adminUser.UserType != "super_admin" && adminUser.UserType != "manager" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins, super admins, and managers can view all bookings",
+		})
+	}
+
+	// Get query parameters for pagination and filtering
+	pageStr := c.QueryParam("page")
+	limitStr := c.QueryParam("limit")
+	status := c.QueryParam("status")
+	serviceProviderID := c.QueryParam("serviceProviderId")
+	userID := c.QueryParam("userId")
+	dateStr := c.QueryParam("date")
+
+	// Set default values
+	page := 1
+	limit := 20
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	// Build filter
+	filter := bson.M{}
+	if status != "" {
+		filter["status"] = status
+	}
+	if serviceProviderID != "" {
+		if objID, err := primitive.ObjectIDFromHex(serviceProviderID); err == nil {
+			filter["serviceProviderId"] = objID
+		}
+	}
+	if userID != "" {
+		if objID, err := primitive.ObjectIDFromHex(userID); err == nil {
+			filter["userId"] = objID
+		}
+	}
+	if dateStr != "" {
+		if date, err := time.Parse("2006-01-02", dateStr); err == nil {
+			startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+			endOfDay := startOfDay.Add(24 * time.Hour)
+			filter["bookingDate"] = bson.M{
+				"$gte": startOfDay,
+				"$lt":  endOfDay,
+			}
+		}
+	}
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get total count for pagination
+	bookingsCollection := bc.db.Database("barrim").Collection("bookings")
+	totalCount, err := bookingsCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error counting bookings",
+		})
+	}
+
+	// Calculate skip value
+	skip := (page - 1) * limit
+
+	// Find options for pagination and sorting
+	findOptions := options.Find()
+	findOptions.SetSkip(int64(skip))
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSort(bson.D{{Key: "createdAt", Value: -1}}) // Most recent first
+
+	// Execute query
+	cursor, err := bookingsCollection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error fetching bookings",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	// Parse results
+	var bookings []models.Booking
+	if err := cursor.All(ctx, &bookings); err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error parsing bookings",
+		})
+	}
+
+	// Calculate pagination info
+	totalPages := int((totalCount + int64(limit) - 1) / int64(limit))
+	hasNext := page < totalPages
+	hasPrev := page > 1
+
+	// Create response
+	response := map[string]interface{}{
+		"bookings": bookings,
+		"pagination": map[string]interface{}{
+			"currentPage": page,
+			"totalPages":  totalPages,
+			"totalCount":  totalCount,
+			"limit":       limit,
+			"hasNext":     hasNext,
+			"hasPrev":     hasPrev,
+		},
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Bookings retrieved successfully",
+		Data:    response,
+	})
+}
+
+// DeleteBookingForAdmin allows admins to delete a booking
+func (bc *BookingController) DeleteBookingForAdmin(c echo.Context) error {
+	bookingID := c.Param("id")
+
+	// Get admin user from JWT token
+	adminUser, err := utils.GetUserFromToken(c, bc.db)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
+	}
+
+	// Check if user is admin, super_admin, or manager
+	if adminUser.UserType != "admin" && adminUser.UserType != "super_admin" && adminUser.UserType != "manager" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins, super admins, and managers can delete bookings",
+		})
+	}
+
+	// Validate booking ID
+	objID, err := primitive.ObjectIDFromHex(bookingID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid booking ID",
+		})
+	}
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Find the booking first to get media files for cleanup
+	bookingsCollection := bc.db.Database("barrim").Collection("bookings")
+	var booking models.Booking
+	err = bookingsCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(&booking)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Booking not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error finding booking",
+		})
+	}
+
+	// Delete the booking
+	result, err := bookingsCollection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error deleting booking",
+		})
+	}
+
+	if result.DeletedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Booking not found",
+		})
+	}
+
+	// If booking had media files, log them for cleanup
+	// Note: File deletion from storage would need to be implemented based on your storage solution
+	if len(booking.MediaURLs) > 0 {
+		log.Printf("Booking deleted - media files should be cleaned up: %v", booking.MediaURLs)
+	}
+
+	if len(booking.ThumbnailURLs) > 0 {
+		log.Printf("Booking deleted - thumbnail files should be cleaned up: %v", booking.ThumbnailURLs)
+	}
+
+	// Send notification to user about booking deletion (optional)
+	if err := bc.hub.SendToUser(booking.UserID, websocket.Notification{
+		Type:    "booking_deleted",
+		Message: "Your booking has been deleted by an administrator",
+		Data: map[string]interface{}{
+			"bookingId": bookingID,
+			"reason":    "Admin deletion",
+		},
+	}); err != nil {
+		log.Printf("Failed to send WebSocket notification to user: %v", err)
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Booking deleted successfully",
+		Data: map[string]interface{}{
+			"bookingId": bookingID,
+			"deletedAt": time.Now(),
+		},
 	})
 }

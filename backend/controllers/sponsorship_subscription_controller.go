@@ -203,10 +203,48 @@ func (ssc *SponsorshipSubscriptionController) GetPendingSponsorshipSubscriptionR
 		})
 	}
 
+	// Enhance requests with sponsorship and entity details
+	enhancedRequests := make([]map[string]interface{}, 0, len(requests))
+	for _, request := range requests {
+		enhancedRequest := map[string]interface{}{
+			"request": request,
+		}
+
+		// Get sponsorship details
+		sponsorshipCollection := ssc.DB.Collection("sponsorships")
+		var sponsorship models.Sponsorship
+		err := sponsorshipCollection.FindOne(context.Background(), bson.M{"_id": request.SponsorshipID}).Decode(&sponsorship)
+		if err == nil {
+			enhancedRequest["sponsorship"] = map[string]interface{}{
+				"id":        sponsorship.ID,
+				"title":     sponsorship.Title,
+				"price":     sponsorship.Price,
+				"duration":  sponsorship.Duration,
+				"discount":  sponsorship.Discount,
+				"startDate": sponsorship.StartDate,
+				"endDate":   sponsorship.EndDate,
+			}
+		} else {
+			enhancedRequest["sponsorship"] = nil
+			log.Printf("Warning: Failed to retrieve sponsorship details for ID %s: %v", request.SponsorshipID.Hex(), err)
+		}
+
+		// Get entity details based on entity type
+		entityDetails, err := ssc.getEnhancedEntityDetails(request.EntityType, request.EntityID)
+		if err == nil {
+			enhancedRequest["entityDetails"] = entityDetails
+		} else {
+			enhancedRequest["entityDetails"] = nil
+			log.Printf("Warning: Failed to retrieve entity details for type %s, ID %s: %v", request.EntityType, request.EntityID.Hex(), err)
+		}
+
+		enhancedRequests = append(enhancedRequests, enhancedRequest)
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
-			"requests": requests,
+			"requests": enhancedRequests,
 			"pagination": map[string]interface{}{
 				"page":  page,
 				"limit": limit,
@@ -428,10 +466,48 @@ func (ssc *SponsorshipSubscriptionController) GetActiveSponsorshipSubscriptions(
 		})
 	}
 
+	// Enhance subscriptions with sponsorship and entity details
+	enhancedSubscriptions := make([]map[string]interface{}, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		enhancedSubscription := map[string]interface{}{
+			"subscription": subscription,
+		}
+
+		// Get sponsorship details
+		sponsorshipCollection := ssc.DB.Collection("sponsorships")
+		var sponsorship models.Sponsorship
+		err := sponsorshipCollection.FindOne(context.Background(), bson.M{"_id": subscription.SponsorshipID}).Decode(&sponsorship)
+		if err == nil {
+			enhancedSubscription["sponsorship"] = map[string]interface{}{
+				"id":        sponsorship.ID,
+				"title":     sponsorship.Title,
+				"price":     sponsorship.Price,
+				"duration":  sponsorship.Duration,
+				"discount":  sponsorship.Discount,
+				"startDate": sponsorship.StartDate,
+				"endDate":   sponsorship.EndDate,
+			}
+		} else {
+			enhancedSubscription["sponsorship"] = nil
+			log.Printf("Warning: Failed to retrieve sponsorship details for ID %s: %v", subscription.SponsorshipID.Hex(), err)
+		}
+
+		// Get entity details based on entity type
+		entityDetails, err := ssc.getEnhancedEntityDetails(subscription.EntityType, subscription.EntityID)
+		if err == nil {
+			enhancedSubscription["entityDetails"] = entityDetails
+		} else {
+			enhancedSubscription["entityDetails"] = nil
+			log.Printf("Warning: Failed to retrieve entity details for type %s, ID %s: %v", subscription.EntityType, subscription.EntityID.Hex(), err)
+		}
+
+		enhancedSubscriptions = append(enhancedSubscriptions, enhancedSubscription)
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
-			"subscriptions": subscriptions,
+			"subscriptions": enhancedSubscriptions,
 			"pagination": map[string]interface{}{
 				"page":  page,
 				"limit": limit,
@@ -762,17 +838,20 @@ func (ssc *SponsorshipSubscriptionController) GetTimeRemainingForEntity(c echo.C
 		})
 	}
 
-	// Validate entity type
+	// Validate entity type (accept both camelCase and snake_case)
 	validEntityTypes := map[string]bool{
 		"service_provider":  true,
 		"company_branch":    true,
 		"wholesaler_branch": true,
+		"serviceProvider":   true,
+		"companyBranch":     true,
+		"wholesalerBranch":  true,
 	}
 
 	if !validEntityTypes[entityType] {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"success": false,
-			"message": "Invalid entity type. Must be one of: service_provider, company_branch, wholesaler_branch",
+			"message": "Invalid entity type. Must be one of: service_provider/serviceProvider, company_branch/companyBranch, wholesaler_branch/wholesalerBranch",
 		})
 	}
 
@@ -863,7 +942,10 @@ func (ssc *SponsorshipSubscriptionController) GetTimeRemainingForEntity(c echo.C
 
 // Helper function to get entity name based on entity type and ID
 func (ssc *SponsorshipSubscriptionController) getEntityName(entityType string, entityID primitive.ObjectID) (string, error) {
-	switch entityType {
+	// Normalize entity type to handle both camelCase and snake_case formats
+	normalizedEntityType := ssc.normalizeEntityType(entityType)
+
+	switch normalizedEntityType {
 	case "service_provider":
 		log.Printf("Looking for service provider with ID: %s", entityID.Hex())
 		var serviceProvider models.ServiceProvider
@@ -917,7 +999,10 @@ func (ssc *SponsorshipSubscriptionController) getEntityName(entityType string, e
 
 // Helper function to get entity details based on entity type and ID
 func (ssc *SponsorshipSubscriptionController) getEntityDetails(entityType string, entityID primitive.ObjectID) (map[string]interface{}, error) {
-	switch entityType {
+	// Normalize entity type to handle both camelCase and snake_case formats
+	normalizedEntityType := ssc.normalizeEntityType(entityType)
+
+	switch normalizedEntityType {
 	case "service_provider":
 		var serviceProvider models.ServiceProvider
 		err := ssc.DB.Collection("serviceProviders").FindOne(context.Background(), bson.M{"_id": entityID}).Decode(&serviceProvider)
@@ -989,7 +1074,7 @@ func (ssc *SponsorshipSubscriptionController) createActiveSubscription(request m
 	// Create active subscription
 	subscription := models.SponsorshipSubscription{
 		SponsorshipID:   request.SponsorshipID,
-		EntityType:      request.EntityType,
+		EntityType:      ssc.normalizeEntityType(request.EntityType), // Normalize to snake_case for consistency
 		EntityID:        request.EntityID,
 		StartDate:       startDate,
 		EndDate:         endDate,
@@ -1017,12 +1102,29 @@ func (ssc *SponsorshipSubscriptionController) createActiveSubscription(request m
 	return err
 }
 
+// Helper function to normalize entity type (handle both camelCase and snake_case)
+func (ssc *SponsorshipSubscriptionController) normalizeEntityType(entityType string) string {
+	switch entityType {
+	case "serviceProvider":
+		return "service_provider"
+	case "companyBranch":
+		return "company_branch"
+	case "wholesalerBranch":
+		return "wholesaler_branch"
+	default:
+		return entityType
+	}
+}
+
 // Helper function to update entity sponsorship status
 func (ssc *SponsorshipSubscriptionController) updateEntitySponsorshipStatus(entityType string, entityID primitive.ObjectID, hasSponsorship bool) error {
-	switch entityType {
+	// Normalize entity type to handle both camelCase and snake_case formats
+	normalizedEntityType := ssc.normalizeEntityType(entityType)
+
+	switch normalizedEntityType {
 	case "service_provider":
 		// Update service provider sponsorship status
-		_, err := ssc.DB.Collection("service_providers").UpdateOne(
+		_, err := ssc.DB.Collection("serviceProviders").UpdateOne(
 			context.Background(),
 			bson.M{"_id": entityID},
 			bson.M{"$set": bson.M{
@@ -1113,5 +1215,182 @@ func formatTimeRemaining(duration time.Duration) string {
 		return fmt.Sprintf("%d minutes, %d seconds", minutes, seconds)
 	} else {
 		return fmt.Sprintf("%d seconds", seconds)
+	}
+}
+
+// Helper function to get enhanced entity details including user information
+func (ssc *SponsorshipSubscriptionController) getEnhancedEntityDetails(entityType string, entityID primitive.ObjectID) (map[string]interface{}, error) {
+	// Normalize entity type to handle both camelCase and snake_case formats
+	normalizedEntityType := ssc.normalizeEntityType(entityType)
+
+	switch normalizedEntityType {
+	case "service_provider":
+		var serviceProvider models.ServiceProvider
+		err := ssc.DB.Collection("serviceProviders").FindOne(context.Background(), bson.M{"_id": entityID}).Decode(&serviceProvider)
+		if err != nil {
+			// Try to find by userId field as fallback
+			err = ssc.DB.Collection("serviceProviders").FindOne(context.Background(), bson.M{"userId": entityID}).Decode(&serviceProvider)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Get user details if available
+		var userDetails map[string]interface{}
+		if !serviceProvider.UserID.IsZero() {
+			var user models.User
+			err := ssc.DB.Collection("users").FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
+			if err == nil {
+				userDetails = map[string]interface{}{
+					"id":        user.ID,
+					"email":     user.Email,
+					"fullName":  user.FullName,
+					"phone":     user.Phone,
+					"userType":  user.UserType,
+					"isActive":  user.IsActive,
+					"status":    user.Status,
+					"createdAt": user.CreatedAt,
+				}
+			}
+		}
+
+		return map[string]interface{}{
+			"entityType":    "service_provider",
+			"id":            serviceProvider.ID,
+			"businessName":  serviceProvider.BusinessName,
+			"category":      serviceProvider.Category,
+			"email":         serviceProvider.Email,
+			"phone":         serviceProvider.Phone,
+			"contactPerson": serviceProvider.ContactPerson,
+			"contactPhone":  serviceProvider.ContactPhone,
+			"country":       serviceProvider.Country,
+			"district":      serviceProvider.District,
+			"city":          serviceProvider.City,
+			"street":        serviceProvider.Street,
+			"postalCode":    serviceProvider.PostalCode,
+			"logoURL":       serviceProvider.LogoURL,
+			"status":        serviceProvider.Status,
+			"sponsorship":   serviceProvider.Sponsorship,
+			"createdAt":     serviceProvider.CreatedAt,
+			"userDetails":   userDetails,
+		}, nil
+
+	case "company_branch":
+		var company models.Company
+		err := ssc.DB.Collection("companies").FindOne(context.Background(), bson.M{"branches._id": entityID}).Decode(&company)
+		if err != nil {
+			return nil, err
+		}
+
+		// Find the specific branch
+		var branch models.Branch
+		for _, b := range company.Branches {
+			if b.ID == entityID {
+				branch = b
+				break
+			}
+		}
+
+		// Get user details if available
+		var userDetails map[string]interface{}
+		if !company.UserID.IsZero() {
+			var user models.User
+			err := ssc.DB.Collection("users").FindOne(context.Background(), bson.M{"_id": company.UserID}).Decode(&user)
+			if err == nil {
+				userDetails = map[string]interface{}{
+					"id":        user.ID,
+					"email":     user.Email,
+					"fullName":  user.FullName,
+					"phone":     user.Phone,
+					"userType":  user.UserType,
+					"isActive":  user.IsActive,
+					"status":    user.Status,
+					"createdAt": user.CreatedAt,
+				}
+			}
+		}
+
+		return map[string]interface{}{
+			"entityType":  "company_branch",
+			"id":          branch.ID,
+			"name":        branch.Name,
+			"category":    branch.Category,
+			"subCategory": branch.SubCategory,
+			"description": branch.Description,
+			"phone":       branch.Phone,
+			"status":      branch.Status,
+			"sponsorship": branch.Sponsorship,
+			"createdAt":   branch.CreatedAt,
+			"companyInfo": map[string]interface{}{
+				"id":            company.ID,
+				"businessName":  company.BusinessName,
+				"category":      company.Category,
+				"email":         company.Email,
+				"contactPerson": company.ContactPerson,
+				"logoURL":       company.LogoURL,
+				"sponsorship":   company.Sponsorship,
+			},
+			"userDetails": userDetails,
+		}, nil
+
+	case "wholesaler_branch":
+		var wholesaler models.Wholesaler
+		err := ssc.DB.Collection("wholesalers").FindOne(context.Background(), bson.M{"branches._id": entityID}).Decode(&wholesaler)
+		if err != nil {
+			return nil, err
+		}
+
+		// Find the specific branch
+		var branch models.Branch
+		for _, b := range wholesaler.Branches {
+			if b.ID == entityID {
+				branch = b
+				break
+			}
+		}
+
+		// Get user details if available
+		var userDetails map[string]interface{}
+		if !wholesaler.UserID.IsZero() {
+			var user models.User
+			err := ssc.DB.Collection("users").FindOne(context.Background(), bson.M{"_id": wholesaler.UserID}).Decode(&user)
+			if err == nil {
+				userDetails = map[string]interface{}{
+					"id":        user.ID,
+					"email":     user.Email,
+					"fullName":  user.FullName,
+					"phone":     user.Phone,
+					"userType":  user.UserType,
+					"isActive":  user.IsActive,
+					"status":    user.Status,
+					"createdAt": user.CreatedAt,
+				}
+			}
+		}
+
+		return map[string]interface{}{
+			"entityType":  "wholesaler_branch",
+			"id":          branch.ID,
+			"name":        branch.Name,
+			"category":    branch.Category,
+			"subCategory": branch.SubCategory,
+			"description": branch.Description,
+			"phone":       branch.Phone,
+			"status":      branch.Status,
+			"sponsorship": branch.Sponsorship,
+			"createdAt":   branch.CreatedAt,
+			"wholesalerInfo": map[string]interface{}{
+				"id":           wholesaler.ID,
+				"businessName": wholesaler.BusinessName,
+				"category":     wholesaler.Category,
+				"phone":        wholesaler.Phone,
+				"logoURL":      wholesaler.LogoURL,
+				"sponsorship":  wholesaler.Sponsorship,
+			},
+			"userDetails": userDetails,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("invalid entity type: %s", entityType)
 	}
 }

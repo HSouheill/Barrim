@@ -410,3 +410,215 @@ func (rc *ReviewController) GetReviewReply(c echo.Context) error {
 		Data:    review.Reply,
 	})
 }
+
+// DeleteReview allows admins to delete a review
+func (rc *ReviewController) DeleteReview(c echo.Context) error {
+	reviewID := c.Param("id")
+
+	// Get admin user from JWT token
+	adminUser, err := utils.GetUserFromToken(c, rc.db)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
+	}
+
+	// Check if user is admin, super_admin, or manager
+	if adminUser.UserType != "admin" && adminUser.UserType != "super_admin" && adminUser.UserType != "manager" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins, super admins, and managers can delete reviews",
+		})
+	}
+
+	// Validate review ID
+	objID, err := primitive.ObjectIDFromHex(reviewID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid review ID",
+		})
+	}
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Find the review first to get service provider ID for rating update
+	reviewsCollection := rc.db.Database("barrim").Collection("reviews")
+	var review models.Review
+	err = reviewsCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(&review)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Review not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error finding review",
+		})
+	}
+
+	// Delete the review
+	result, err := reviewsCollection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error deleting review",
+		})
+	}
+
+	if result.DeletedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Review not found",
+		})
+	}
+
+	// If review had media files, delete them from storage
+	// Note: File deletion from storage would need to be implemented based on your storage solution
+	// For now, we'll just log that files should be cleaned up
+	if review.MediaURL != "" {
+		log.Printf("Review deleted - media file should be cleaned up: %s", review.MediaURL)
+	}
+
+	if review.ThumbnailURL != "" {
+		log.Printf("Review deleted - thumbnail file should be cleaned up: %s", review.ThumbnailURL)
+	}
+
+	// Update service provider average rating in background
+	go rc.updateProviderRating(review.ServiceProviderID)
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Review deleted successfully",
+	})
+}
+
+// GetAllReviewsForAdmin allows admins to get all reviews with pagination and filtering
+func (rc *ReviewController) GetAllReviewsForAdmin(c echo.Context) error {
+	// Get admin user from JWT token
+	adminUser, err := utils.GetUserFromToken(c, rc.db)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
+	}
+
+	// Check if user is admin, super_admin, or manager
+	if adminUser.UserType != "admin" && adminUser.UserType != "super_admin" && adminUser.UserType != "manager" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins, super admins, and managers can view all reviews",
+		})
+	}
+
+	// Get query parameters for pagination and filtering
+	pageStr := c.QueryParam("page")
+	limitStr := c.QueryParam("limit")
+	serviceProviderID := c.QueryParam("serviceProviderId")
+	ratingStr := c.QueryParam("rating")
+	verifiedStr := c.QueryParam("verified")
+
+	// Set default values
+	page := 1
+	limit := 20
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	// Build filter
+	filter := bson.M{}
+	if serviceProviderID != "" {
+		if objID, err := primitive.ObjectIDFromHex(serviceProviderID); err == nil {
+			filter["serviceProviderId"] = objID
+		}
+	}
+	if ratingStr != "" {
+		if rating, err := strconv.Atoi(ratingStr); err == nil && rating >= 1 && rating <= 5 {
+			filter["rating"] = rating
+		}
+	}
+	if verifiedStr != "" {
+		if verified, err := strconv.ParseBool(verifiedStr); err == nil {
+			filter["isVerified"] = verified
+		}
+	}
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get total count for pagination
+	reviewsCollection := rc.db.Database("barrim").Collection("reviews")
+	totalCount, err := reviewsCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error counting reviews",
+		})
+	}
+
+	// Calculate skip value
+	skip := (page - 1) * limit
+
+	// Find options for pagination and sorting
+	findOptions := options.Find()
+	findOptions.SetSkip(int64(skip))
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSort(bson.D{{Key: "createdAt", Value: -1}}) // Most recent first
+
+	// Execute query
+	cursor, err := reviewsCollection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error fetching reviews",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	// Parse results
+	var reviews []models.Review
+	if err := cursor.All(ctx, &reviews); err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error parsing reviews",
+		})
+	}
+
+	// Calculate pagination info
+	totalPages := int((totalCount + int64(limit) - 1) / int64(limit))
+	hasNext := page < totalPages
+	hasPrev := page > 1
+
+	// Create response
+	response := map[string]interface{}{
+		"reviews": reviews,
+		"pagination": map[string]interface{}{
+			"currentPage": page,
+			"totalPages":  totalPages,
+			"totalCount":  totalCount,
+			"limit":       limit,
+			"hasNext":     hasNext,
+			"hasPrev":     hasPrev,
+		},
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Reviews retrieved successfully",
+		Data:    response,
+	})
+}

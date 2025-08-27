@@ -146,21 +146,21 @@ class _AddPlanPopupFormState extends State<AddPlanPopupForm> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    OutlinedButton(
-                      onPressed: _pickImage,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white70),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      ),
-                      child: const Text(
-                        'Upload Image',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
+                    // const SizedBox(width: 10),
+                    // OutlinedButton(
+                    //   onPressed: _pickImage,
+                    //   style: OutlinedButton.styleFrom(
+                    //     side: const BorderSide(color: Colors.white70),
+                    //     shape: RoundedRectangleBorder(
+                    //       borderRadius: BorderRadius.circular(20),
+                    //     ),
+                    //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    //   ),
+                    //   child: const Text(
+                    //     'Upload Image',
+                    //     style: TextStyle(color: Colors.white70, fontSize: 12),
+                    //   ),
+                    // ),
                   ],
                 ),
               ),

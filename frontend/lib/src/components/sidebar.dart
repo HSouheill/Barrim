@@ -19,6 +19,7 @@ import '../screens/admin_withdraws.dart';
 import '../screens/admin_wallet.dart';
 import '../screens/admin/requests.dart';
 import '../screens/admin_sponsorship.dart';
+import '../screens/bookings_and_reviews.dart';
 import '../screens/categories/categories_screen.dart';
 import '../../main.dart' as main;
 
@@ -230,6 +231,18 @@ MaterialPageRoute(builder: (context) => const DashboardPage()),                 
                     onCollapse();
                       Navigator.of(parentContext).pushReplacement(
                         MaterialPageRoute(builder: (context) => const AdminSponsorshipScreen()),
+                      );
+
+                  },
+                ),
+
+                _buildMenuItem(
+                  Icons.star,
+                  'Bookings & Reviews',
+                  onTap: () {
+                    onCollapse();
+                      Navigator.of(parentContext).pushReplacement(
+                        MaterialPageRoute(builder: (context) => const BookingsAndReviewsScreen()),
                       );
 
                   },

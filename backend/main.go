@@ -126,7 +126,7 @@ func main() {
 	routes.SetupRoutes(e, client, wsHub, authController, userController)
 
 	// Register admin routes AFTER general routes to avoid conflicts
-	routes.RegisterAdminRoutes(e, barrimDB)
+	routes.RegisterAdminRoutes(e, barrimDB, wsHub)
 
 	// Start the inactive user checker in a goroutine
 	go func() {
