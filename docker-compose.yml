@@ -114,6 +114,25 @@ services:
           cpus: '0.25'
           memory: 128M
 
+  privacy-service:
+    build:
+      context: ./privacy
+      dockerfile: Dockerfile
+    container_name: privacy-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:80"
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
   nginx:
     image: nginx:alpine
     container_name: nginx-proxy

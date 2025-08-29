@@ -1,74 +1,62 @@
-# Build stage
-FROM debian:latest AS build-env
+# Use official Flutter image for much faster builds
+FROM dart:stable
 
 # Add build arguments to force rebuilds
 ARG BUILD_DATE
 ARG VERSION
 ARG BUILD_TIMESTAMP
 
-# Install Flutter dependencies
-RUN apt-get update 
-RUN apt-get install -y curl git wget unzip gdb libstdc++6 libglu1-mesa fonts-droid-fallback python3 ca-certificates
-RUN apt-get clean
+# Install Flutter
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    unzip \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m -s /bin/bash flutter
-USER flutter
-WORKDIR /home/flutter
+# Install Flutter
+RUN git clone https://github.com/flutter/flutter.git /flutter
+ENV PATH="/flutter/bin:${PATH}"
 
-# Clone the flutter repo
-RUN git clone https://github.com/flutter/flutter.git /home/flutter/flutter
-
-# Set flutter path
-ENV PATH="/home/flutter/flutter/bin:/home/flutter/flutter/bin/cache/dart-sdk/bin:${PATH}"
-
-# Run flutter doctor
-RUN flutter doctor -v
+# Pre-download Flutter artifacts
+RUN flutter precache
 
 # Enable flutter web
-RUN flutter channel stable
-RUN flutter upgrade
 RUN flutter config --enable-web
 
 # Create a file with build timestamp to force rebuilds
-RUN echo "Build Date: ${BUILD_DATE:-$(date)}" > /home/flutter/build_info.txt
-RUN echo "Version: ${VERSION:-local}" >> /home/flutter/build_info.txt
-RUN echo "Timestamp: ${BUILD_TIMESTAMP:-$(date +%s)}" >> /home/flutter/build_info.txt
+RUN echo "Build Date: ${BUILD_DATE:-$(date)}" > /build_info.txt \
+    && echo "Version: ${VERSION:-local}" >> /build_info.txt \
+    && echo "Timestamp: ${BUILD_TIMESTAMP:-$(date +%s)}" >> /build_info.txt
 
-# Copy the app files to the container
-COPY --chown=flutter:flutter . /home/flutter/app/
-WORKDIR /home/flutter/app/
+# Set working directory
+WORKDIR /app
 
-# Get app dependencies
+# Copy only pubspec files first for better layer caching
+COPY pubspec.yaml pubspec.lock ./
+
+# Get app dependencies (this layer will be cached unless pubspec changes)
 RUN flutter pub get
 
-# Add web platform support
-RUN flutter create . --platforms web
+# Copy the app source code
+COPY . .
+
+# Add web platform support (only if not already present)
+RUN if [ ! -d "web" ]; then flutter create . --platforms web; fi
 
 # Build the app for the web
-RUN flutter build web
-
-# Production stage
-FROM nginx:alpine
-
-# Add build arguments to production stage
-ARG BUILD_DATE
-ARG VERSION
-ARG BUILD_TIMESTAMP
-
-# Copy the built Flutter web files
-COPY --from=build-env /home/flutter/app/build/web /usr/share/nginx/html
+RUN flutter build web --release
 
 # Copy nginx configuration
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
 # Create a build info file in the production image
-RUN echo "Build Date: ${BUILD_DATE:-$(date)}" > /usr/share/nginx/html/build_info.txt
-RUN echo "Version: ${VERSION:-local}" >> /usr/share/nginx/html/build_info.txt
-RUN echo "Timestamp: ${BUILD_TIMESTAMP:-$(date +%s)}" >> /usr/share/nginx/html/build_info.txt
+RUN echo "Build Date: ${BUILD_DATE:-$(date)}" > /app/build/web/build_info.txt \
+    && echo "Version: ${VERSION:-local}" >> /app/build/web/build_info.txt \
+    && echo "Timestamp: ${BUILD_TIMESTAMP:-$(date +%s)}" >> /app/build/web/build_info.txt
 
 # Expose port 80
 EXPOSE 80
 
-# Start nginx
+# Start nginx with the built Flutter app
 CMD ["nginx", "-g", "daemon off;"]
