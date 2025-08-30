@@ -47,8 +47,9 @@ RUN if [ ! -d "web" ]; then flutter create . --platforms web; fi
 # Build the app for the web
 RUN flutter build web --release
 
-# Copy nginx configuration
+# Copy nginx configuration and remove any conflicting defaults
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default 2>/dev/null || true
 
 # Create a build info file in the production image
 RUN echo "Build Date: ${BUILD_DATE:-$(date)}" > /app/build/web/build_info.txt \

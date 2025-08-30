@@ -75,6 +75,11 @@ esac
 echo "⏳ Waiting for services to be ready..."
 sleep 15
 
+# Restart nginx to reload custom configuration
+echo "🔄 Restarting nginx to reload custom configuration..."
+docker-compose restart nginx
+sleep 5
+
 # Check status
 echo "📊 Service deployment status:"
 docker-compose ps
