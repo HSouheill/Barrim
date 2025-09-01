@@ -149,10 +149,27 @@ func (c *ServiceProviderReferralController) GetServiceProviderDetails(ctx echo.C
 	})
 }
 
-// GetAllServiceProviders retrieves all service providers with location information
+// ServiceProviderWithUserData represents service provider data combined with user information
+type ServiceProviderWithUserData struct {
+	models.ServiceProvider `bson:",inline"`
+	Description            string      `json:"description,omitempty"`
+	Rating                 float64     `json:"rating,omitempty"`
+	ProfilePhoto           string      `json:"profilePhoto,omitempty"`
+	CertificateImage       string      `json:"certificateImage,omitempty"`
+	ServiceType            string      `json:"serviceType,omitempty"`
+	CustomServiceType      string      `json:"customServiceType,omitempty"`
+	YearsExperience        interface{} `json:"yearsExperience,omitempty"`
+	AvailableHours         []string    `json:"availableHours,omitempty"`
+	AvailableDays          []string    `json:"availableDays,omitempty"`
+	AvailableWeekdays      []string    `json:"availableWeekdays,omitempty"`
+	Status                 string      `json:"status,omitempty"`
+}
+
+// GetAllServiceProviders retrieves all service providers with complete data including description and rating
 func (c *ServiceProviderReferralController) GetAllServiceProviders(ctx echo.Context) error {
-	// Get service providers collection
+	// Get collections
 	serviceProviderCollection := c.DB.Database("barrim").Collection("serviceProviders")
+	userCollection := c.DB.Database("barrim").Collection("users")
 
 	// Define filter for active service providers (include all statuses for now to see what's available)
 	filter := bson.M{}
@@ -176,24 +193,49 @@ func (c *ServiceProviderReferralController) GetAllServiceProviders(ctx echo.Cont
 		})
 	}
 
-	// Process each service provider to ensure location data is complete
-	for i := range serviceProviders {
-		// Remove sensitive information
-		serviceProviders[i].Password = ""
+	// Create enhanced service providers with user data
+	var enhancedServiceProviders []ServiceProviderWithUserData
 
-		// The location fields are already populated in the ServiceProvider model
-		// No need for additional processing as they are flat fields
+	for _, sp := range serviceProviders {
+		// Remove sensitive information
+		sp.Password = ""
+
+		enhancedSP := ServiceProviderWithUserData{
+			ServiceProvider: sp,
+		}
+
+		// If service provider has a userId, fetch additional user data
+		if !sp.UserID.IsZero() {
+			var user models.User
+			err := userCollection.FindOne(context.Background(), bson.M{"_id": sp.UserID}).Decode(&user)
+			if err == nil && user.ServiceProviderInfo != nil {
+				// Populate additional fields from ServiceProviderInfo
+				enhancedSP.Description = user.ServiceProviderInfo.Description
+				enhancedSP.Rating = user.ServiceProviderInfo.Rating
+				enhancedSP.ProfilePhoto = user.ServiceProviderInfo.ProfilePhoto
+				enhancedSP.CertificateImage = user.ServiceProviderInfo.CertificateImage
+				enhancedSP.ServiceType = user.ServiceProviderInfo.ServiceType
+				enhancedSP.CustomServiceType = user.ServiceProviderInfo.CustomServiceType
+				enhancedSP.YearsExperience = user.ServiceProviderInfo.YearsExperience
+				enhancedSP.AvailableHours = user.ServiceProviderInfo.AvailableHours
+				enhancedSP.AvailableDays = user.ServiceProviderInfo.AvailableDays
+				enhancedSP.AvailableWeekdays = user.ServiceProviderInfo.AvailableWeekdays
+				enhancedSP.Status = user.ServiceProviderInfo.Status
+			}
+		}
+
+		enhancedServiceProviders = append(enhancedServiceProviders, enhancedSP)
 	}
 
-	// Return the service providers data with location information
+	// Return the enhanced service providers data
 	return ctx.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Service providers retrieved successfully",
-		Data:    serviceProviders,
+		Data:    enhancedServiceProviders,
 	})
 }
 
-// GetServiceProviderByID retrieves a specific service provider by ID
+// GetServiceProviderByID retrieves a specific service provider by ID with complete data
 func (c *ServiceProviderReferralController) GetServiceProviderByID(ctx echo.Context) error {
 	// Get provider ID from request parameter
 	providerID := ctx.Param("id")
@@ -207,8 +249,9 @@ func (c *ServiceProviderReferralController) GetServiceProviderByID(ctx echo.Cont
 		})
 	}
 
-	// Get serviceProviders collection
+	// Get collections
 	serviceProviderCollection := c.DB.Database("barrim").Collection("serviceProviders")
+	userCollection := c.DB.Database("barrim").Collection("users")
 
 	// Define filter for service provider
 	filter := bson.M{
@@ -231,11 +274,39 @@ func (c *ServiceProviderReferralController) GetServiceProviderByID(ctx echo.Cont
 		})
 	}
 
-	// Return the service provider data
+	// Remove sensitive information
+	serviceProvider.Password = ""
+
+	// Create enhanced service provider with user data
+	enhancedSP := ServiceProviderWithUserData{
+		ServiceProvider: serviceProvider,
+	}
+
+	// If service provider has a userId, fetch additional user data
+	if !serviceProvider.UserID.IsZero() {
+		var user models.User
+		err := userCollection.FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
+		if err == nil && user.ServiceProviderInfo != nil {
+			// Populate additional fields from ServiceProviderInfo
+			enhancedSP.Description = user.ServiceProviderInfo.Description
+			enhancedSP.Rating = user.ServiceProviderInfo.Rating
+			enhancedSP.ProfilePhoto = user.ServiceProviderInfo.ProfilePhoto
+			enhancedSP.CertificateImage = user.ServiceProviderInfo.CertificateImage
+			enhancedSP.ServiceType = user.ServiceProviderInfo.ServiceType
+			enhancedSP.CustomServiceType = user.ServiceProviderInfo.CustomServiceType
+			enhancedSP.YearsExperience = user.ServiceProviderInfo.YearsExperience
+			enhancedSP.AvailableHours = user.ServiceProviderInfo.AvailableHours
+			enhancedSP.AvailableDays = user.ServiceProviderInfo.AvailableDays
+			enhancedSP.AvailableWeekdays = user.ServiceProviderInfo.AvailableWeekdays
+			enhancedSP.Status = user.ServiceProviderInfo.Status
+		}
+	}
+
+	// Return the enhanced service provider data
 	return ctx.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Service provider retrieved successfully",
-		Data:    serviceProvider,
+		Data:    enhancedSP,
 	})
 }
 
