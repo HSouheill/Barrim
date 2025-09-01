@@ -162,7 +162,7 @@ type ServiceProviderWithUserData struct {
 	AvailableHours         []string    `json:"availableHours,omitempty"`
 	AvailableDays          []string    `json:"availableDays,omitempty"`
 	AvailableWeekdays      []string    `json:"availableWeekdays,omitempty"`
-	Status                 string      `json:"status,omitempty"`
+	AvailabilityStatus     string      `json:"availabilityStatus,omitempty"`
 }
 
 // GetAllServiceProviders retrieves all service providers with complete data including description and rating
@@ -298,7 +298,7 @@ func (c *ServiceProviderReferralController) GetServiceProviderByID(ctx echo.Cont
 			enhancedSP.AvailableHours = user.ServiceProviderInfo.AvailableHours
 			enhancedSP.AvailableDays = user.ServiceProviderInfo.AvailableDays
 			enhancedSP.AvailableWeekdays = user.ServiceProviderInfo.AvailableWeekdays
-			enhancedSP.Status = user.ServiceProviderInfo.Status
+			enhancedSP.AvailabilityStatus = user.ServiceProviderInfo.Status
 		}
 	}
 
