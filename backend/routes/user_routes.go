@@ -93,6 +93,18 @@ func RegisterUserRoutes(e *echo.Echo, db *mongo.Client, userController *controll
 		serviceProviderController := controllers.NewServiceProviderReferralController(db)
 		return serviceProviderController.UploadCertificateImage(c)
 	})
+	serviceProvider.GET("/certificates", func(c echo.Context) error {
+		serviceProviderController := controllers.NewServiceProviderReferralController(db)
+		return serviceProviderController.GetCertificates(c)
+	})
+	serviceProvider.DELETE("/certificate", func(c echo.Context) error {
+		serviceProviderController := controllers.NewServiceProviderReferralController(db)
+		return serviceProviderController.DeleteCertificate(c)
+	})
+	serviceProvider.GET("/certificate/details", func(c echo.Context) error {
+		serviceProviderController := controllers.NewServiceProviderReferralController(db)
+		return serviceProviderController.GetCertificateDetails(c)
+	})
 	serviceProvider.GET("/details", func(c echo.Context) error {
 		serviceProviderController := controllers.NewServiceProviderReferralController(db)
 		return serviceProviderController.GetServiceProviderDetails(c)

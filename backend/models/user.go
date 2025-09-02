@@ -98,7 +98,7 @@ type ServiceProviderInfo struct {
 	Description              string               `json:"description,omitempty" bson:"description,omitempty"`
 	YearsExperience          interface{}          `json:"yearsExperience" bson:"yearsExperience"`
 	ProfilePhoto             string               `json:"profilePhoto,omitempty" bson:"profilePhoto,omitempty"`
-	CertificateImage         string               `json:"certificateImage,omitempty" bson:"certificateImage,omitempty"`
+	CertificateImages        []string             `json:"certificateImages,omitempty" bson:"certificateImages,omitempty"`
 	AvailableHours           []string             `json:"availableHours,omitempty" bson:"availableHours,omitempty"`
 	AvailableDays            []string             `json:"availableDays,omitempty" bson:"availableDays,omitempty"`
 	ApplyToAllMonths         bool                 `json:"applyToAllMonths,omitempty" bson:"applyToAllMonths,omitempty"`
@@ -113,18 +113,18 @@ type ServiceProviderInfo struct {
 
 // Update the UpdateServiceProviderRequest to include description
 type UpdateServiceProviderRequest struct {
-	FullName         string      `json:"fullName,omitempty"`
-	Email            string      `json:"email,omitempty"`
-	Password         string      `json:"password,omitempty"`
-	LogoPath         string      `json:"logoPath,omitempty"`
-	Phone            string      `json:"phone,omitempty"`
-	ServiceType      string      `json:"serviceType,omitempty"`
-	Description      string      `json:"description,omitempty"`      // New field
-	CertificateImage string      `json:"certificateImage,omitempty"` // New field
-	YearsExperience  interface{} `json:"yearsExperience,omitempty"`
-	Location         *Location   `json:"location,omitempty"`
-	AvailableDays    []string    `json:"availableDays,omitempty"`
-	AvailableHours   []string    `json:"availableHours,omitempty"`
+	FullName          string      `json:"fullName,omitempty"`
+	Email             string      `json:"email,omitempty"`
+	Password          string      `json:"password,omitempty"`
+	LogoPath          string      `json:"logoPath,omitempty"`
+	Phone             string      `json:"phone,omitempty"`
+	ServiceType       string      `json:"serviceType,omitempty"`
+	Description       string      `json:"description,omitempty"`       // New field
+	CertificateImages []string    `json:"certificateImages,omitempty"` // New field
+	YearsExperience   interface{} `json:"yearsExperience,omitempty"`
+	Location          *Location   `json:"location,omitempty"`
+	AvailableDays     []string    `json:"availableDays,omitempty"`
+	AvailableHours    []string    `json:"availableHours,omitempty"`
 }
 
 // Step 2: Create a request model for updating social links

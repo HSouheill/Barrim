@@ -155,7 +155,7 @@ type ServiceProviderWithUserData struct {
 	Description            string      `json:"description,omitempty"`
 	Rating                 float64     `json:"rating,omitempty"`
 	ProfilePhoto           string      `json:"profilePhoto,omitempty"`
-	CertificateImage       string      `json:"certificateImage,omitempty"`
+	CertificateImages      []string    `json:"certificateImages,omitempty"`
 	ServiceType            string      `json:"serviceType,omitempty"`
 	CustomServiceType      string      `json:"customServiceType,omitempty"`
 	YearsExperience        interface{} `json:"yearsExperience,omitempty"`
@@ -213,7 +213,7 @@ func (c *ServiceProviderReferralController) GetAllServiceProviders(ctx echo.Cont
 				enhancedSP.Description = user.ServiceProviderInfo.Description
 				enhancedSP.Rating = user.ServiceProviderInfo.Rating
 				enhancedSP.ProfilePhoto = user.ServiceProviderInfo.ProfilePhoto
-				enhancedSP.CertificateImage = user.ServiceProviderInfo.CertificateImage
+				enhancedSP.CertificateImages = user.ServiceProviderInfo.CertificateImages
 				enhancedSP.ServiceType = user.ServiceProviderInfo.ServiceType
 				enhancedSP.CustomServiceType = user.ServiceProviderInfo.CustomServiceType
 				enhancedSP.YearsExperience = user.ServiceProviderInfo.YearsExperience
@@ -291,7 +291,7 @@ func (c *ServiceProviderReferralController) GetServiceProviderByID(ctx echo.Cont
 			enhancedSP.Description = user.ServiceProviderInfo.Description
 			enhancedSP.Rating = user.ServiceProviderInfo.Rating
 			enhancedSP.ProfilePhoto = user.ServiceProviderInfo.ProfilePhoto
-			enhancedSP.CertificateImage = user.ServiceProviderInfo.CertificateImage
+			enhancedSP.CertificateImages = user.ServiceProviderInfo.CertificateImages
 			enhancedSP.ServiceType = user.ServiceProviderInfo.ServiceType
 			enhancedSP.CustomServiceType = user.ServiceProviderInfo.CustomServiceType
 			enhancedSP.YearsExperience = user.ServiceProviderInfo.YearsExperience
@@ -1044,14 +1044,16 @@ func (c *ServiceProviderReferralController) UploadCertificateImage(ctx echo.Cont
 		})
 	}
 
-	// Update the user's certificate image path in the database
+	// Update the user's certificate images array in the database
 	userCollection := c.DB.Database("barrim").Collection("users")
 	objID, _ := primitive.ObjectIDFromHex(userID)
 
 	update := bson.M{
+		"$push": bson.M{
+			"serviceProviderInfo.certificateImages": uploadPath,
+		},
 		"$set": bson.M{
-			"serviceProviderInfo.certificateImage": uploadPath,
-			"updatedAt":                            time.Now(),
+			"updatedAt": time.Now(),
 		},
 	}
 
@@ -1059,15 +1061,251 @@ func (c *ServiceProviderReferralController) UploadCertificateImage(ctx echo.Cont
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to update certificate image path",
+			Message: "Failed to update certificate images",
 		})
 	}
 
 	return ctx.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Certificate image uploaded successfully",
-		Data: map[string]string{
+		Data: map[string]interface{}{
 			"certificateImage": uploadPath,
+			"message":          "Certificate added to your collection",
+		},
+	})
+}
+
+// GetCertificates retrieves all certificates for a service provider
+func (c *ServiceProviderReferralController) GetCertificates(ctx echo.Context) error {
+	// Extract user ID from token
+	userID, err := middleware.ExtractUserID(ctx)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid authentication token",
+		})
+	}
+
+	// Convert string ID to ObjectID
+	objID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID format",
+		})
+	}
+
+	// Get user collection
+	userCollection := c.DB.Database("barrim").Collection("users")
+
+	// Find the service provider
+	var user models.User
+	err = userCollection.FindOne(context.Background(), bson.M{
+		"_id":      objID,
+		"userType": "serviceProvider",
+	}).Decode(&user)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return ctx.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return ctx.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to fetch service provider data: " + err.Error(),
+		})
+	}
+
+	// Get certificates
+	var certificates []string
+	if user.ServiceProviderInfo != nil {
+		certificates = user.ServiceProviderInfo.CertificateImages
+	}
+
+	return ctx.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Certificates retrieved successfully",
+		Data: map[string]interface{}{
+			"certificates": certificates,
+			"count":        len(certificates),
+		},
+	})
+}
+
+// DeleteCertificate removes a specific certificate from a service provider
+func (c *ServiceProviderReferralController) DeleteCertificate(ctx echo.Context) error {
+	// Extract user ID from token
+	userID, err := middleware.ExtractUserID(ctx)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid authentication token",
+		})
+	}
+
+	// Convert string ID to ObjectID
+	objID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID format",
+		})
+	}
+
+	// Get certificate path from request
+	var req struct {
+		CertificatePath string `json:"certificatePath"`
+	}
+	if err := ctx.Bind(&req); err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+		})
+	}
+
+	if req.CertificatePath == "" {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Certificate path is required",
+		})
+	}
+
+	// Get user collection
+	userCollection := c.DB.Database("barrim").Collection("users")
+
+	// Remove the certificate from the array
+	update := bson.M{
+		"$pull": bson.M{
+			"serviceProviderInfo.certificateImages": req.CertificatePath,
+		},
+		"$set": bson.M{
+			"updatedAt": time.Now(),
+		},
+	}
+
+	result, err := userCollection.UpdateOne(context.Background(), bson.M{"_id": objID}, update)
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to delete certificate: " + err.Error(),
+		})
+	}
+
+	if result.ModifiedCount == 0 {
+		return ctx.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Certificate not found",
+		})
+	}
+
+	// Try to delete the physical file
+	filePath := req.CertificatePath
+	if _, err := os.Stat(filePath); err == nil {
+		os.Remove(filePath)
+	}
+
+	return ctx.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Certificate deleted successfully",
+		Data: map[string]interface{}{
+			"deletedPath": req.CertificatePath,
+		},
+	})
+}
+
+// GetCertificateDetails retrieves detailed information about a specific certificate
+func (c *ServiceProviderReferralController) GetCertificateDetails(ctx echo.Context) error {
+	// Extract user ID from token
+	userID, err := middleware.ExtractUserID(ctx)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid authentication token",
+		})
+	}
+
+	// Convert string ID to ObjectID
+	objID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID format",
+		})
+	}
+
+	// Get certificate path from URL parameter
+	certificatePath := ctx.QueryParam("path")
+	if certificatePath == "" {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Certificate path is required",
+		})
+	}
+
+	// Get user collection
+	userCollection := c.DB.Database("barrim").Collection("users")
+
+	// Find the service provider
+	var user models.User
+	err = userCollection.FindOne(context.Background(), bson.M{
+		"_id":      objID,
+		"userType": "serviceProvider",
+	}).Decode(&user)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return ctx.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return ctx.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to fetch service provider data: " + err.Error(),
+		})
+	}
+
+	// Check if certificate exists in user's certificates
+	certificateExists := false
+	if user.ServiceProviderInfo != nil {
+		for _, cert := range user.ServiceProviderInfo.CertificateImages {
+			if cert == certificatePath {
+				certificateExists = true
+				break
+			}
+		}
+	}
+
+	if !certificateExists {
+		return ctx.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Certificate not found",
+		})
+	}
+
+	// Get file information
+	fileInfo, err := os.Stat(certificatePath)
+	if err != nil {
+		return ctx.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Certificate file not found",
+		})
+	}
+
+	// Extract filename from path
+	filename := filepath.Base(certificatePath)
+
+	return ctx.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Certificate details retrieved successfully",
+		Data: map[string]interface{}{
+			"filename":   filename,
+			"path":       certificatePath,
+			"size":       fileInfo.Size(),
+			"uploadedAt": fileInfo.ModTime(),
+			"isReadable": true,
 		},
 	})
 }
