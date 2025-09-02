@@ -128,11 +128,10 @@ func (c *BookingController) CreateBooking(ctx echo.Context) error {
 	}
 
 	// Check if service provider exists
-	collection := c.db.Database("barrim").Collection("users")
-	var serviceProvider models.User
-	err = collection.FindOne(context.Background(), bson.M{
-		"_id":      serviceProviderID,
-		"userType": "serviceProvider",
+	serviceProviderCollection := c.db.Database("barrim").Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	err = serviceProviderCollection.FindOne(context.Background(), bson.M{
+		"_id": serviceProviderID,
 	}).Decode(&serviceProvider)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -147,8 +146,19 @@ func (c *BookingController) CreateBooking(ctx echo.Context) error {
 		})
 	}
 
+	// Get user data for availability check
+	var userData *models.User
+	if !serviceProvider.UserID.IsZero() {
+		userCollection := c.db.Database("barrim").Collection("users")
+		var user models.User
+		err = userCollection.FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
+		if err == nil {
+			userData = &user
+		}
+	}
+
 	// Check service provider availability
-	if !isProviderAvailable(serviceProvider, request.BookingDate, request.TimeSlot) {
+	if userData == nil || !isProviderAvailable(*userData, request.BookingDate, request.TimeSlot) {
 		return ctx.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Service provider is not available at this time",
@@ -341,12 +351,11 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 		})
 	}
 
-	// Get service provider details
-	collection := c.db.Database("barrim").Collection("users")
-	var serviceProvider models.User
-	err = collection.FindOne(context.Background(), bson.M{
-		"_id":      serviceProviderID,
-		"userType": "serviceProvider",
+	// Get service provider details from serviceProviders collection
+	serviceProviderCollection := c.db.Database("barrim").Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	err = serviceProviderCollection.FindOne(context.Background(), bson.M{
+		"_id": serviceProviderID,
 	}).Decode(&serviceProvider)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -361,11 +370,24 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 		})
 	}
 
+	// Get additional user data if userId exists
+	var userData *models.User
+	if !serviceProvider.UserID.IsZero() {
+		userCollection := c.db.Database("barrim").Collection("users")
+		var user models.User
+		err = userCollection.FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
+		if err == nil {
+			userData = &user
+		}
+	}
+
 	// Check if the provider is available on this date (by checking availableDays)
 	dateStr = date.Format("2006-01-02")
 	isDateAvailable := false
-	if serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.AvailableDays != nil {
-		for _, availableDate := range serviceProvider.ServiceProviderInfo.AvailableDays {
+
+	// First check availableDays from user data
+	if userData != nil && userData.ServiceProviderInfo != nil && userData.ServiceProviderInfo.AvailableDays != nil {
+		for _, availableDate := range userData.ServiceProviderInfo.AvailableDays {
 			if availableDate == dateStr {
 				isDateAvailable = true
 				break
@@ -374,9 +396,9 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 	}
 
 	// If not directly in availableDays, check if the weekday is available
-	if !isDateAvailable && serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.AvailableWeekdays != nil {
+	if !isDateAvailable && userData != nil && userData.ServiceProviderInfo != nil && userData.ServiceProviderInfo.AvailableWeekdays != nil {
 		dayOfWeek := date.Weekday().String()
-		for _, weekday := range serviceProvider.ServiceProviderInfo.AvailableWeekdays {
+		for _, weekday := range userData.ServiceProviderInfo.AvailableWeekdays {
 			if weekday == dayOfWeek {
 				isDateAvailable = true
 				break
@@ -396,10 +418,11 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 	var startHour, endHour time.Time
 	var availableSlots []string
 
-	if serviceProvider.ServiceProviderInfo != nil && len(serviceProvider.ServiceProviderInfo.AvailableHours) >= 2 {
+	// Get available hours from user data
+	if userData != nil && userData.ServiceProviderInfo != nil && len(userData.ServiceProviderInfo.AvailableHours) >= 2 {
 		// Parse start and end hours from provider's available hours (format: "09:00", "17:00")
-		startTimeStr := serviceProvider.ServiceProviderInfo.AvailableHours[0]
-		endTimeStr := serviceProvider.ServiceProviderInfo.AvailableHours[1]
+		startTimeStr := userData.ServiceProviderInfo.AvailableHours[0]
+		endTimeStr := userData.ServiceProviderInfo.AvailableHours[1]
 
 		// Parse times in 24-hour format
 		startHour, err = time.Parse("15:04", startTimeStr)
