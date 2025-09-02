@@ -220,7 +220,10 @@ func (c *ServiceProviderReferralController) GetAllServiceProviders(ctx echo.Cont
 				enhancedSP.AvailableHours = user.ServiceProviderInfo.AvailableHours
 				enhancedSP.AvailableDays = user.ServiceProviderInfo.AvailableDays
 				enhancedSP.AvailableWeekdays = user.ServiceProviderInfo.AvailableWeekdays
-				enhancedSP.Status = user.ServiceProviderInfo.Status
+				// Only override status if the service provider's status is empty
+				if enhancedSP.Status == "" {
+					enhancedSP.Status = user.ServiceProviderInfo.Status
+				}
 			}
 		}
 
