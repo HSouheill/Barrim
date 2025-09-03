@@ -1035,7 +1035,7 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		updateFields["password"] = hashedPassword
 	}
 
-	// Update category
+	// Update category (this should be at root level for service providers)
 	if len(category) > 0 && category[0] != "" {
 		updateFields["category"] = category[0]
 	}
@@ -1143,17 +1143,25 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		serviceProviderInfo["location"] = location
 	}
 
-	// Update ServiceProviderInfo if there are any fields to update
-	if len(serviceProviderInfo) > 0 {
-		updateFields["serviceProviderInfo"] = serviceProviderInfo
-	}
-
 	// Perform the update
 	userCollection := c.DB.Database("barrim").Collection("users")
+
+	// Build the update document with proper dot notation for nested fields
+	updateDoc := bson.M{"$set": updateFields}
+
+	// Add serviceProviderInfo fields using dot notation to avoid overwriting the entire object
+	if len(serviceProviderInfo) > 0 {
+		for key, value := range serviceProviderInfo {
+			updateDoc["$set"].(bson.M)["serviceProviderInfo."+key] = value
+		}
+		// Remove the serviceProviderInfo object from updateFields since we're using dot notation
+		delete(updateDoc["$set"].(bson.M), "serviceProviderInfo")
+	}
+
 	_, err = userCollection.UpdateOne(
 		context.Background(),
 		bson.M{"_id": objID},
-		bson.M{"$set": updateFields},
+		updateDoc,
 	)
 
 	if err != nil {
