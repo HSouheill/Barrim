@@ -1813,21 +1813,74 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		if user.ServiceProviderInfo != nil {
 			user.ServiceProviderInfo.ReferralCode = referralCode
 		}
-		// Create a ServiceProvider record with status pending
+
+		// Create a comprehensive ServiceProvider record with all data
 		serviceProvider := models.ServiceProvider{
-			ID:           primitive.NewObjectID(),
-			UserID:       userID,
-			BusinessName: user.FullName,
-			Category:     "",                   // Set if available
-			ContactInfo:  models.ContactInfo{}, // Set if available
-			LogoURL:      user.LogoPath,
-			ReferralCode: referralCode,
-			CreatedBy:    userID,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-			Status:       "pending", // Set to pending until manager approval
+			ID:                primitive.NewObjectID(),
+			UserID:            userID,
+			BusinessName:      user.FullName,
+			Category:          "", // Will be set from ServiceProviderInfo if available
+			Email:             user.Email,
+			Phone:             user.Phone,
+			Password:          user.Password,
+			ContactPerson:     user.FullName,
+			ContactPhone:      user.Phone,
+			Country:           "",
+			District:          "",
+			City:              "",
+			Street:            "",
+			PostalCode:        "",
+			LogoURL:           user.LogoPath,
+			ContactInfo:       models.ContactInfo{},
+			ReferralCode:      referralCode,
+			CommissionPercent: 0,
+			Sponsorship:       false,
+			CreatedBy:         userID,
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
+			Status:            "pending", // Set to pending until manager approval
+			CreationRequest:   "pending",
 		}
-		_, _ = ac.DB.Database("barrim").Collection("serviceProviders").InsertOne(ctx, serviceProvider)
+
+		// Populate fields from ServiceProviderInfo if available
+		if user.ServiceProviderInfo != nil {
+			serviceProvider.Category = user.ServiceProviderInfo.ServiceType
+		}
+
+		// Populate location fields if available
+		if user.Location != nil {
+			serviceProvider.Country = user.Location.Country
+			serviceProvider.District = user.Location.District
+			serviceProvider.City = user.Location.City
+			serviceProvider.Street = user.Location.Street
+			serviceProvider.PostalCode = user.Location.PostalCode
+
+			// Convert Location to Address for ContactInfo
+			serviceProvider.ContactInfo = models.ContactInfo{
+				Phone: user.Phone,
+				Address: models.Address{
+					Country:    user.Location.Country,
+					District:   user.Location.District,
+					City:       user.Location.City,
+					Street:     user.Location.Street,
+					PostalCode: user.Location.PostalCode,
+					Lat:        user.Location.Lat,
+					Lng:        user.Location.Lng,
+				},
+			}
+		}
+
+		// Insert the service provider record
+		_, err = ac.DB.Database("barrim").Collection("serviceProviders").InsertOne(ctx, serviceProvider)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create service provider record",
+			})
+		}
+
+		// Update user with service provider ID
+		user.ServiceProviderID = &serviceProvider.ID
 	}
 
 	// If it's a service provider signup and a referral code was provided, increment points for the referring service provider
