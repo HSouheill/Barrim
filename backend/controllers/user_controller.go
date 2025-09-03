@@ -1742,28 +1742,28 @@ func (uc *UserController) AddServiceProviderToFavorites(c echo.Context) error {
 		})
 	}
 
-	// Check if service provider exists in users collection first
+	// Check if service provider exists in serviceProviders collection first (primary location)
+	serviceProvidersCollection := uc.DB.Database("barrim").Collection("serviceProviders")
 	usersCollection := uc.DB.Database("barrim").Collection("users")
-	var serviceProvider models.User
-	filter := bson.M{
-		"_id":      serviceProviderID,
-		"userType": "serviceProvider",
-	}
-	err = usersCollection.FindOne(context.Background(), filter).Decode(&serviceProvider)
+	var serviceProviderDoc models.ServiceProvider
+	filter := bson.M{"_id": serviceProviderID}
+	err = serviceProvidersCollection.FindOne(context.Background(), filter).Decode(&serviceProviderDoc)
 
-	// If not found in users collection, check serviceProviders collection
+	// If not found in serviceProviders collection, check users collection as fallback
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			// Check in serviceProviders collection
-			serviceProvidersCollection := uc.DB.Database("barrim").Collection("serviceProviders")
-			var serviceProviderDoc models.ServiceProvider
-			filter = bson.M{"_id": serviceProviderID}
-			err = serviceProvidersCollection.FindOne(context.Background(), filter).Decode(&serviceProviderDoc)
+			// Check in users collection as fallback
+			var serviceProviderUser models.User
+			filter = bson.M{
+				"_id":      serviceProviderID,
+				"userType": "serviceProvider",
+			}
+			err = usersCollection.FindOne(context.Background(), filter).Decode(&serviceProviderUser)
 			if err != nil {
 				if err == mongo.ErrNoDocuments {
 					return c.JSON(http.StatusNotFound, models.Response{
 						Status:  http.StatusNotFound,
-						Message: "Service provider not found in either users or serviceProviders collection",
+						Message: "Service provider not found in either serviceProviders or users collection",
 					})
 				}
 				return c.JSON(http.StatusInternalServerError, models.Response{
@@ -1771,7 +1771,7 @@ func (uc *UserController) AddServiceProviderToFavorites(c echo.Context) error {
 					Message: "Error finding service provider: " + err.Error(),
 				})
 			}
-			// Service provider found in serviceProviders collection
+			// Service provider found in users collection
 			// We can proceed with adding to favorites
 		} else {
 			return c.JSON(http.StatusInternalServerError, models.Response{
@@ -1933,7 +1933,46 @@ func (uc *UserController) GetFavoriteServiceProviders(c echo.Context) error {
 	// Find all service providers that match the IDs from both collections
 	var allFavoriteProviders []map[string]interface{}
 
-	// First, try to find in users collection
+	// First, try to find in serviceProviders collection (primary)
+	serviceProvidersCollection := uc.DB.Database("barrim").Collection("serviceProviders")
+	serviceProviderPipeline := []bson.M{
+		{
+			"$match": bson.M{
+				"_id": bson.M{"$in": favoriteIds},
+			},
+		},
+		{
+			"$project": bson.M{
+				"_id":                 1,
+				"businessName":        1,
+				"email":               1,
+				"phone":               1,
+				"logo":                1,
+				"category":            1,
+				"country":             1,
+				"district":            1,
+				"city":                1,
+				"street":              1,
+				"postalCode":          1,
+				"serviceProviderInfo": 1,
+				"contactInfo":         1,
+				"createdAt":           1,
+				"updatedAt":           1,
+				"source":              "serviceProviders",
+			},
+		},
+	}
+
+	serviceProviderCursor, err := serviceProvidersCollection.Aggregate(context.Background(), serviceProviderPipeline)
+	if err == nil {
+		var serviceProviderDocs []map[string]interface{}
+		if err = serviceProviderCursor.All(context.Background(), &serviceProviderDocs); err == nil {
+			allFavoriteProviders = append(allFavoriteProviders, serviceProviderDocs...)
+		}
+		serviceProviderCursor.Close(context.Background())
+	}
+
+	// Then, try to find in users collection as fallback
 	pipeline := []bson.M{
 		{
 			"$match": bson.M{
@@ -1965,36 +2004,6 @@ func (uc *UserController) GetFavoriteServiceProviders(c echo.Context) error {
 		}
 		cursor.Close(context.Background())
 	}
-
-	// Then, try to find in serviceProviders collection
-	serviceProvidersCollection := uc.DB.Database("barrim").Collection("serviceProviders")
-	serviceProviderPipeline := []bson.M{
-		{
-			"$match": bson.M{
-				"_id": bson.M{"$in": favoriteIds},
-			},
-		},
-		{
-			"$project": bson.M{
-				"_id":          1,
-				"businessName": 1,
-				"email":        1,
-				"phone":        1,
-				"logo":         1,
-				"category":     1,
-				"country":      1,
-				"district":     1,
-				"city":         1,
-				"street":       1,
-				"postalCode":   1,
-				"createdAt":    1,
-				"updatedAt":    1,
-				"source":       "serviceProviders",
-			},
-		},
-	}
-
-	serviceProviderCursor, err := serviceProvidersCollection.Aggregate(context.Background(), serviceProviderPipeline)
 	if err == nil {
 		var serviceProviderDocs []map[string]interface{}
 		if err = serviceProviderCursor.All(context.Background(), &serviceProviderDocs); err == nil {
@@ -2021,6 +2030,12 @@ func (uc *UserController) GetFavoriteServiceProviders(c echo.Context) error {
 				// Handle serviceProviders collection data
 				if logo, exists := provider["logo"].(string); exists && logo != "" {
 					allFavoriteProviders[i]["logo"] = "/" + logo
+				}
+				// Handle ServiceProviderInfo from serviceProviders collection
+				if serviceProviderInfo, exists := provider["serviceProviderInfo"].(map[string]interface{}); exists {
+					if profilePhoto, exists := serviceProviderInfo["profilePhoto"].(string); exists && profilePhoto != "" {
+						allFavoriteProviders[i]["profilePhoto"] = "/uploads/serviceprovider/" + profilePhoto
+					}
 				}
 			}
 		}

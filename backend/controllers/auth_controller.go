@@ -1802,19 +1802,14 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		}
 	}
 
-	// If it's a service provider signup, set ServiceProviderInfo and LogoPath
+	// If it's a service provider signup, save data to serviceProviders collection
 	if signupData.UserType == "serviceProvider" {
-		user.ServiceProviderInfo = signupData.ServiceProviderInfo
+		// Don't set ServiceProviderInfo in user - it will be in serviceProviders collection
 		user.LogoPath = signupData.LogoPath
 		user.Location = signupData.Location
 		user.ReferralCode = referralCode
 
-		// Set referral code in ServiceProviderInfo if it exists
-		if user.ServiceProviderInfo != nil {
-			user.ServiceProviderInfo.ReferralCode = referralCode
-		}
-
-		// Create a comprehensive ServiceProvider record with all data
+		// Create a comprehensive ServiceProvider record with all data including ServiceProviderInfo
 		serviceProvider := models.ServiceProvider{
 			ID:                primitive.NewObjectID(),
 			UserID:            userID,
@@ -1843,8 +1838,12 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		}
 
 		// Populate fields from ServiceProviderInfo if available
-		if user.ServiceProviderInfo != nil {
-			serviceProvider.Category = user.ServiceProviderInfo.ServiceType
+		if signupData.ServiceProviderInfo != nil {
+			serviceProvider.Category = signupData.ServiceProviderInfo.ServiceType
+			// Set referral code in ServiceProviderInfo
+			signupData.ServiceProviderInfo.ReferralCode = referralCode
+			// Save ServiceProviderInfo in the serviceProviders collection
+			serviceProvider.ServiceProviderInfo = signupData.ServiceProviderInfo
 		}
 
 		// Populate location fields if available
@@ -1879,7 +1878,7 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 			})
 		}
 
-		// Update user with service provider ID
+		// Update user with service provider ID (but don't include ServiceProviderInfo)
 		user.ServiceProviderID = &serviceProvider.ID
 	}
 

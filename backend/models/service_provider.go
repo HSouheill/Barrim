@@ -63,10 +63,12 @@ type ServiceProvider struct {
 	ContactInfo       ContactInfo        `json:"contactInfo,omitempty" bson:"contactInfo,omitempty"`
 	ReferralCode      string             `json:"referralCode,omitempty" bson:"referralCode,omitempty"`
 	CommissionPercent float64            `bson:"commissionPercent,omitempty" json:"commissionPercent,omitempty"`
-	Sponsorship       bool               `json:"sponsorship,omitempty" bson:"sponsorship,omitempty"`           // Whether the service provider has active sponsorship
+	Sponsorship       bool               `json:"sponsorship,omitempty" bson:"sponsorship,omitempty"` // Whether the service provider has active sponsorship
 	CreatedBy         primitive.ObjectID `json:"createdBy,omitempty" bson:"createdBy,omitempty"`
 	CreatedAt         time.Time          `json:"createdAt,omitempty" bson:"createdAt,omitempty"`
 	UpdatedAt         time.Time          `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
 	Status            string             `json:"status,omitempty" bson:"status,omitempty"`
 	CreationRequest   string             `json:"CreationRequest,omitempty" bson:"CreationRequest,omitempty"` // "approved", "rejected", or ""
+	// Service provider specific information
+	ServiceProviderInfo *ServiceProviderInfo `json:"serviceProviderInfo,omitempty" bson:"serviceProviderInfo,omitempty"`
 }
