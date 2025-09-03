@@ -12,6 +12,17 @@ RUN addgroup -g 1001 -S appuser && \
 # Copy pre-built binary into the image
 COPY barrim_backend ./barrim_backend
 
+# Create upload directories
+RUN mkdir -p /app/uploads/bookings \
+    /app/uploads/category \
+    /app/uploads/certificates \
+    /app/uploads/companies \
+    /app/uploads/logo \
+    /app/uploads/logos \
+    /app/uploads/videos \
+    /app/uploads/profiles \
+    /app/uploads/serviceprovider
+
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app
 

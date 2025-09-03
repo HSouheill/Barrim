@@ -29,6 +29,17 @@ RUN addgroup -g 1001 -S appuser && \
 # Copy binary from builder stage
 COPY --from=builder /app/barrim_backend .
 
+# Create upload directories
+RUN mkdir -p /app/uploads/bookings \
+    /app/uploads/category \
+    /app/uploads/certificates \
+    /app/uploads/companies \
+    /app/uploads/logo \
+    /app/uploads/logos \
+    /app/uploads/videos \
+    /app/uploads/profiles \
+    /app/uploads/serviceprovider
+
 # Change ownership
 RUN chown -R appuser:appuser /app
 

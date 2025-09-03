@@ -73,7 +73,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=100M,noexec,nosuid,nodev
-      - /app/uploads:size=1G,noexec,nosuid,nodev
+    volumes:
+      - uploads_data:/app/uploads
     deploy:
       resources:
         limits:
@@ -103,6 +104,8 @@ volumes:
   redis_data:
     driver: local
   mongodb_data:
+    driver: local
+  uploads_data:
     driver: local
 
 networks:

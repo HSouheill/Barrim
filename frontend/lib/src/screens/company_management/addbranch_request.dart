@@ -742,13 +742,14 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                                       Map<String, dynamic>? spData;
                                                       if (data['serviceProvider'] != null && data['serviceProvider'] is Map<String, dynamic>) {
                                                         spData = data['serviceProvider'];
-                                                      } else if (data['fullName'] != null) {
+                                                      } else if (data['businessName'] != null || data['fullName'] != null) {
                                                         spData = data;
                                                       }
                                                       
                                                       if (spData != null) {
-                                                        name = spData['fullName'] ?? spData['name'] ?? 'N/A';
-                                                        address = spData['contactInfo']?['address']?['city'] ?? 'N/A';
+                                                        // Use businessName, contactPerson, or fullName in that order
+                                                        name = spData['businessName'] ?? spData['contactPerson'] ?? spData['fullname'] ?? spData['fullName'] ?? spData['name'] ?? 'N/A';
+                                                        address = spData['contactInfo']?['address']?['city'] ?? spData['city'] ?? 'N/A';
                                                         entityId = spData['id'];
                                                         currentStatus = spData['status'] ?? 'active';
                                                         
