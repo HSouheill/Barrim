@@ -1742,7 +1742,7 @@ func (uc *UserController) AddServiceProviderToFavorites(c echo.Context) error {
 		})
 	}
 
-	// Check if service provider exists
+	// Check if service provider exists in users collection first
 	usersCollection := uc.DB.Database("barrim").Collection("users")
 	var serviceProvider models.User
 	filter := bson.M{
@@ -1750,17 +1750,35 @@ func (uc *UserController) AddServiceProviderToFavorites(c echo.Context) error {
 		"userType": "serviceProvider",
 	}
 	err = usersCollection.FindOne(context.Background(), filter).Decode(&serviceProvider)
+
+	// If not found in users collection, check serviceProviders collection
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return c.JSON(http.StatusNotFound, models.Response{
-				Status:  http.StatusNotFound,
-				Message: "Service provider not found",
+			// Check in serviceProviders collection
+			serviceProvidersCollection := uc.DB.Database("barrim").Collection("serviceProviders")
+			var serviceProviderDoc models.ServiceProvider
+			filter = bson.M{"_id": serviceProviderID}
+			err = serviceProvidersCollection.FindOne(context.Background(), filter).Decode(&serviceProviderDoc)
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					return c.JSON(http.StatusNotFound, models.Response{
+						Status:  http.StatusNotFound,
+						Message: "Service provider not found in either users or serviceProviders collection",
+					})
+				}
+				return c.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Error finding service provider: " + err.Error(),
+				})
+			}
+			// Service provider found in serviceProviders collection
+			// We can proceed with adding to favorites
+		} else {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Error finding service provider: " + err.Error(),
 			})
 		}
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Error finding service provider: " + err.Error(),
-		})
 	}
 
 	// Create a new field for favorite service providers if it doesn't exist in User model
@@ -1912,7 +1930,10 @@ func (uc *UserController) GetFavoriteServiceProviders(c echo.Context) error {
 		favoriteIds[i] = oid
 	}
 
-	// Find all service providers that match the IDs
+	// Find all service providers that match the IDs from both collections
+	var allFavoriteProviders []map[string]interface{}
+
+	// First, try to find in users collection
 	pipeline := []bson.M{
 		{
 			"$match": bson.M{
@@ -1931,43 +1952,84 @@ func (uc *UserController) GetFavoriteServiceProviders(c echo.Context) error {
 				"location":            1,
 				"createdAt":           1,
 				"updatedAt":           1,
+				"source":              "users",
 			},
 		},
 	}
 
 	cursor, err := usersCollection.Aggregate(context.Background(), pipeline)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Error fetching favorite service providers: " + err.Error(),
-		})
-	}
-	defer cursor.Close(context.Background())
-
-	var favoriteProviders []models.User
-	if err = cursor.All(context.Background(), &favoriteProviders); err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Error parsing favorite service providers: " + err.Error(),
-		})
-	}
-
-	// Modify paths for profile photos and logos
-	for i, provider := range favoriteProviders {
-		if provider.ServiceProviderInfo != nil && provider.ServiceProviderInfo.ProfilePhoto != "" {
-			favoriteProviders[i].ServiceProviderInfo.ProfilePhoto = "/uploads/serviceprovider/" + provider.ServiceProviderInfo.ProfilePhoto
+	if err == nil {
+		var userProviders []map[string]interface{}
+		if err = cursor.All(context.Background(), &userProviders); err == nil {
+			allFavoriteProviders = append(allFavoriteProviders, userProviders...)
 		}
+		cursor.Close(context.Background())
+	}
 
-		// Add path prefix to logoPath if it exists
-		if provider.LogoPath != "" {
-			favoriteProviders[i].LogoPath = "/" + provider.LogoPath
+	// Then, try to find in serviceProviders collection
+	serviceProvidersCollection := uc.DB.Database("barrim").Collection("serviceProviders")
+	serviceProviderPipeline := []bson.M{
+		{
+			"$match": bson.M{
+				"_id": bson.M{"$in": favoriteIds},
+			},
+		},
+		{
+			"$project": bson.M{
+				"_id":          1,
+				"businessName": 1,
+				"email":        1,
+				"phone":        1,
+				"logo":         1,
+				"category":     1,
+				"country":      1,
+				"district":     1,
+				"city":         1,
+				"street":       1,
+				"postalCode":   1,
+				"createdAt":    1,
+				"updatedAt":    1,
+				"source":       "serviceProviders",
+			},
+		},
+	}
+
+	serviceProviderCursor, err := serviceProvidersCollection.Aggregate(context.Background(), serviceProviderPipeline)
+	if err == nil {
+		var serviceProviderDocs []map[string]interface{}
+		if err = serviceProviderCursor.All(context.Background(), &serviceProviderDocs); err == nil {
+			allFavoriteProviders = append(allFavoriteProviders, serviceProviderDocs...)
+		}
+		serviceProviderCursor.Close(context.Background())
+	}
+
+	// Process and format the results
+	for i, provider := range allFavoriteProviders {
+		// Handle profile photos and logos based on source
+		if source, ok := provider["source"].(string); ok {
+			if source == "users" {
+				// Handle user collection data
+				if serviceProviderInfo, exists := provider["serviceProviderInfo"].(map[string]interface{}); exists {
+					if profilePhoto, exists := serviceProviderInfo["profilePhoto"].(string); exists && profilePhoto != "" {
+						allFavoriteProviders[i]["profilePhoto"] = "/uploads/serviceprovider/" + profilePhoto
+					}
+				}
+				if logoPath, exists := provider["logoPath"].(string); exists && logoPath != "" {
+					allFavoriteProviders[i]["logoPath"] = "/" + logoPath
+				}
+			} else if source == "serviceProviders" {
+				// Handle serviceProviders collection data
+				if logo, exists := provider["logo"].(string); exists && logo != "" {
+					allFavoriteProviders[i]["logo"] = "/" + logo
+				}
+			}
 		}
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Favorite service providers retrieved successfully",
-		Data:    favoriteProviders,
+		Data:    allFavoriteProviders,
 	})
 }
 
