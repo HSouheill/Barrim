@@ -146,19 +146,8 @@ func (c *BookingController) CreateBooking(ctx echo.Context) error {
 		})
 	}
 
-	// Get user data for availability check
-	var userData *models.User
-	if !serviceProvider.UserID.IsZero() {
-		userCollection := c.db.Database("barrim").Collection("users")
-		var user models.User
-		err = userCollection.FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
-		if err == nil {
-			userData = &user
-		}
-	}
-
-	// Check service provider availability
-	if userData == nil || !isProviderAvailable(*userData, request.BookingDate, request.TimeSlot) {
+	// Check service provider availability using ServiceProviderInfo from serviceProviders collection
+	if !isServiceProviderAvailable(serviceProvider, request.BookingDate, request.TimeSlot) {
 		return ctx.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Service provider is not available at this time",
@@ -370,24 +359,13 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 		})
 	}
 
-	// Get additional user data if userId exists
-	var userData *models.User
-	if !serviceProvider.UserID.IsZero() {
-		userCollection := c.db.Database("barrim").Collection("users")
-		var user models.User
-		err = userCollection.FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
-		if err == nil {
-			userData = &user
-		}
-	}
-
 	// Check if the provider is available on this date (by checking availableDays)
 	dateStr = date.Format("2006-01-02")
 	isDateAvailable := false
 
-	// First check availableDays from user data
-	if userData != nil && userData.ServiceProviderInfo != nil && userData.ServiceProviderInfo.AvailableDays != nil {
-		for _, availableDate := range userData.ServiceProviderInfo.AvailableDays {
+	// Check availableDays from serviceProvider data
+	if serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.AvailableDays != nil {
+		for _, availableDate := range serviceProvider.ServiceProviderInfo.AvailableDays {
 			if availableDate == dateStr {
 				isDateAvailable = true
 				break
@@ -396,9 +374,9 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 	}
 
 	// If not directly in availableDays, check if the weekday is available
-	if !isDateAvailable && userData != nil && userData.ServiceProviderInfo != nil && userData.ServiceProviderInfo.AvailableWeekdays != nil {
+	if !isDateAvailable && serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.AvailableWeekdays != nil {
 		dayOfWeek := date.Weekday().String()
-		for _, weekday := range userData.ServiceProviderInfo.AvailableWeekdays {
+		for _, weekday := range serviceProvider.ServiceProviderInfo.AvailableWeekdays {
 			if weekday == dayOfWeek {
 				isDateAvailable = true
 				break
@@ -418,11 +396,11 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 	var startHour, endHour time.Time
 	var availableSlots []string
 
-	// Get available hours from user data
-	if userData != nil && userData.ServiceProviderInfo != nil && len(userData.ServiceProviderInfo.AvailableHours) >= 2 {
+	// Get available hours from serviceProvider data
+	if serviceProvider.ServiceProviderInfo != nil && len(serviceProvider.ServiceProviderInfo.AvailableHours) >= 2 {
 		// Parse start and end hours from provider's available hours (format: "09:00", "17:00")
-		startTimeStr := userData.ServiceProviderInfo.AvailableHours[0]
-		endTimeStr := userData.ServiceProviderInfo.AvailableHours[1]
+		startTimeStr := serviceProvider.ServiceProviderInfo.AvailableHours[0]
+		endTimeStr := serviceProvider.ServiceProviderInfo.AvailableHours[1]
 
 		// Parse times in 24-hour format
 		startHour, err = time.Parse("15:04", startTimeStr)
@@ -706,6 +684,81 @@ func isProviderAvailable(provider models.User, bookingDate time.Time, timeSlot s
 	// This could be improved with more specific default hour ranges if needed
 	return true
 
+}
+
+// Helper function to check if a service provider is available at a specific time using ServiceProviderInfo from serviceProviders collection
+func isServiceProviderAvailable(serviceProvider models.ServiceProvider, bookingDate time.Time, timeSlot string) bool {
+	// Format the date for comparison with available days
+	formattedDate := bookingDate.Format("2006-01-02")
+
+	if serviceProvider.ServiceProviderInfo == nil {
+		return false
+	}
+
+	// Check if provider works on this specific date
+	dateAvailable := false
+	if serviceProvider.ServiceProviderInfo.AvailableDays != nil {
+		for _, day := range serviceProvider.ServiceProviderInfo.AvailableDays {
+			if day == formattedDate {
+				dateAvailable = true
+				break
+			}
+		}
+	}
+
+	// If not available on this specific date, check weekdays
+	if !dateAvailable && serviceProvider.ServiceProviderInfo.AvailableWeekdays != nil {
+		dayOfWeek := bookingDate.Weekday().String()
+		for _, day := range serviceProvider.ServiceProviderInfo.AvailableWeekdays {
+			if day == dayOfWeek {
+				dateAvailable = true
+				break
+			}
+		}
+	}
+
+	if !dateAvailable {
+		return false
+	}
+
+	// If the provider has available hours, check if the requested time slot is within those hours
+	if serviceProvider.ServiceProviderInfo.AvailableHours != nil && len(serviceProvider.ServiceProviderInfo.AvailableHours) >= 2 {
+		// Parse the start and end hours
+		startHourStr := serviceProvider.ServiceProviderInfo.AvailableHours[0]
+		endHourStr := serviceProvider.ServiceProviderInfo.AvailableHours[1]
+
+		startHour, err := time.Parse("15:04", startHourStr)
+		if err != nil {
+			return false
+		}
+
+		endHour, err := time.Parse("15:04", endHourStr)
+		if err != nil {
+			return false
+		}
+
+		// Parse the requested time slot (format: "11:00" - 24-hour format)
+		requestedTime, err := time.Parse("15:04", timeSlot)
+		if err != nil {
+			// Try parsing as 12-hour format ("3:04 PM")
+			requestedTime, err = time.Parse("3:04 PM", timeSlot)
+			if err != nil {
+				return false
+			}
+		}
+
+		// Convert to comparable format (hours and minutes only)
+		requestedHour := time.Date(0, 1, 1, requestedTime.Hour(), requestedTime.Minute(), 0, 0, time.UTC)
+		startHourNormalized := time.Date(0, 1, 1, startHour.Hour(), startHour.Minute(), 0, 0, time.UTC)
+		endHourNormalized := time.Date(0, 1, 1, endHour.Hour(), endHour.Minute(), 0, 0, time.UTC)
+
+		// Check if the requested time is within the provider's working hours
+		return (requestedHour.Equal(startHourNormalized) || requestedHour.After(startHourNormalized)) &&
+			requestedHour.Before(endHourNormalized)
+	}
+
+	// If no specific hours are defined, use default business hours logic
+	return true
 }
 
 // AcceptBooking allows a service provider to accept a booking request

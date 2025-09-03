@@ -2574,30 +2574,56 @@ func (ac *AuthController) GoogleAuthWithoutFirebase(c echo.Context) error {
 	ctx := context.Background()
 	collection := ac.DB.Database("barrim").Collection("users")
 	var user models.User
+
+	// First, check if user exists by Google ID
 	err = collection.FindOne(ctx, bson.M{"googleID": sub}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
-		// Create new user
-		ac.logger.Printf("Google auth: Creating new user for Google ID: %s", sub)
-		user = models.User{
-			ID:        primitive.NewObjectID(),
-			Email:     email,
-			FullName:  name,
-			GoogleID:  sub,
-			UserType:  "user",
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+		// User not found by Google ID, check if user exists by email
+		err = collection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+		if err == mongo.ErrNoDocuments {
+			// No user exists with this email, create new user
+			ac.logger.Printf("Google auth: Creating new user for Google ID: %s", sub)
+			user = models.User{
+				ID:        primitive.NewObjectID(),
+				Email:     email,
+				FullName:  name,
+				GoogleID:  sub,
+				UserType:  "user",
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+			_, err := collection.InsertOne(ctx, user)
+			if err != nil {
+				ac.logger.Printf("Google auth error: Failed to create user in database: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create user"})
+			}
+			ac.logger.Printf("Google auth: Successfully created new user with ID: %s", user.ID.Hex())
+		} else if err != nil {
+			ac.logger.Printf("Google auth error: Database error while finding user by email: %v", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+		} else {
+			// User exists with this email but no Google ID, link the Google ID
+			ac.logger.Printf("Google auth: Linking Google ID to existing user with ID: %s", user.ID.Hex())
+			_, err := collection.UpdateOne(
+				ctx,
+				bson.M{"_id": user.ID},
+				bson.M{"$set": bson.M{
+					"googleID":  sub,
+					"updatedAt": time.Now(),
+				}},
+			)
+			if err != nil {
+				ac.logger.Printf("Google auth error: Failed to link Google ID: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to link Google account"})
+			}
+			user.GoogleID = sub
+			ac.logger.Printf("Google auth: Successfully linked Google ID to existing user")
 		}
-		_, err := collection.InsertOne(ctx, user)
-		if err != nil {
-			ac.logger.Printf("Google auth error: Failed to create user in database: %v", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create user"})
-		}
-		ac.logger.Printf("Google auth: Successfully created new user with ID: %s", user.ID.Hex())
 	} else if err != nil {
-		ac.logger.Printf("Google auth error: Database error while finding user: %v", err)
+		ac.logger.Printf("Google auth error: Database error while finding user by Google ID: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
 	} else {
-		ac.logger.Printf("Google auth: Found existing user with ID: %s", user.ID.Hex())
+		ac.logger.Printf("Google auth: Found existing user with Google ID: %s", user.ID.Hex())
 	}
 
 	// Generate your own JWT here
