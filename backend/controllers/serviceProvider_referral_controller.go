@@ -916,6 +916,10 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		"updatedAt": time.Now(),
 	}
 
+	// Declare variables at function level
+	var uploadPath string
+	var hashedPassword string
+
 	// Handle logo file if present
 	logoFiles := form.File["logo"]
 	if len(logoFiles) > 0 {
@@ -931,7 +935,7 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 
 		// Save logo file
 		filename := "logo_" + userID + "_" + time.Now().Format("20060102150405") + filepath.Ext(logoFile.Filename)
-		uploadPath := filepath.Join("uploads", "logos", filename)
+		uploadPath = filepath.Join("uploads", "logos", filename)
 
 		// Ensure directory exists
 		os.MkdirAll(filepath.Join("uploads", "logos"), 0755)
@@ -1025,7 +1029,7 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	if len(password) > 0 && password[0] != "" {
-		hashedPassword, err := utils.HashPassword(password[0])
+		hashedPassword, err = utils.HashPassword(password[0])
 		if err != nil {
 			return ctx.JSON(http.StatusInternalServerError, models.Response{
 				Status:  http.StatusInternalServerError,
@@ -1143,25 +1147,66 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		serviceProviderInfo["location"] = location
 	}
 
-	// Perform the update
+	// Perform the update - Update both users and serviceProviders collections
+
+	// First, update the users collection for basic user info
 	userCollection := c.DB.Database("barrim").Collection("users")
+	userUpdateFields := bson.M{
+		"updatedAt": time.Now(),
+	}
 
-	// Build the update document with proper dot notation for nested fields
-	updateDoc := bson.M{"$set": updateFields}
-
-	// Add serviceProviderInfo fields using dot notation to avoid overwriting the entire object
-	if len(serviceProviderInfo) > 0 {
-		for key, value := range serviceProviderInfo {
-			updateDoc["$set"].(bson.M)["serviceProviderInfo."+key] = value
-		}
-		// Remove the serviceProviderInfo object from updateFields since we're using dot notation
-		delete(updateDoc["$set"].(bson.M), "serviceProviderInfo")
+	// Add basic user fields to user update
+	if len(fullName) > 0 && fullName[0] != "" {
+		userUpdateFields["fullName"] = fullName[0]
+	}
+	if len(email) > 0 && email[0] != "" {
+		userUpdateFields["email"] = email[0]
+	}
+	if len(password) > 0 && password[0] != "" {
+		userUpdateFields["password"] = hashedPassword
+	}
+	if len(logoFiles) > 0 {
+		userUpdateFields["logoPath"] = uploadPath
 	}
 
 	_, err = userCollection.UpdateOne(
 		context.Background(),
 		bson.M{"_id": objID},
-		updateDoc,
+		bson.M{"$set": userUpdateFields},
+	)
+
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to update user data",
+		})
+	}
+
+	// Then, update the serviceProviders collection for service provider specific data
+	serviceProviderCollection := c.DB.Database("barrim").Collection("serviceProviders")
+
+	// Build service provider update document
+	serviceProviderUpdateFields := bson.M{
+		"updatedAt": time.Now(),
+	}
+
+	// Add category to service provider update
+	if len(category) > 0 && category[0] != "" {
+		serviceProviderUpdateFields["category"] = category[0]
+	}
+
+	// Add serviceProviderInfo fields using dot notation
+	if len(serviceProviderInfo) > 0 {
+		for key, value := range serviceProviderInfo {
+			serviceProviderUpdateFields["serviceProviderInfo."+key] = value
+		}
+	}
+
+	// Update service provider document using userId as reference
+	_, err = serviceProviderCollection.UpdateOne(
+		context.Background(),
+		bson.M{"userId": objID},
+		bson.M{"$set": serviceProviderUpdateFields},
 	)
 
 	if err != nil {
