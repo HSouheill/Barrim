@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"time"
@@ -889,6 +890,26 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	fullName := form.Value["fullName"]
 	email := form.Value["email"]
 	password := form.Value["password"]
+	category := form.Value["category"]
+	yearsExperience := form.Value["yearsExperience"]
+	description := form.Value["description"]
+	serviceType := form.Value["serviceType"]
+	customServiceType := form.Value["customServiceType"]
+
+	// Location fields
+	country := form.Value["country"]
+	district := form.Value["district"]
+	city := form.Value["city"]
+	street := form.Value["street"]
+	postalCode := form.Value["postalCode"]
+	lat := form.Value["lat"]
+	lng := form.Value["lng"]
+
+	// Availability fields
+	availableDays := form.Value["availableDays"]
+	availableHours := form.Value["availableHours"]
+	availableWeekdays := form.Value["availableWeekdays"]
+	applyToAllMonths := form.Value["applyToAllMonths"]
 
 	// Prepare update fields
 	updateFields := bson.M{
@@ -944,7 +965,57 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		updateFields["logoPath"] = uploadPath
 	}
 
-	// Update other fields
+	// Handle certificate files if present
+	certificateFiles := form.File["certificates"]
+	var certificatePaths []string
+	if len(certificateFiles) > 0 {
+		// Ensure directory exists
+		os.MkdirAll(filepath.Join("uploads", "certificates"), 0755)
+
+		for i, certFile := range certificateFiles {
+			// Validate file
+			if !utils.IsValidImageFile(certFile) {
+				return ctx.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: "Invalid certificate file type",
+				})
+			}
+
+			// Save certificate file
+			filename := "certificate_" + userID + "_" + time.Now().Format("20060102150405") + "_" + strconv.Itoa(i) + filepath.Ext(certFile.Filename)
+			uploadPath := filepath.Join("uploads", "certificates", filename)
+
+			// Save the file
+			src, err := certFile.Open()
+			if err != nil {
+				return ctx.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to open certificate file",
+				})
+			}
+			defer src.Close()
+
+			dst, err := os.Create(uploadPath)
+			if err != nil {
+				return ctx.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to save certificate file",
+				})
+			}
+			defer dst.Close()
+
+			if _, err = io.Copy(dst, src); err != nil {
+				return ctx.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to copy certificate file",
+				})
+			}
+
+			certificatePaths = append(certificatePaths, uploadPath)
+		}
+	}
+
+	// Update basic fields
 	if len(fullName) > 0 && fullName[0] != "" {
 		updateFields["fullName"] = fullName[0]
 	}
@@ -962,6 +1033,119 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 			})
 		}
 		updateFields["password"] = hashedPassword
+	}
+
+	// Update category
+	if len(category) > 0 && category[0] != "" {
+		updateFields["category"] = category[0]
+	}
+
+	// Prepare ServiceProviderInfo update
+	serviceProviderInfo := bson.M{}
+
+	// Update years of experience
+	if len(yearsExperience) > 0 && yearsExperience[0] != "" {
+		// Try to convert to int if it's a string
+		if years, err := strconv.Atoi(yearsExperience[0]); err == nil {
+			serviceProviderInfo["yearsExperience"] = years
+		} else {
+			serviceProviderInfo["yearsExperience"] = yearsExperience[0]
+		}
+	}
+
+	// Update description
+	if len(description) > 0 && description[0] != "" {
+		serviceProviderInfo["description"] = description[0]
+	}
+
+	// Update service type
+	if len(serviceType) > 0 && serviceType[0] != "" {
+		serviceProviderInfo["serviceType"] = serviceType[0]
+	}
+
+	// Update custom service type
+	if len(customServiceType) > 0 && customServiceType[0] != "" {
+		serviceProviderInfo["customServiceType"] = customServiceType[0]
+	}
+
+	// Update certificate images
+	if len(certificatePaths) > 0 {
+		serviceProviderInfo["certificateImages"] = certificatePaths
+	}
+
+	// Update availability days
+	if len(availableDays) > 0 {
+		serviceProviderInfo["availableDays"] = availableDays
+	}
+
+	// Update availability hours
+	if len(availableHours) > 0 {
+		serviceProviderInfo["availableHours"] = availableHours
+	}
+
+	// Update availability weekdays
+	if len(availableWeekdays) > 0 {
+		serviceProviderInfo["availableWeekdays"] = availableWeekdays
+	}
+
+	// Update apply to all months
+	if len(applyToAllMonths) > 0 {
+		applyToAllMonthsBool := applyToAllMonths[0] == "true"
+		serviceProviderInfo["applyToAllMonths"] = applyToAllMonthsBool
+	}
+
+	// Prepare location update
+	location := bson.M{}
+	locationUpdated := false
+
+	if len(country) > 0 && country[0] != "" {
+		location["country"] = country[0]
+		locationUpdated = true
+	}
+
+	if len(district) > 0 && district[0] != "" {
+		location["district"] = district[0]
+		locationUpdated = true
+	}
+
+	if len(city) > 0 && city[0] != "" {
+		location["city"] = city[0]
+		locationUpdated = true
+	}
+
+	if len(street) > 0 && street[0] != "" {
+		location["street"] = street[0]
+		locationUpdated = true
+	}
+
+	if len(postalCode) > 0 && postalCode[0] != "" {
+		location["postalCode"] = postalCode[0]
+		locationUpdated = true
+	}
+
+	if len(lat) > 0 && lat[0] != "" {
+		if latFloat, err := strconv.ParseFloat(lat[0], 64); err == nil {
+			location["lat"] = latFloat
+			locationUpdated = true
+		}
+	}
+
+	if len(lng) > 0 && lng[0] != "" {
+		if lngFloat, err := strconv.ParseFloat(lng[0], 64); err == nil {
+			location["lng"] = lngFloat
+			locationUpdated = true
+		}
+	}
+
+	// Set allowed to true by default for location
+	if locationUpdated {
+		location["allowed"] = true
+		serviceProviderInfo["location"] = location
+	}
+
+	// Update ServiceProviderInfo if there are any fields to update
+	if len(serviceProviderInfo) > 0 {
+		updateFields["serviceProviderInfo"] = serviceProviderInfo
 	}
 
 	// Perform the update
