@@ -136,10 +136,12 @@ func (c *ServiceProviderReferralController) GetServiceProviderDetails(ctx echo.C
 		serviceProvider.ServiceProviderInfo.Status = status
 	}
 
-	// Create response data with category information
+	// Create response data with category information and explicit id/userid fields
 	responseData := map[string]interface{}{
 		"serviceProvider": serviceProvider,
 		"category":        category,
+		"id":              serviceProvider.ID.Hex(),
+		"userid":          serviceProvider.ID.Hex(), // Since this is the user document, the ID is the userid
 	}
 
 	// Return the service provider data with category information
