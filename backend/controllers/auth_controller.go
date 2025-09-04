@@ -1844,6 +1844,14 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 			signupData.ServiceProviderInfo.ReferralCode = referralCode
 			// Save ServiceProviderInfo in the serviceProviders collection
 			serviceProvider.ServiceProviderInfo = signupData.ServiceProviderInfo
+		} else {
+			// Create ServiceProviderInfo if it doesn't exist
+			signupData.ServiceProviderInfo = &models.ServiceProviderInfo{
+				ReferralCode:             referralCode,
+				Points:                   0,
+				ReferredServiceProviders: []primitive.ObjectID{},
+			}
+			serviceProvider.ServiceProviderInfo = signupData.ServiceProviderInfo
 		}
 
 		// Populate location fields if available
@@ -1878,8 +1886,12 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 			})
 		}
 
-		// Update user with service provider ID (but don't include ServiceProviderInfo)
+		// Update user with service provider ID and ServiceProviderInfo
 		user.ServiceProviderID = &serviceProvider.ID
+		// Also store ServiceProviderInfo in the users collection for easy access
+		if signupData.ServiceProviderInfo != nil {
+			user.ServiceProviderInfo = signupData.ServiceProviderInfo
+		}
 	}
 
 	// If it's a service provider signup and a referral code was provided, increment points for the referring service provider
