@@ -172,15 +172,16 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	protected.PUT("/toggle-status/company/:companyId/branch/:branchId", adminController.ToggleCompanyBranchStatus)
 	protected.PUT("/toggle-status/wholesaler/:wholesalerId/branch/:branchId", adminController.ToggleWholesalerBranchStatus)
 
-	// Review management routes
-	reviewController := controllers.NewReviewController(client)
-	protected.GET("/reviews", reviewController.GetAllReviewsForAdmin)
-	protected.DELETE("/reviews/:id", reviewController.DeleteReview)
-
 	// Booking management routes
 	bookingController := controllers.NewBookingController(client, hub)
 	protected.GET("/bookings", bookingController.GetAllBookingsForAdmin)
 	protected.DELETE("/bookings/:id", bookingController.DeleteBookingForAdmin)
+
+	// Review management routes
+	reviewController := controllers.NewReviewController(client)
+	protected.GET("/reviews", reviewController.GetAllReviewsAndRepliesForAdmin)
+	protected.PUT("/reviews/:id/verify", reviewController.ToggleReviewVerification)
+	protected.DELETE("/reviews/:id", reviewController.DeleteReview)
 
 	// Delete entity by ID
 	protected.DELETE("/entities/:entityType/:id", adminController.DeleteEntity)
@@ -196,8 +197,7 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	manager.PUT("/toggle-status/:entityType/:id", adminController.ToggleEntityStatus)
 	manager.DELETE("/entities/:entityType/:id", adminController.DeleteEntity)
 	manager.GET("/debug/:entityType/:id", adminController.DebugEntity)
-	manager.GET("/reviews", reviewController.GetAllReviewsForAdmin)
-	manager.DELETE("/reviews/:id", reviewController.DeleteReview)
+
 	manager.GET("/bookings", bookingController.GetAllBookingsForAdmin)
 	manager.DELETE("/bookings/:id", bookingController.DeleteBookingForAdmin)
 
@@ -207,8 +207,7 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	salesManager.PUT("/toggle-status/:entityType/:id", adminController.ToggleEntityStatus)
 	salesManager.PUT("/service-providers/:id/toggle-status", serviceProviderController.ToggleEntityStatus)
 	salesManager.DELETE("/entities/:entityType/:id", adminController.DeleteEntity)
-	salesManager.GET("/reviews", reviewController.GetAllReviewsForAdmin)
-	salesManager.DELETE("/reviews/:id", reviewController.DeleteReview)
+
 	salesManager.GET("/bookings", bookingController.GetAllBookingsForAdmin)
 	salesManager.DELETE("/bookings/:id", bookingController.DeleteBookingForAdmin)
 
