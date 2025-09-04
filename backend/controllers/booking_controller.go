@@ -989,6 +989,9 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 	serviceProviderID := c.QueryParam("serviceProviderId")
 	userID := c.QueryParam("userId")
 	dateStr := c.QueryParam("date")
+	isEmergency := c.QueryParam("isEmergency") // "true", "false", or empty for all
+	dateRangeStart := c.QueryParam("dateRangeStart")
+	dateRangeEnd := c.QueryParam("dateRangeEnd")
 
 	// Set default values
 	page := 1
@@ -1019,6 +1022,13 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 			filter["userId"] = objID
 		}
 	}
+	if isEmergency == "true" {
+		filter["isEmergency"] = true
+	} else if isEmergency == "false" {
+		filter["isEmergency"] = false
+	}
+
+	// Handle date filtering
 	if dateStr != "" {
 		if date, err := time.Parse("2006-01-02", dateStr); err == nil {
 			startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
@@ -1028,10 +1038,21 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 				"$lt":  endOfDay,
 			}
 		}
+	} else if dateRangeStart != "" && dateRangeEnd != "" {
+		startDate, err1 := time.Parse("2006-01-02", dateRangeStart)
+		endDate, err2 := time.Parse("2006-01-02", dateRangeEnd)
+		if err1 == nil && err2 == nil {
+			startOfDay := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
+			endOfDay := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, endDate.Location())
+			filter["bookingDate"] = bson.M{
+				"$gte": startOfDay,
+				"$lte": endOfDay,
+			}
+		}
 	}
 
 	// Create context
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Get total count for pagination
@@ -1072,6 +1093,58 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 		})
 	}
 
+	// Enrich bookings with user and service provider information
+	var enrichedBookings []map[string]interface{}
+	for _, booking := range bookings {
+		// Get user information
+		var user models.User
+		err := bc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": booking.UserID}).Decode(&user)
+		if err != nil {
+			log.Printf("Error fetching user info for booking %s: %v", booking.ID.Hex(), err)
+		}
+
+		// Get service provider information
+		var serviceProvider models.User
+		err = bc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": booking.ServiceProviderID}).Decode(&serviceProvider)
+		if err != nil {
+			log.Printf("Error fetching service provider info for booking %s: %v", booking.ID.Hex(), err)
+		}
+
+		enrichedBooking := map[string]interface{}{
+			"booking": booking,
+			"user": map[string]interface{}{
+				"id":       user.ID,
+				"fullName": user.FullName,
+				"email":    user.Email,
+				"phone":    user.Phone,
+				"userType": user.UserType,
+			},
+			"serviceProvider": map[string]interface{}{
+				"id":       serviceProvider.ID,
+				"fullName": serviceProvider.FullName,
+				"email":    serviceProvider.Email,
+				"phone":    serviceProvider.Phone,
+				"userType": serviceProvider.UserType,
+			},
+		}
+
+		enrichedBookings = append(enrichedBookings, enrichedBooking)
+	}
+
+	// Calculate statistics
+	stats, err := bc.getBookingStatistics(ctx, filter)
+	if err != nil {
+		log.Printf("Error calculating booking statistics: %v", err)
+		stats = map[string]interface{}{
+			"totalBookings":     0,
+			"pendingBookings":   0,
+			"confirmedBookings": 0,
+			"completedBookings": 0,
+			"cancelledBookings": 0,
+			"emergencyBookings": 0,
+		}
+	}
+
 	// Calculate pagination info
 	totalPages := int((totalCount + int64(limit) - 1) / int64(limit))
 	hasNext := page < totalPages
@@ -1079,7 +1152,7 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 
 	// Create response
 	response := map[string]interface{}{
-		"bookings": bookings,
+		"bookings": enrichedBookings,
 		"pagination": map[string]interface{}{
 			"currentPage": page,
 			"totalPages":  totalPages,
@@ -1088,6 +1161,16 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 			"hasNext":     hasNext,
 			"hasPrev":     hasPrev,
 		},
+		"statistics": stats,
+		"filters": map[string]interface{}{
+			"status":            status,
+			"serviceProviderId": serviceProviderID,
+			"userId":            userID,
+			"date":              dateStr,
+			"isEmergency":       isEmergency,
+			"dateRangeStart":    dateRangeStart,
+			"dateRangeEnd":      dateRangeEnd,
+		},
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
@@ -1095,6 +1178,113 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 		Message: "Bookings retrieved successfully",
 		Data:    response,
 	})
+}
+
+// getBookingStatistics calculates statistics for bookings
+func (bc *BookingController) getBookingStatistics(ctx context.Context, filter bson.M) (map[string]interface{}, error) {
+	bookingsCollection := bc.db.Database("barrim").Collection("bookings")
+
+	// Get total bookings count
+	totalBookings, err := bookingsCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Count bookings by status
+	statusPipeline := []bson.M{
+		{"$match": filter},
+		{"$group": bson.M{
+			"_id":   "$status",
+			"count": bson.M{"$sum": 1},
+		}},
+	}
+
+	cursor, err := bookingsCollection.Aggregate(ctx, statusPipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var statusResults []bson.M
+	if err := cursor.All(ctx, &statusResults); err != nil {
+		return nil, err
+	}
+
+	// Initialize status counts
+	statusCounts := map[string]int64{
+		"pending":   0,
+		"accepted":  0,
+		"rejected":  0,
+		"confirmed": 0,
+		"completed": 0,
+		"cancelled": 0,
+	}
+
+	// Populate status counts from aggregation results
+	for _, result := range statusResults {
+		if status, exists := result["_id"].(string); exists {
+			if count, exists := result["count"].(int64); exists {
+				statusCounts[status] = count
+			}
+		}
+	}
+
+	// Count emergency bookings
+	emergencyFilter := bson.M{}
+	for key, value := range filter {
+		emergencyFilter[key] = value
+	}
+	emergencyFilter["isEmergency"] = true
+	emergencyBookings, err := bookingsCollection.CountDocuments(ctx, emergencyFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate average booking duration (time between creation and completion)
+	durationPipeline := []bson.M{
+		{"$match": bson.M{
+			"status": "completed",
+		}},
+		{"$project": bson.M{
+			"duration": bson.M{
+				"$subtract": []string{"$updatedAt", "$createdAt"},
+			},
+		}},
+		{"$group": bson.M{
+			"_id":         nil,
+			"avgDuration": bson.M{"$avg": "$duration"},
+		}},
+	}
+
+	durationCursor, err := bookingsCollection.Aggregate(ctx, durationPipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer durationCursor.Close(ctx)
+
+	var durationResults []bson.M
+	if err := durationCursor.All(ctx, &durationResults); err != nil {
+		return nil, err
+	}
+
+	var avgDuration float64
+	if len(durationResults) > 0 {
+		if avg, exists := durationResults[0]["avgDuration"]; exists && avg != nil {
+			avgDuration = avg.(float64)
+		}
+	}
+
+	return map[string]interface{}{
+		"totalBookings":     totalBookings,
+		"pendingBookings":   statusCounts["pending"],
+		"acceptedBookings":  statusCounts["accepted"],
+		"rejectedBookings":  statusCounts["rejected"],
+		"confirmedBookings": statusCounts["confirmed"],
+		"completedBookings": statusCounts["completed"],
+		"cancelledBookings": statusCounts["cancelled"],
+		"emergencyBookings": emergencyBookings,
+		"avgCompletionTime": avgDuration, // in milliseconds
+	}, nil
 }
 
 // DeleteBookingForAdmin allows admins to delete a booking

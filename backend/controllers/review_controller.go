@@ -32,14 +32,14 @@ func NewReviewController(db *mongo.Client) *ReviewController {
 
 // GetReviewsByProviderID retrieves all reviews for a specific service provider
 func (rc *ReviewController) GetReviewsByProviderID(c echo.Context) error {
-	providerID := c.Param("id")
+	userID := c.Param("userid")
 
-	// Validate provider ID
-	objectID, err := primitive.ObjectIDFromHex(providerID)
+	// Validate user ID
+	objectID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid provider ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -47,7 +47,7 @@ func (rc *ReviewController) GetReviewsByProviderID(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Find reviews for this provider
+	// Find reviews for this provider by user ID
 	reviewsCollection := rc.db.Database("barrim").Collection("reviews")
 
 	// Get reviews sorted by most recent first
