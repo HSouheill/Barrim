@@ -322,10 +322,35 @@ func (c *BookingController) GetProviderBookings(ctx echo.Context) error {
 		})
 	}
 
-	return ctx.JSON(http.StatusOK, models.BookingsResponse{
+	// Enrich bookings with user information
+	var enrichedBookings []map[string]interface{}
+	for _, booking := range bookings {
+		// Get user information
+		var bookingUser models.User
+		err := c.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": booking.UserID}).Decode(&bookingUser)
+		if err != nil {
+			log.Printf("Error fetching user info for booking %s: %v", booking.ID.Hex(), err)
+		}
+
+		enrichedBooking := map[string]interface{}{
+			"booking": booking,
+			"user": map[string]interface{}{
+				"id":         bookingUser.ID,
+				"fullName":   bookingUser.FullName,
+				"email":      bookingUser.Email,
+				"phone":      bookingUser.Phone,
+				"profilePic": bookingUser.ProfilePic,
+				"userType":   bookingUser.UserType,
+			},
+		}
+
+		enrichedBookings = append(enrichedBookings, enrichedBooking)
+	}
+
+	return ctx.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Bookings retrieved successfully",
-		Data:    bookings,
+		Data:    enrichedBookings,
 	})
 }
 
@@ -1000,11 +1025,36 @@ func (bc *BookingController) GetPendingBookings(c echo.Context) error {
 		})
 	}
 
-	// Return the bookings
+	// Enrich bookings with user information
+	var enrichedBookings []map[string]interface{}
+	for _, booking := range bookings {
+		// Get user information
+		var bookingUser models.User
+		err := bc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": booking.UserID}).Decode(&bookingUser)
+		if err != nil {
+			log.Printf("Error fetching user info for booking %s: %v", booking.ID.Hex(), err)
+		}
+
+		enrichedBooking := map[string]interface{}{
+			"booking": booking,
+			"user": map[string]interface{}{
+				"id":         bookingUser.ID,
+				"fullName":   bookingUser.FullName,
+				"email":      bookingUser.Email,
+				"phone":      bookingUser.Phone,
+				"profilePic": bookingUser.ProfilePic,
+				"userType":   bookingUser.UserType,
+			},
+		}
+
+		enrichedBookings = append(enrichedBookings, enrichedBooking)
+	}
+
+	// Return the enriched bookings
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Pending bookings retrieved successfully",
-		Data:    bookings,
+		Data:    enrichedBookings,
 	})
 }
 
