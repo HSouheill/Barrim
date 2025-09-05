@@ -210,7 +210,7 @@ func (rc *ReviewController) CreateReview(c echo.Context) error {
 	now := time.Now()
 	newReview := models.Review{
 		ID:                primitive.NewObjectID(),
-		ServiceProviderID: providerID,
+		ServiceProviderID: providerID, // This will be the user ID for service providers going forward
 		UserID:            user.ID,
 		Username:          user.FullName,
 		UserProfilePic:    user.ProfilePic,
@@ -335,7 +335,16 @@ func (rc *ReviewController) PostReviewReply(c echo.Context) error {
 			Message: "Review not found",
 		})
 	}
-	if review.ServiceProviderID != spUser.ID {
+
+	// Unified ID validation: Check if the review belongs to this service provider
+	isOwner, err := utils.IsServiceProviderOwner(spUser.ID, review.ServiceProviderID, rc.db)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error validating service provider ownership",
+		})
+	}
+	if !isOwner {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "You can only reply to reviews for your own service provider account",
@@ -395,11 +404,16 @@ func (rc *ReviewController) GetReviewReply(c echo.Context) error {
 			Message: "Review not found",
 		})
 	}
-	if user.ID != review.UserID && user.ID != review.ServiceProviderID {
-		return c.JSON(http.StatusForbidden, models.Response{
-			Status:  http.StatusForbidden,
-			Message: "You are not allowed to view this reply",
-		})
+	// Unified ID validation: Allow access if user is the reviewer or the service provider
+	if user.ID != review.UserID {
+		// Check if user is the service provider owner
+		isOwner, err := utils.IsServiceProviderOwner(user.ID, review.ServiceProviderID, rc.db)
+		if err != nil || !isOwner {
+			return c.JSON(http.StatusForbidden, models.Response{
+				Status:  http.StatusForbidden,
+				Message: "You are not allowed to view this reply",
+			})
+		}
 	}
 	if review.Reply == nil {
 		return c.JSON(http.StatusNotFound, models.Response{
