@@ -288,9 +288,23 @@ func (c *BookingController) GetProviderBookings(ctx echo.Context) error {
 		})
 	}
 
-	// Retrieve bookings from database
+	// Retrieve bookings from database using unified ID approach
 	collection := c.db.Database("barrim").Collection("bookings")
-	cursor, err := collection.Find(context.Background(), bson.M{"serviceProviderId": user.ID})
+
+	// Build filter with unified ID support
+	filter := bson.M{
+		"$or": []bson.M{
+			{"serviceProviderId": user.ID},                // New unified approach
+			{"serviceProviderId": user.ServiceProviderID}, // Legacy approach
+		},
+	}
+
+	// Remove the $or clause if ServiceProviderID is nil
+	if user.ServiceProviderID == nil {
+		filter = bson.M{"serviceProviderId": user.ID}
+	}
+
+	cursor, err := collection.Find(context.Background(), filter)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
@@ -818,13 +832,28 @@ func (bc *BookingController) AcceptBooking(c echo.Context) error {
 	// Get the booking collection
 	bookingCollection := bc.db.Database("barrim").Collection("bookings")
 
-	// Find the booking
+	// Find the booking using unified ID approach
 	ctx := context.Background()
 	var booking models.Booking
-	err = bookingCollection.FindOne(ctx, bson.M{
-		"_id":               objID,
-		"serviceProviderId": user.ID, // Ensure the booking belongs to this service provider
-	}).Decode(&booking)
+
+	// Build filter with unified ID support
+	filter := bson.M{
+		"_id": objID,
+		"$or": []bson.M{
+			{"serviceProviderId": user.ID},                // New unified approach
+			{"serviceProviderId": user.ServiceProviderID}, // Legacy approach
+		},
+	}
+
+	// Remove the $or clause if ServiceProviderID is nil
+	if user.ServiceProviderID == nil {
+		filter = bson.M{
+			"_id":               objID,
+			"serviceProviderId": user.ID,
+		}
+	}
+
+	err = bookingCollection.FindOne(ctx, filter).Decode(&booking)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -932,11 +961,27 @@ func (bc *BookingController) GetPendingBookings(c echo.Context) error {
 	bookingCollection := bc.db.Database("barrim").Collection("bookings")
 
 	// Find all pending bookings for this service provider
+	// Use unified ID approach to handle both new and legacy booking data
 	ctx := context.Background()
-	cursor, err := bookingCollection.Find(ctx, bson.M{
-		"serviceProviderId": user.ID,
-		"status":            "pending",
-	})
+
+	// Build filter with unified ID support
+	filter := bson.M{
+		"status": "pending",
+		"$or": []bson.M{
+			{"serviceProviderId": user.ID},                // New unified approach
+			{"serviceProviderId": user.ServiceProviderID}, // Legacy approach
+		},
+	}
+
+	// Remove the $or clause if ServiceProviderID is nil
+	if user.ServiceProviderID == nil {
+		filter = bson.M{
+			"serviceProviderId": user.ID,
+			"status":            "pending",
+		}
+	}
+
+	cursor, err := bookingCollection.Find(ctx, filter)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.Response{
