@@ -293,16 +293,38 @@ func (c *ServiceProviderReferralController) GetServiceProviderByID(ctx echo.Cont
 		var user models.User
 		err := userCollection.FindOne(context.Background(), bson.M{"_id": serviceProvider.UserID}).Decode(&user)
 		if err == nil && user.ServiceProviderInfo != nil {
-			// Populate additional fields from ServiceProviderInfo
-			enhancedSP.Description = user.ServiceProviderInfo.Description
-			enhancedSP.Rating = user.ServiceProviderInfo.Rating
-			enhancedSP.ProfilePhoto = user.ServiceProviderInfo.ProfilePhoto
-			enhancedSP.CertificateImages = user.ServiceProviderInfo.CertificateImages
-			enhancedSP.ServiceType = user.ServiceProviderInfo.ServiceType
+			// Only populate fields that are not already present in ServiceProvider model
+			// to avoid duplication
+			if enhancedSP.Description == "" {
+				enhancedSP.Description = user.ServiceProviderInfo.Description
+			}
+			if enhancedSP.Rating == 0 {
+				enhancedSP.Rating = user.ServiceProviderInfo.Rating
+			}
+			if enhancedSP.ProfilePhoto == "" {
+				enhancedSP.ProfilePhoto = user.ServiceProviderInfo.ProfilePhoto
+			}
+			// Only add certificate images if not already present
+			if len(enhancedSP.CertificateImages) == 0 && len(user.ServiceProviderInfo.CertificateImages) > 0 {
+				enhancedSP.CertificateImages = user.ServiceProviderInfo.CertificateImages
+			}
+			// Only add service type if not already present
+			if enhancedSP.ServiceType == "" {
+				enhancedSP.ServiceType = user.ServiceProviderInfo.ServiceType
+			}
 			enhancedSP.CustomServiceType = user.ServiceProviderInfo.CustomServiceType
-			enhancedSP.YearsExperience = user.ServiceProviderInfo.YearsExperience
-			enhancedSP.AvailableHours = user.ServiceProviderInfo.AvailableHours
-			enhancedSP.AvailableDays = user.ServiceProviderInfo.AvailableDays
+			// Only add years experience if not already present
+			if enhancedSP.YearsExperience == nil {
+				enhancedSP.YearsExperience = user.ServiceProviderInfo.YearsExperience
+			}
+			// Only add available hours if not already present
+			if len(enhancedSP.AvailableHours) == 0 && len(user.ServiceProviderInfo.AvailableHours) > 0 {
+				enhancedSP.AvailableHours = user.ServiceProviderInfo.AvailableHours
+			}
+			// Only add available days if not already present
+			if len(enhancedSP.AvailableDays) == 0 && len(user.ServiceProviderInfo.AvailableDays) > 0 {
+				enhancedSP.AvailableDays = user.ServiceProviderInfo.AvailableDays
+			}
 			enhancedSP.AvailableWeekdays = user.ServiceProviderInfo.AvailableWeekdays
 			enhancedSP.AvailabilityStatus = user.ServiceProviderInfo.Status
 		}
@@ -1021,15 +1043,7 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		}
 	}
 
-	// Update basic fields
-	if len(fullName) > 0 && fullName[0] != "" {
-		updateFields["fullName"] = fullName[0]
-	}
-
-	if len(email) > 0 && email[0] != "" {
-		updateFields["email"] = email[0]
-	}
-
+	// Prepare password hashing if needed
 	if len(password) > 0 && password[0] != "" {
 		hashedPassword, err = utils.HashPassword(password[0])
 		if err != nil {
@@ -1038,12 +1052,6 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 				Message: "Failed to hash password",
 			})
 		}
-		updateFields["password"] = hashedPassword
-	}
-
-	// Update category (this should be at root level for service providers)
-	if len(category) > 0 && category[0] != "" {
-		updateFields["category"] = category[0]
 	}
 
 	// Prepare ServiceProviderInfo update
@@ -1150,14 +1158,16 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	// Perform the update - Update both users and serviceProviders collections
+	// To avoid duplication, we'll update users collection with basic user fields only
+	// and serviceProviders collection with all service provider specific data
 
-	// First, update the users collection for basic user info
+	// First, update the users collection for basic user info only
 	userCollection := c.DB.Database("barrim").Collection("users")
 	userUpdateFields := bson.M{
 		"updatedAt": time.Now(),
 	}
 
-	// Add basic user fields to user update
+	// Add only basic user fields to user update (no service provider specific data)
 	if len(fullName) > 0 && fullName[0] != "" {
 		userUpdateFields["fullName"] = fullName[0]
 	}
@@ -1184,17 +1194,42 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		})
 	}
 
-	// Then, update the serviceProviders collection for service provider specific data
+	// Then, update the serviceProviders collection with ALL service provider data
 	serviceProviderCollection := c.DB.Database("barrim").Collection("serviceProviders")
 
-	// Build service provider update document
+	// Build service provider update document with all fields
 	serviceProviderUpdateFields := bson.M{
 		"updatedAt": time.Now(),
 	}
 
-	// Add category to service provider update
+	// Add category to service provider update (root level)
 	if len(category) > 0 && category[0] != "" {
 		serviceProviderUpdateFields["category"] = category[0]
+	}
+
+	// Note: phone, contactPerson, contactPhone are not available in this form
+	// They would need to be added to the form parsing section if needed
+
+	// Add location fields (root level)
+	if len(country) > 0 && country[0] != "" {
+		serviceProviderUpdateFields["country"] = country[0]
+	}
+	if len(district) > 0 && district[0] != "" {
+		serviceProviderUpdateFields["district"] = district[0]
+	}
+	if len(city) > 0 && city[0] != "" {
+		serviceProviderUpdateFields["city"] = city[0]
+	}
+	if len(street) > 0 && street[0] != "" {
+		serviceProviderUpdateFields["street"] = street[0]
+	}
+	if len(postalCode) > 0 && postalCode[0] != "" {
+		serviceProviderUpdateFields["postalCode"] = postalCode[0]
+	}
+
+	// Add logo path
+	if len(logoFiles) > 0 {
+		serviceProviderUpdateFields["logoPath"] = uploadPath
 	}
 
 	// Add serviceProviderInfo fields using dot notation
@@ -1221,7 +1256,7 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	return ctx.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Service provider data updated successfully",
-		Data:    updateFields,
+		Data:    serviceProviderUpdateFields,
 	})
 }
 
