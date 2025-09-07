@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/models"
@@ -415,9 +416,16 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 	// If not directly in availableDays, check if the weekday is available
 	if !isDateAvailable && serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.AvailableWeekdays != nil {
 		dayOfWeek := date.Weekday().String()
-		for _, weekday := range serviceProvider.ServiceProviderInfo.AvailableWeekdays {
-			if weekday == dayOfWeek {
-				isDateAvailable = true
+		for _, weekdayStr := range serviceProvider.ServiceProviderInfo.AvailableWeekdays {
+			// Handle comma-separated weekdays
+			weekdays := strings.Split(weekdayStr, ",")
+			for _, weekday := range weekdays {
+				if strings.TrimSpace(weekday) == dayOfWeek {
+					isDateAvailable = true
+					break
+				}
+			}
+			if isDateAvailable {
 				break
 			}
 		}
@@ -436,33 +444,52 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 	var availableSlots []string
 
 	// Get available hours from serviceProvider data
-	if serviceProvider.ServiceProviderInfo != nil && len(serviceProvider.ServiceProviderInfo.AvailableHours) >= 2 {
-		// Parse start and end hours from provider's available hours (format: "09:00", "17:00")
-		startTimeStr := serviceProvider.ServiceProviderInfo.AvailableHours[0]
-		endTimeStr := serviceProvider.ServiceProviderInfo.AvailableHours[1]
+	if serviceProvider.ServiceProviderInfo != nil && len(serviceProvider.ServiceProviderInfo.AvailableHours) > 0 {
+		// Handle comma-separated hours format: "09:00,10:00,11:00,12:00,13:00,14:00,15:00"
+		hoursStr := serviceProvider.ServiceProviderInfo.AvailableHours[0]
+		hours := strings.Split(hoursStr, ",")
 
-		// Parse times in 24-hour format
-		startHour, err = time.Parse("15:04", startTimeStr)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Error parsing provider start time",
-			})
-		}
+		if len(hours) >= 2 {
+			// Parse start and end hours
+			startTimeStr := strings.TrimSpace(hours[0])
+			endTimeStr := strings.TrimSpace(hours[len(hours)-1])
 
-		endHour, err = time.Parse("15:04", endTimeStr)
-		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Error parsing provider end time",
-			})
-		}
+			// Parse times in 24-hour format
+			startHour, err = time.Parse("15:04", startTimeStr)
+			if err != nil {
+				return ctx.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Error parsing provider start time",
+				})
+			}
 
-		// Generate time slots at 30-minute intervals
-		for h := startHour; h.Before(endHour); h = h.Add(30 * time.Minute) {
-			// Format time as "3:04 PM" for UI display
-			timeSlot := h.Format("3:04 PM")
-			availableSlots = append(availableSlots, timeSlot)
+			endHour, err = time.Parse("15:04", endTimeStr)
+			if err != nil {
+				return ctx.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Error parsing provider end time",
+				})
+			}
+
+			// Generate time slots at 30-minute intervals
+			for h := startHour; h.Before(endHour); h = h.Add(30 * time.Minute) {
+				// Format time as "3:04 PM" for UI display
+				timeSlot := h.Format("3:04 PM")
+				availableSlots = append(availableSlots, timeSlot)
+			}
+		} else {
+			// If we have individual hours, create slots for each hour
+			for _, hourStr := range hours {
+				hourStr = strings.TrimSpace(hourStr)
+				if hourStr != "" {
+					// Parse the hour and create a slot
+					hour, err := time.Parse("15:04", hourStr)
+					if err == nil {
+						timeSlot := hour.Format("3:04 PM")
+						availableSlots = append(availableSlots, timeSlot)
+					}
+				}
+			}
 		}
 	} else {
 		// Default time slots if provider hasn't specified hours
