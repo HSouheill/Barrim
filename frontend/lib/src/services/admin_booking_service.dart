@@ -29,8 +29,7 @@ class AdminBookingService {
     };
   }
 
-  // Placeholder method for getting all bookings
-  // This will be implemented when the backend endpoint is available
+  // Get all bookings for admin with pagination and filtering
   Future<Map<String, dynamic>> getAllBookingsForAdmin({
     int page = 1,
     int limit = 20,
@@ -39,27 +38,102 @@ class AdminBookingService {
     String? userId,
   }) async {
     try {
-      // For now, return mock data
-      // TODO: Implement actual API call when backend endpoint is available
-      await Future.delayed(Duration(milliseconds: 500)); // Simulate API delay
-      
-      return {
-        'success': true,
-        'message': 'Bookings retrieved successfully (mock data)',
-        'data': {
-          'bookings': [
-            // Mock booking data
-          ],
-          'pagination': {
-            'currentPage': page,
-            'totalPages': 1,
-            'totalCount': 0,
-            'limit': limit,
-            'hasNext': false,
-            'hasPrev': false,
-          },
-        },
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
       };
+
+      if (serviceProviderId != null && serviceProviderId.isNotEmpty) {
+        queryParams['serviceProviderId'] = serviceProviderId;
+      }
+      if (status != null && status.isNotEmpty) {
+        queryParams['status'] = status;
+      }
+      if (userId != null && userId.isNotEmpty) {
+        queryParams['userId'] = userId;
+      }
+
+      final uri = Uri.parse('$secureBaseUrl${ApiConstants.getAllBookingsForAdmin}')
+          .replace(queryParameters: queryParams);
+
+      final headers = await _getHeaders();
+      print('Making request to: $uri');
+      print('Headers: $headers');
+
+      final response = await http.get(
+        uri,
+        headers: headers,
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final bookingsData = responseData['data'];
+        
+        // Handle both enriched and simple booking data
+        List<Booking> bookings;
+        if (bookingsData['bookings'] is List) {
+          final bookingsList = bookingsData['bookings'] as List;
+          
+          if (bookingsList.isNotEmpty && bookingsList.first is Map<String, dynamic>) {
+            final firstBooking = bookingsList.first as Map<String, dynamic>;
+            
+            // Check if it's enriched data (has nested objects)
+            if (firstBooking.containsKey('booking') && firstBooking.containsKey('user')) {
+              // Enriched data structure
+              bookings = bookingsList.map((enrichedBooking) {
+                final bookingData = enrichedBooking['booking'] as Map<String, dynamic>;
+                final userData = enrichedBooking['user'] as Map<String, dynamic>;
+                final serviceProviderData = enrichedBooking['serviceProvider'] as Map<String, dynamic>;
+                
+                // Merge the data for the Booking.fromJson method
+                final bookingJson = Map<String, dynamic>.from(bookingData);
+                bookingJson['userName'] = userData['fullName'];
+                bookingJson['serviceProviderName'] = serviceProviderData['fullName'];
+                
+                return Booking.fromJson(bookingJson);
+              }).toList();
+            } else {
+              // Simple data structure
+              bookings = bookingsList.map((json) => Booking.fromJson(json)).toList();
+            }
+          } else {
+            bookings = [];
+          }
+        } else {
+          bookings = [];
+        }
+
+        return {
+          'success': true,
+          'message': responseData['message'],
+          'data': {
+            'bookings': bookings,
+            'pagination': bookingsData['pagination'],
+          },
+        };
+      } else if (response.statusCode == 403) {
+        return {
+          'success': false,
+          'message': 'Access denied: Admin privileges required',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Unauthorized: Please log in',
+          'statusCode': response.statusCode,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Failed to fetch bookings',
+          'statusCode': response.statusCode,
+        };
+      }
     } catch (e) {
       return {
         'success': false,
@@ -68,18 +142,42 @@ class AdminBookingService {
     }
   }
 
-  // Placeholder method for deleting a booking
-  // This will be implemented when the backend endpoint is available
+  // Delete a booking
   Future<Map<String, dynamic>> deleteBooking(String bookingId) async {
     try {
-      // For now, return mock success
-      // TODO: Implement actual API call when backend endpoint is available
-      await Future.delayed(Duration(milliseconds: 500)); // Simulate API delay
-      
-      return {
-        'success': true,
-        'message': 'Booking deleted successfully (mock)',
-      };
+      final uri = Uri.parse('$secureBaseUrl${ApiConstants.deleteBooking}/$bookingId');
+
+      final response = await http.delete(
+        uri,
+        headers: await _getHeaders(),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': responseData['message'],
+        };
+      } else if (response.statusCode == 403) {
+        return {
+          'success': false,
+          'message': 'Access denied: Admin privileges required',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Unauthorized: Please log in',
+          'statusCode': response.statusCode,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Failed to delete booking',
+          'statusCode': response.statusCode,
+        };
+      }
     } catch (e) {
       return {
         'success': false,

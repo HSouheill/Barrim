@@ -56,18 +56,37 @@ class AdminReviewService {
       final uri = Uri.parse('$secureBaseUrl${ApiConstants.getAllReviewsForAdmin}')
           .replace(queryParameters: queryParams);
 
+      final headers = await _getHeaders();
+      print('Making review request to: $uri');
+      print('Review headers: $headers');
+
       final response = await http.get(
         uri,
-        headers: await _getHeaders(),
+        headers: headers,
       );
+
+      print('Review response status: ${response.statusCode}');
+      print('Review response body: ${response.body}');
 
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final reviewsData = responseData['data'];
-        final reviews = (reviewsData['reviews'] as List)
-            .map((json) => Review.fromJson(json))
-            .toList();
+        final enrichedReviews = reviewsData['reviews'] as List;
+        
+        // Convert enriched reviews to Review objects
+        final reviews = enrichedReviews.map((enrichedReview) {
+          final reviewData = enrichedReview['review'] as Map<String, dynamic>;
+          final userData = enrichedReview['user'] as Map<String, dynamic>;
+          final serviceProviderData = enrichedReview['serviceProvider'] as Map<String, dynamic>;
+          
+          // Merge the data for the Review.fromJson method
+          final reviewJson = Map<String, dynamic>.from(reviewData);
+          reviewJson['userName'] = userData['fullName'];
+          reviewJson['serviceProviderName'] = serviceProviderData['fullName'];
+          
+          return Review.fromJson(reviewJson);
+        }).toList();
 
         return {
           'success': true,
@@ -76,6 +95,18 @@ class AdminReviewService {
             'reviews': reviews,
             'pagination': reviewsData['pagination'],
           },
+        };
+      } else if (response.statusCode == 403) {
+        return {
+          'success': false,
+          'message': 'Access denied: Admin privileges required',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Unauthorized: Please log in',
+          'statusCode': response.statusCode,
         };
       } else {
         return {
@@ -108,6 +139,18 @@ class AdminReviewService {
         return {
           'success': true,
           'message': responseData['message'],
+        };
+      } else if (response.statusCode == 403) {
+        return {
+          'success': false,
+          'message': 'Access denied: Admin privileges required',
+          'statusCode': response.statusCode,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Unauthorized: Please log in',
+          'statusCode': response.statusCode,
         };
       } else {
         return {

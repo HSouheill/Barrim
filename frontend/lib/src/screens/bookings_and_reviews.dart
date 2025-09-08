@@ -8,6 +8,7 @@ import '../services/api_constant.dart';
 import '../components/header.dart';
 import '../components/sidebar.dart';
 import '../screens/homepage/homepage.dart';
+import '../utils/secure_storage.dart';
 
 class BookingsAndReviewsScreen extends StatefulWidget {
   const BookingsAndReviewsScreen({Key? key}) : super(key: key);
@@ -53,6 +54,32 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
     _reviewService = AdminReviewService(baseUrl: ApiConstants.baseUrl);
     _bookingService = AdminBookingService(baseUrl: ApiConstants.baseUrl);
     
+    _checkAuthenticationAndLoad();
+  }
+
+  Future<void> _checkAuthenticationAndLoad() async {
+    final secureStorage = SecureStorage();
+    final token = await secureStorage.getToken();
+    
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please log in to access this feature'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Login',
+            textColor: Colors.white,
+            onPressed: () {
+              // TODO: Navigate to login screen
+              print('Navigate to login screen');
+            },
+          ),
+        ),
+      );
+      return;
+    }
+    
     _loadReviews();
     _loadBookings();
   }
@@ -82,18 +109,66 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
       if (result['success']) {
         final data = result['data'];
         setState(() {
-          _reviews = data['reviews'];
+          _reviews = (data['reviews'] as List<dynamic>)
+              .map((reviewJson) => Review.fromJson(reviewJson))
+              .toList();
           _totalReviewPages = data['pagination']['totalPages'];
           _totalReviewCount = data['pagination']['totalCount'];
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'])),
-        );
+        final message = result['message'];
+        final statusCode = result['statusCode'];
+        
+        if (statusCode == 403) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Access denied: Admin privileges required'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Login as Admin',
+                textColor: Colors.white,
+                onPressed: () {
+                  // TODO: Navigate to admin login
+                  print('Navigate to admin login');
+                },
+              ),
+            ),
+          );
+        } else if (statusCode == 401) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Please log in to access this feature'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Login',
+                textColor: Colors.white,
+                onPressed: () {
+                  // TODO: Navigate to login screen
+                  print('Navigate to login screen');
+                },
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } catch (e) {
+      print('Error loading reviews: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading reviews: $e')),
+        SnackBar(
+          content: Text('Error loading reviews: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
       );
     } finally {
       setState(() {
@@ -121,18 +196,66 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
       if (result['success']) {
         final data = result['data'];
         setState(() {
-          _bookings = data['bookings'];
+          _bookings = (data['bookings'] as List<dynamic>)
+              .map((bookingJson) => Booking.fromJson(bookingJson))
+              .toList();
           _totalBookingPages = data['pagination']['totalPages'];
           _totalBookingCount = data['pagination']['totalCount'];
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'])),
-        );
+        final message = result['message'];
+        final statusCode = result['statusCode'];
+        
+        if (statusCode == 403) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Access denied: Admin privileges required'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Login as Admin',
+                textColor: Colors.white,
+                onPressed: () {
+                  // TODO: Navigate to admin login
+                  print('Navigate to admin login');
+                },
+              ),
+            ),
+          );
+        } else if (statusCode == 401) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Please log in to access this feature'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Login',
+                textColor: Colors.white,
+                onPressed: () {
+                  // TODO: Navigate to login screen
+                  print('Navigate to login screen');
+                },
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } catch (e) {
+      print('Error loading bookings: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading bookings: $e')),
+        SnackBar(
+          content: Text('Error loading bookings: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
       );
     } finally {
       setState(() {

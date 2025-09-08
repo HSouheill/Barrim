@@ -71,6 +71,10 @@ class ApiConstants {
   static const String getAllReviewsForAdmin = '/api/admin/reviews';
   static const String deleteReview = '/api/admin/reviews';
   
+  // Booking management endpoints
+  static const String getAllBookingsForAdmin = '/api/admin/bookings'; // TODO: Implement this endpoint in backend
+  static const String deleteBooking = '/api/admin/bookings'; // TODO: Implement this endpoint in backend
+  
   // Sponsorship endpoints
   static const String createServiceProviderSponsorship = '/api/admin/sponsorships/service-provider';
   static const String createCompanyWholesalerSponsorship = '/api/admin/sponsorships/company-wholesaler';

@@ -449,31 +449,55 @@ class SponsorshipSubscriptionRequest {
   });
 
   factory SponsorshipSubscriptionRequest.fromJson(Map<String, dynamic> json) {
+    print('DEBUG: SponsorshipSubscriptionRequest.fromJson called with: $json');
+    
+    // Handle the nested structure where request data is in a 'request' field
+    Map<String, dynamic> requestData;
+    Map<String, dynamic>? entityData;
+    Map<String, dynamic>? sponsorshipData;
+    
+    if (json['request'] != null && json['request'] is Map<String, dynamic>) {
+      // This is the new structure with nested request data
+      requestData = json['request'] as Map<String, dynamic>;
+      entityData = json['entityDetails'] as Map<String, dynamic>?;
+      sponsorshipData = json['sponsorship'] as Map<String, dynamic>?;
+      print('DEBUG: Using nested structure');
+    } else {
+      // This is the old structure with flat data
+      requestData = json;
+      entityData = json['entity'] as Map<String, dynamic>?;
+      sponsorshipData = json['sponsorship'] as Map<String, dynamic>?;
+      print('DEBUG: Using flat structure');
+    }
+    
+    final id = requestData['id'] ?? requestData['_id'];
+    print('DEBUG: Parsed ID: $id');
+    
     return SponsorshipSubscriptionRequest(
-      id: json['id'] ?? json['_id'],
-      entityType: json['entityType'] ?? '',
-      entityId: json['entityId'] ?? '',
-      sponsorshipId: json['sponsorshipId'] ?? '',
-      status: json['status'] ?? 'pending',
-      requestedAt: DateTime.tryParse(json['requestedAt'] ?? '') ?? DateTime.now(),
-      adminId: json['adminId'],
-      adminNote: json['adminNote'],
-      processedAt: json['processedAt'] != null
-          ? DateTime.tryParse(json['processedAt'])
+      id: id,
+      entityType: requestData['entityType'] ?? '',
+      entityId: requestData['entityId'] ?? '',
+      sponsorshipId: requestData['sponsorshipId'] ?? '',
+      status: requestData['status'] ?? 'pending',
+      requestedAt: DateTime.tryParse(requestData['requestedAt'] ?? '') ?? DateTime.now(),
+      adminId: requestData['adminId'],
+      adminNote: requestData['adminNote'],
+      processedAt: requestData['processedAt'] != null
+          ? DateTime.tryParse(requestData['processedAt'])
           : null,
-      adminApproved: json['adminApproved'],
-      approvedBy: json['approvedBy'],
-      approvedAt: json['approvedAt'] != null
-          ? DateTime.tryParse(json['approvedAt'])
+      adminApproved: requestData['adminApproved'],
+      approvedBy: requestData['approvedBy'],
+      approvedAt: requestData['approvedAt'] != null
+          ? DateTime.tryParse(requestData['approvedAt'])
           : null,
-      rejectedBy: json['rejectedBy'],
-      rejectedAt: json['rejectedAt'] != null
-          ? DateTime.tryParse(json['rejectedAt'])
+      rejectedBy: requestData['rejectedBy'],
+      rejectedAt: requestData['rejectedAt'] != null
+          ? DateTime.tryParse(requestData['rejectedAt'])
           : null,
-      sponsorship: json['sponsorship'] != null
-          ? Sponsorship.fromJson(json['sponsorship'])
+      sponsorship: sponsorshipData != null
+          ? Sponsorship.fromJson(sponsorshipData)
           : null,
-      entity: json['entity'],
+      entity: entityData,
     );
   }
 
@@ -530,12 +554,30 @@ class SponsorshipSubscriptionListResponse {
   });
 
   factory SponsorshipSubscriptionListResponse.fromJson(Map<String, dynamic> json) {
-    final data = json['data'] ?? {};
+    print('DEBUG: SponsorshipSubscriptionListResponse.fromJson called with: $json');
+    
+    // Try different possible structures
+    List<dynamic>? requestsList;
+    Map<String, dynamic>? paginationData;
+    
+    if (json['data'] != null && json['data'] is Map<String, dynamic>) {
+      final data = json['data'] as Map<String, dynamic>;
+      requestsList = data['requests'] as List?;
+      paginationData = data['pagination'] as Map<String, dynamic>?;
+      print('DEBUG: Found data structure with ${requestsList?.length ?? 0} requests');
+    } else if (json['requests'] != null && json['requests'] is List) {
+      requestsList = json['requests'] as List;
+      paginationData = json['pagination'] as Map<String, dynamic>?;
+      print('DEBUG: Found direct requests structure with ${requestsList.length} requests');
+    } else {
+      print('DEBUG: No recognizable structure found');
+    }
+    
+    final requests = requestsList?.map((r) => SponsorshipSubscriptionRequest.fromJson(r)).toList() ?? [];
+    
     return SponsorshipSubscriptionListResponse(
-      requests: (data['requests'] as List?)
-          ?.map((r) => SponsorshipSubscriptionRequest.fromJson(r))
-          .toList() ?? [],
-      pagination: SponsorshipSubscriptionPagination.fromJson(data['pagination'] ?? {}),
+      requests: requests,
+      pagination: SponsorshipSubscriptionPagination.fromJson(paginationData ?? {}),
     );
   }
 }

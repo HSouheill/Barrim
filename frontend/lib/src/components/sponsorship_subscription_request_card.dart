@@ -60,7 +60,7 @@ class SponsorshipSubscriptionRequestCard extends StatelessWidget {
 
             // Only Entity Name and Requested At
             if (request.entity != null) ...[
-              _buildInfoRow('Entity', request.entity!['businessName'] ?? 'N/A'),
+              _buildInfoRow('Entity', _getEntityName(request.entity!)),
               const SizedBox(height: 8),
             ],
             _buildInfoRow('Requested At', _formatDate(request.requestedAt)),
@@ -163,5 +163,16 @@ class SponsorshipSubscriptionRequestCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _getEntityName(Map<String, dynamic> entity) {
+    if (entity['companyInfo'] != null) {
+      return entity['companyInfo']['businessName'] ?? 'N/A';
+    } else if (entity['name'] != null) {
+      return entity['name'];
+    } else if (entity['businessName'] != null) {
+      return entity['businessName'];
+    }
+    return 'N/A';
   }
 }

@@ -142,6 +142,18 @@ class _AdminSponsorshipScreenState extends State<AdminSponsorshipScreen> with Ti
           _pendingRequests = response.data?.requests ?? [];
         });
         print('Pending requests loaded: ${_pendingRequests.length}');
+        
+        // Debug: Print the first request to see its structure
+        if (_pendingRequests.isNotEmpty) {
+          print('First request structure:');
+          print('ID: ${_pendingRequests.first.id}');
+          print('Entity Type: ${_pendingRequests.first.entityType}');
+          print('Entity ID: ${_pendingRequests.first.entityId}');
+          print('Sponsorship ID: ${_pendingRequests.first.sponsorshipId}');
+          print('Status: ${_pendingRequests.first.status}');
+          print('Requested At: ${_pendingRequests.first.requestedAt}');
+          print('Entity: ${_pendingRequests.first.entity}');
+        }
       } else {
         print('Error loading pending requests: ${response.message}');
         setState(() {
@@ -370,6 +382,19 @@ class _AdminSponsorshipScreenState extends State<AdminSponsorshipScreen> with Ti
   Future<void> _handleApproveRequest(SponsorshipSubscriptionRequest request) async {
     print('Approving request: ${request.id}');
     
+    // Check if request ID is null
+    if (request.id == null || request.id!.isEmpty) {
+      print('Error: Request ID is null or empty');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Request ID is missing. Cannot approve request.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -418,6 +443,19 @@ class _AdminSponsorshipScreenState extends State<AdminSponsorshipScreen> with Ti
   Future<void> _handleRejectRequest(SponsorshipSubscriptionRequest request) async {
     print('Rejecting request: ${request.id}');
     
+    // Check if request ID is null
+    if (request.id == null || request.id!.isEmpty) {
+      print('Error: Request ID is null or empty');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Request ID is missing. Cannot reject request.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isLoading = true;

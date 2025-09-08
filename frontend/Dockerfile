@@ -44,20 +44,8 @@ COPY . .
 # Add web platform support (only if not already present)
 RUN if [ ! -d "web" ]; then flutter create . --platforms web; fi
 
-# Build the app for the web
-RUN flutter build web --release
+# Expose port for Flutter web development server
+EXPOSE 3000
 
-# Copy nginx configuration and remove any conflicting defaults
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
-RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default 2>/dev/null || true
-
-# Create a build info file in the production image
-RUN echo "Build Date: ${BUILD_DATE:-$(date)}" > /app/build/web/build_info.txt \
-    && echo "Version: ${VERSION:-local}" >> /app/build/web/build_info.txt \
-    && echo "Timestamp: ${BUILD_TIMESTAMP:-$(date +%s)}" >> /app/build/web/build_info.txt
-
-# Expose port 80
-EXPOSE 80
-
-# Start nginx with the built Flutter app
-CMD ["nginx", "-g", "daemon off;"]
+# Start Flutter web development server
+CMD ["flutter", "run", "web", "--web-port", "3000", "--web-hostname", "0.0.0.0"]
