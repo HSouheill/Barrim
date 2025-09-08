@@ -69,5 +69,23 @@ RUN echo "Final web directory check:" && \
 # Expose port for Flutter web development server
 EXPOSE 3000
 
+# Create a startup script to debug and run Flutter web
+RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'echo "=== Container startup debug ==="' >> /start.sh && \
+    echo 'echo "Current directory: $(pwd)"' >> /start.sh && \
+    echo 'echo "Directory contents:"' >> /start.sh && \
+    echo 'ls -la' >> /start.sh && \
+    echo 'echo "Web directory check:"' >> /start.sh && \
+    echo 'if [ -d "web" ]; then' >> /start.sh && \
+    echo '    echo "Web directory exists, contents:"' >> /start.sh && \
+    echo '    ls -la web/' >> /start.sh && \
+    echo 'else' >> /start.sh && \
+    echo '    echo "Web directory does not exist, creating..."' >> /start.sh && \
+    echo '    flutter create . --platforms web' >> /start.sh && \
+    echo 'fi' >> /start.sh && \
+    echo 'echo "Starting Flutter web server..."' >> /start.sh && \
+    echo 'flutter run web --web-port 3000 --web-hostname 0.0.0.0' >> /start.sh && \
+    chmod +x /start.sh
+
 # Start Flutter web development server
-CMD ["flutter", "run", "web", "--web-port", "3000", "--web-hostname", "0.0.0.0"]
+CMD ["/start.sh"]
