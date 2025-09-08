@@ -86,7 +86,7 @@ RUN echo '#!/bin/bash' > /start.sh && \
     echo 'echo "Available devices:"' >> /start.sh && \
     echo 'flutter devices' >> /start.sh && \
     echo 'echo "Starting Flutter web server..."' >> /start.sh && \
-    echo 'flutter run -d chrome --web-port 3000 --web-hostname 0.0.0.0' >> /start.sh && \
+    echo 'flutter run --web-renderer html --web-port 3000 --web-hostname 0.0.0.0' >> /start.sh && \
     chmod +x /start.sh
 
 # Start Flutter web development server
