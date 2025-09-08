@@ -84,7 +84,7 @@ RUN echo '#!/bin/bash' > /start.sh && \
     echo '    flutter create . --platforms web' >> /start.sh && \
     echo 'fi' >> /start.sh && \
     echo 'echo "Starting Flutter web server..."' >> /start.sh && \
-    echo 'flutter run web --web-port 3000 --web-hostname 0.0.0.0' >> /start.sh && \
+    echo 'flutter run --web-port 3000 --web-hostname 0.0.0.0' >> /start.sh && \
     chmod +x /start.sh
 
 # Start Flutter web development server
