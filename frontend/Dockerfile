@@ -41,8 +41,30 @@ RUN flutter pub get
 # Copy the app source code
 COPY . .
 
-# Ensure web platform is properly created
-RUN flutter create . --platforms web --overwrite
+# Debug: Check if web directory exists and list contents
+RUN echo "Checking web directory..." && \
+    if [ -d "web" ]; then \
+        echo "Web directory exists, listing contents:" && \
+        ls -la web/; \
+    else \
+        echo "Web directory does not exist"; \
+    fi
+
+# Ensure Flutter doctor is working and web is enabled
+RUN flutter doctor -v
+
+# Ensure web platform is properly created (skip if already exists)
+RUN if [ ! -d "web" ]; then \
+        echo "Creating web platform..."; \
+        flutter create . --platforms web; \
+    else \
+        echo "Web platform already exists, skipping creation"; \
+    fi
+
+# Debug: Verify web directory after creation
+RUN echo "Final web directory check:" && \
+    ls -la web/ && \
+    echo "Web directory contents verified"
 
 # Expose port for Flutter web development server
 EXPOSE 3000
