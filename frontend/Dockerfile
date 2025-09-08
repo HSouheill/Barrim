@@ -6,12 +6,13 @@ ARG BUILD_DATE
 ARG VERSION
 ARG BUILD_TIMESTAMP
 
-# Install Flutter
+# Install Flutter and Python
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     unzip \
     nginx \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Flutter
@@ -69,24 +70,25 @@ RUN echo "Final web directory check:" && \
 # Expose port for Flutter web development server
 EXPOSE 3000
 
-# Create a startup script to debug and run Flutter web
+# Build the Flutter web app for production
+RUN flutter build web --release
+
+# Create a startup script to serve the built web app
 RUN echo '#!/bin/bash' > /start.sh && \
     echo 'echo "=== Container startup debug ==="' >> /start.sh && \
     echo 'echo "Current directory: $(pwd)"' >> /start.sh && \
     echo 'echo "Directory contents:"' >> /start.sh && \
     echo 'ls -la' >> /start.sh && \
-    echo 'echo "Web directory check:"' >> /start.sh && \
-    echo 'if [ -d "web" ]; then' >> /start.sh && \
-    echo '    echo "Web directory exists, contents:"' >> /start.sh && \
-    echo '    ls -la web/' >> /start.sh && \
+    echo 'echo "Web build directory check:"' >> /start.sh && \
+    echo 'if [ -d "build/web" ]; then' >> /start.sh && \
+    echo '    echo "Web build directory exists, contents:"' >> /start.sh && \
+    echo '    ls -la build/web/' >> /start.sh && \
     echo 'else' >> /start.sh && \
-    echo '    echo "Web directory does not exist, creating..."' >> /start.sh && \
-    echo '    flutter create . --platforms web' >> /start.sh && \
+    echo '    echo "Web build directory does not exist, building..."' >> /start.sh && \
+    echo '    flutter build web --release' >> /start.sh && \
     echo 'fi' >> /start.sh && \
-    echo 'echo "Available devices:"' >> /start.sh && \
-    echo 'flutter devices' >> /start.sh && \
-    echo 'echo "Starting Flutter web server..."' >> /start.sh && \
-    echo 'flutter run --web-renderer html --web-port 3000 --web-hostname 0.0.0.0' >> /start.sh && \
+    echo 'echo "Starting web server..."' >> /start.sh && \
+    echo 'cd build/web && python3 -m http.server 3000 --bind 0.0.0.0' >> /start.sh && \
     chmod +x /start.sh
 
 # Start Flutter web development server
