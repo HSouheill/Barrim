@@ -41,8 +41,8 @@ RUN flutter pub get
 # Copy the app source code
 COPY . .
 
-# Add web platform support (only if not already present)
-RUN if [ ! -d "web" ]; then flutter create . --platforms web; fi
+# Ensure web platform is properly created
+RUN flutter create . --platforms web --overwrite
 
 # Expose port for Flutter web development server
 EXPOSE 3000
