@@ -35,23 +35,15 @@ import (
 	"github.com/HSouheill/barrim_backend/utils"
 	"github.com/golang-jwt/jwt"
 	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/twilio/twilio-go"
 )
 
-const (
-	twilioBaseURL = "https://verify.twilio.com/v2"
-)
+// Removed Twilio constants as we're now using BestSMSBulk API
 
 // AuthController contains authentication logic
 type AuthController struct {
-	DB                *mongo.Client
-	logger            *log.Logger
-	twilioClient      *twilio.RestClient
-	accountSid        string
-	authToken         string
-	twilioPhoneNumber string
-	verifyServiceSid  string
-	loginAttempts     map[string]struct {
+	DB            *mongo.Client
+	logger        *log.Logger
+	loginAttempts map[string]struct {
 		count       int
 		lastAttempt time.Time
 	}
@@ -65,24 +57,9 @@ type AuthController struct {
 
 // NewAuthController creates a new auth controller
 func NewAuthController(db *mongo.Client) *AuthController {
-	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
-	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
-	twilioPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
-	verifyServiceSid := os.Getenv("TWILIO_VERIFY_SERVICE_SID")
-
-	twilioClient := twilio.NewRestClientWithParams(twilio.ClientParams{
-		Username: accountSid,
-		Password: authToken,
-	})
-
 	ac := &AuthController{
-		DB:                db,
-		logger:            log.New(os.Stdout, "[AUTH] ", log.LstdFlags),
-		twilioClient:      twilioClient,
-		accountSid:        accountSid,
-		authToken:         authToken,
-		twilioPhoneNumber: twilioPhoneNumber,
-		verifyServiceSid:  verifyServiceSid,
+		DB:     db,
+		logger: log.New(os.Stdout, "[AUTH] ", log.LstdFlags),
 		loginAttempts: make(map[string]struct {
 			count       int
 			lastAttempt time.Time
@@ -163,7 +140,7 @@ func generateAuthOTP() string {
 	return RandomStringGenerator(6, "numeric")
 }
 
-// Send OTP via SMS using Twilio SMS API
+// Send OTP via SMS using BestSMSBulk API
 func (ac *AuthController) sendOTP(phone, otp string) error {
 	return utils.SendOTPViaSMS(phone, otp)
 }
@@ -391,7 +368,7 @@ func (ac *AuthController) Signup(c echo.Context) error {
 		})
 	}
 
-	// Send OTP via SMS using Twilio SMS API
+	// Send OTP via SMS using BestSMSBulk API
 	smsErr := ac.sendOTP(req.Phone, otp)
 	if smsErr != nil {
 		ac.logger.Printf("SMS OTP failed: %v", smsErr)
@@ -678,7 +655,7 @@ func (ac *AuthController) SignupWholesalerWithLogo(c echo.Context) error {
 		})
 	}
 
-	// Send OTP via SMS using Twilio SMS API
+	// Send OTP via SMS using BestSMSBulk API
 	smsErr := ac.sendOTP(signupRequest.Phone, otp)
 	if smsErr != nil {
 		ac.logger.Printf("SMS OTP failed: %v", smsErr)
@@ -929,7 +906,7 @@ func (ac *AuthController) SignupServiceProviderWithLogo(ctx echo.Context) error 
 		})
 	}
 
-	// Send OTP via SMS using Twilio SMS API
+	// Send OTP via SMS using BestSMSBulk API
 	smsErr := ac.sendOTP(signupRequest.Phone, otp)
 	if smsErr != nil {
 		ac.logger.Printf("SMS OTP failed: %v", smsErr)

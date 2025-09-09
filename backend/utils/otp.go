@@ -6,13 +6,9 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"errors"
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/twilio/twilio-go"
-	api "github.com/twilio/twilio-go/rest/api/v2010"
 )
 
 func GenerateSecureOTP() (string, error) {
@@ -46,35 +42,4 @@ func ValidateOTPAttempts(userID string, redis *redis.Client) error {
 	return nil
 }
 
-// SendOTPViaSMS sends a 6-digit OTP via SMS using Twilio SMS API
-func SendOTPViaSMS(phone string, otp string) error {
-	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
-	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
-	twilioPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
-
-	if accountSid == "" || authToken == "" || twilioPhoneNumber == "" {
-		return fmt.Errorf("missing Twilio configuration: check TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER")
-	}
-
-	client := twilio.NewRestClientWithParams(twilio.ClientParams{
-		Username: accountSid,
-		Password: authToken,
-	})
-
-	params := &api.CreateMessageParams{}
-	params.SetTo(phone)
-	params.SetFrom(twilioPhoneNumber)
-	params.SetBody(fmt.Sprintf("Your Barrim verification code is: %s. This code will expire in 10 minutes.", otp))
-
-	resp, err := client.Api.CreateMessage(params)
-	if err != nil {
-		return fmt.Errorf("failed to send OTP via SMS: %w", err)
-	}
-
-	if resp.Sid != nil {
-		fmt.Printf("OTP sent to %s, SID: %s\n", phone, *resp.Sid)
-	} else {
-		fmt.Printf("OTP sent to %s, but no SID returned\n", phone)
-	}
-	return nil
-}
+// SendOTPViaSMS function moved to utils/sms_service.go
