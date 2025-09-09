@@ -1,5 +1,5 @@
 services:
-  admin_dashboard:
+  barrim-admin-dashboard:
     build: 
       context: .
       dockerfile: Dockerfile
@@ -7,4 +7,4 @@ services:
       - "3000:3000"
     restart: unless-stopped
     environment:
-      - FLUTTER_ENV=development 
+      - FLUTTER_ENV=production 

@@ -45,9 +45,7 @@ services:
       - /tmp:size=100M,noexec,nosuid,nodev
 
   backend:
-    build: 
-      context: .
-      dockerfile: Dockerfile.backend
+    image: hsouheil/barrim-backend:latest
     container_name: barrim-backend
     restart: unless-stopped
     ports:
@@ -86,13 +84,7 @@ services:
           memory: 256M
 
   barrim-admin-dashboard:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        BUILD_DATE: ${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
-        VERSION: ${VERSION:-latest}
-        BUILD_TIMESTAMP: ${BUILD_TIMESTAMP:-$(date +%s)}
+    image: hsouheil/barrim-frontend:latest
     container_name: barrim-admin-dashboard
     restart: unless-stopped
     ports:
@@ -105,7 +97,6 @@ services:
       - BUILD_DATE=${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
       - VERSION=${VERSION:-latest}
       - BUILD_TIMESTAMP=${BUILD_TIMESTAMP:-$(date +%s)}
-    # Health check removed - nginx:alpine doesn't have healthcheck.sh
     deploy:
       resources:
         limits:
@@ -116,9 +107,7 @@ services:
           memory: 128M
 
   privacy-service:
-    build:
-      context: ./privacy
-      dockerfile: Dockerfile
+    image: hsouheil/barrim-privacy:latest
     container_name: privacy-service
     restart: unless-stopped
     ports:
@@ -165,4 +154,3 @@ networks:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.name: barrim-bridge
-
