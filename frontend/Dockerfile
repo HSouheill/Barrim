@@ -15,7 +15,6 @@ ENV PATH="/flutter/bin:${PATH}"
 # Pre-download Flutter artifacts
 RUN flutter precache
 
-# Enable flutter web
 RUN flutter config --enable-web
 
 # Set working directory
