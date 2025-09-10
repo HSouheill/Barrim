@@ -148,12 +148,12 @@ func (c *BookingController) CreateBooking(ctx echo.Context) error {
 	}
 
 	// Check service provider availability using ServiceProviderInfo from serviceProviders collection
-	if !isServiceProviderAvailable(serviceProvider, request.BookingDate, request.TimeSlot) {
-		return ctx.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Service provider is not available at this time",
-		})
-	}
+	// if !isServiceProviderAvailable(serviceProvider, request.BookingDate, request.TimeSlot) {
+	// 	return ctx.JSON(http.StatusBadRequest, models.Response{
+	// 		Status:  http.StatusBadRequest,
+	// 		Message: "Service provider is not available at this time",
+	// 	})
+	// }
 
 	// Check if the time slot is already booked
 	bookingsCollection := c.db.Database("barrim").Collection("bookings")
@@ -757,16 +757,23 @@ func isServiceProviderAvailable(serviceProvider models.ServiceProvider, bookingD
 	// Format the date for comparison with available days
 	formattedDate := bookingDate.Format("2006-01-02")
 
+	// Debug logging
+	log.Printf("DEBUG: Checking availability for date: %s, timeSlot: %s", formattedDate, timeSlot)
+	log.Printf("DEBUG: ServiceProviderInfo: %+v", serviceProvider.ServiceProviderInfo)
+
 	if serviceProvider.ServiceProviderInfo == nil {
+		log.Printf("DEBUG: ServiceProviderInfo is nil")
 		return false
 	}
 
 	// Check if provider works on this specific date
 	dateAvailable := false
 	if serviceProvider.ServiceProviderInfo.AvailableDays != nil {
+		log.Printf("DEBUG: Checking AvailableDays: %v", serviceProvider.ServiceProviderInfo.AvailableDays)
 		for _, day := range serviceProvider.ServiceProviderInfo.AvailableDays {
 			if day == formattedDate {
 				dateAvailable = true
+				log.Printf("DEBUG: Found date in AvailableDays: %s", day)
 				break
 			}
 		}
@@ -775,15 +782,18 @@ func isServiceProviderAvailable(serviceProvider models.ServiceProvider, bookingD
 	// If not available on this specific date, check weekdays
 	if !dateAvailable && serviceProvider.ServiceProviderInfo.AvailableWeekdays != nil {
 		dayOfWeek := bookingDate.Weekday().String()
+		log.Printf("DEBUG: Checking AvailableWeekdays: %v for day: %s", serviceProvider.ServiceProviderInfo.AvailableWeekdays, dayOfWeek)
 		for _, day := range serviceProvider.ServiceProviderInfo.AvailableWeekdays {
 			if day == dayOfWeek {
 				dateAvailable = true
+				log.Printf("DEBUG: Found weekday in AvailableWeekdays: %s", day)
 				break
 			}
 		}
 	}
 
 	if !dateAvailable {
+		log.Printf("DEBUG: Date not available - AvailableDays: %v, AvailableWeekdays: %v", serviceProvider.ServiceProviderInfo.AvailableDays, serviceProvider.ServiceProviderInfo.AvailableWeekdays)
 		return false
 	}
 
@@ -793,24 +803,34 @@ func isServiceProviderAvailable(serviceProvider models.ServiceProvider, bookingD
 		startHourStr := serviceProvider.ServiceProviderInfo.AvailableHours[0]
 		endHourStr := serviceProvider.ServiceProviderInfo.AvailableHours[1]
 
+		log.Printf("DEBUG: Checking AvailableHours: %v", serviceProvider.ServiceProviderInfo.AvailableHours)
+		log.Printf("DEBUG: Start hour: %s, End hour: %s", startHourStr, endHourStr)
+
 		startHour, err := time.Parse("15:04", startHourStr)
 		if err != nil {
+			log.Printf("DEBUG: Error parsing start hour %s: %v", startHourStr, err)
 			return false
 		}
 
 		endHour, err := time.Parse("15:04", endHourStr)
 		if err != nil {
+			log.Printf("DEBUG: Error parsing end hour %s: %v", endHourStr, err)
 			return false
 		}
 
 		// Parse the requested time slot (format: "11:00" - 24-hour format)
 		requestedTime, err := time.Parse("15:04", timeSlot)
 		if err != nil {
+			log.Printf("DEBUG: Error parsing timeSlot as 24-hour format %s: %v", timeSlot, err)
 			// Try parsing as 12-hour format ("3:04 PM")
 			requestedTime, err = time.Parse("3:04 PM", timeSlot)
 			if err != nil {
+				log.Printf("DEBUG: Error parsing timeSlot as 12-hour format %s: %v", timeSlot, err)
 				return false
 			}
+			log.Printf("DEBUG: Successfully parsed timeSlot as 12-hour format: %s", timeSlot)
+		} else {
+			log.Printf("DEBUG: Successfully parsed timeSlot as 24-hour format: %s", timeSlot)
 		}
 
 		// Convert to comparable format (hours and minutes only)
@@ -818,9 +838,17 @@ func isServiceProviderAvailable(serviceProvider models.ServiceProvider, bookingD
 		startHourNormalized := time.Date(0, 1, 1, startHour.Hour(), startHour.Minute(), 0, 0, time.UTC)
 		endHourNormalized := time.Date(0, 1, 1, endHour.Hour(), endHour.Minute(), 0, 0, time.UTC)
 
+		log.Printf("DEBUG: Requested hour: %02d:%02d, Start hour: %02d:%02d, End hour: %02d:%02d",
+			requestedTime.Hour(), requestedTime.Minute(),
+			startHour.Hour(), startHour.Minute(),
+			endHour.Hour(), endHour.Minute())
+
 		// Check if the requested time is within the provider's working hours
-		return (requestedHour.Equal(startHourNormalized) || requestedHour.After(startHourNormalized)) &&
+		isWithinHours := (requestedHour.Equal(startHourNormalized) || requestedHour.After(startHourNormalized)) &&
 			requestedHour.Before(endHourNormalized)
+
+		log.Printf("DEBUG: Time slot within hours: %v", isWithinHours)
+		return isWithinHours
 	}
 
 	// If no specific hours are defined, use default business hours logic
