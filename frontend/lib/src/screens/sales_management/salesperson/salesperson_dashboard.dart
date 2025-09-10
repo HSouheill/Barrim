@@ -11,6 +11,7 @@ import '../../../services/salesperson_service.dart';
 import '../../../services/api_constant.dart';
 import '../../../services/location_service.dart';
 import '../../../services/category_service.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../../services/wholesaler_category_service.dart';
 import '../../../services/service_provider_category_service.dart';
 
@@ -1430,74 +1431,106 @@ class _AddNewDialogState extends State<AddNewDialog> {
     }
   }
 
-  // Method to find the nearest location from coordinates
-  Map<String, String> _findNearestLocation(double lat, double lng) {
-    // This is a simplified approach - in a real app, you'd use a proper geocoding service
-    // For now, we'll use the existing location data to find the closest match
-    
-    // Sample coordinates for major cities (you can expand this)
-    final Map<String, Map<String, double>> cityCoordinates = {
-      'Lebanon': {
-        'Beirut': 33.8935, // lat
-        'Mount Lebanon': 33.8935,
-        'North Lebanon': 34.4367,
-        'South Lebanon': 33.5631,
-        'Bekaa': 33.8935,
-      },
-      'United Arab Emirates': {
-        'Dubai': 25.2048,
-        'Abu Dhabi': 24.4539,
-      },
-      'Saudi Arabia': {
-        'Riyadh': 24.7136,
-        'Jeddah': 21.4858,
-      },
-      'Japan': {
-        'Tokyo': 35.6762,
-        'Osaka': 34.6937,
-      },
-      'South Korea': {
-        'Seoul': 37.5665,
-      },
-    };
-    
-    String? bestCountry;
-    String? bestDistrict;
-    double bestDistance = double.infinity;
-    
-    // Find the closest country and district
-    for (final countryEntry in cityCoordinates.entries) {
-      final country = countryEntry.key;
-      final districts = countryEntry.value;
+  // Method to find the nearest location from coordinates using reverse geocoding
+  Future<Map<String, String>> _findNearestLocation(double lat, double lng) async {
+    try {
+      // Use reverse geocoding to get the actual location information
+      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
       
-      for (final districtEntry in districts.entries) {
-        final district = districtEntry.key;
-        final districtLat = districtEntry.value;
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
         
-        // Calculate distance (simplified - just lat difference for demo)
-        final distance = (lat - districtLat).abs();
+        // Extract location information from the placemark
+        String country = place.country ?? 'Lebanon';
+        String district = place.administrativeArea ?? 'Beirut';
+        String city = place.locality ?? place.subLocality ?? 'Beirut';
         
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestCountry = country;
-          bestDistrict = district;
+        // For Lebanon, try to map administrative areas to proper governorates
+        if (country.toLowerCase().contains('lebanon') || country.isEmpty) {
+          country = 'Lebanon';
+          
+          // Map common administrative areas to Lebanese governorates
+          final Map<String, String> lebanonMapping = {
+            'beirut': 'Beirut',
+            'mount lebanon': 'Mount Lebanon',
+            'north lebanon': 'North Lebanon',
+            'south lebanon': 'South Lebanon',
+            'nabatieh': 'South Lebanon',
+            'bekaa': 'Bekaa',
+            'baalbek-hermel': 'Bekaa',
+            'akkar': 'North Lebanon',
+            'baalbek': 'Bekaa',
+            'hermel': 'Bekaa',
+            'zahle': 'Bekaa',
+            'caza': 'Mount Lebanon', // Default for caza
+            'keserwan': 'Mount Lebanon',
+            'metn': 'Mount Lebanon',
+            'jounieh': 'Mount Lebanon',
+            'byblos': 'Mount Lebanon',
+            'jbeil': 'Mount Lebanon',
+            'tripoli': 'North Lebanon',
+            'zgharta': 'North Lebanon',
+            'koura': 'North Lebanon',
+            'sidon': 'South Lebanon',
+            'saida': 'South Lebanon',
+            'tyre': 'South Lebanon',
+            'sur': 'South Lebanon',
+            'jezzine': 'South Lebanon',
+            'marjayoun': 'South Lebanon',
+            'hasbaya': 'South Lebanon',
+            'rashaya': 'South Lebanon',
+            'chtaura': 'Bekaa',
+            'anjar': 'Bekaa',
+            'western bekaa': 'Bekaa',
+            'rachaya': 'Bekaa',
+          };
+          
+          // Try to find a match in the mapping
+          String lowerDistrict = district.toLowerCase();
+          for (final entry in lebanonMapping.entries) {
+            if (lowerDistrict.contains(entry.key)) {
+              district = entry.value;
+              break;
+            }
+          }
+          
+          // If no specific mapping found, try to determine from coordinates
+          if (district == 'Beirut' || district.isEmpty) {
+            if (lat >= 34.0 && lat <= 34.5) {
+              if (lng >= 35.0 && lng <= 35.5) {
+                district = 'North Lebanon';
+              } else if (lng >= 35.5 && lng <= 36.0) {
+                district = 'Mount Lebanon';
+              }
+            } else if (lat >= 33.0 && lat <= 34.0) {
+              if (lng >= 35.0 && lng <= 35.5) {
+                district = 'Beirut';
+              } else if (lng >= 35.5 && lng <= 36.0) {
+                district = 'Mount Lebanon';
+              } else if (lng >= 36.0 && lng <= 36.5) {
+                district = 'Bekaa';
+              }
+            } else if (lat >= 33.0 && lat <= 33.5) {
+              district = 'South Lebanon';
+            }
+          }
         }
+        
+        return {
+          'country': country,
+          'district': district,
+          'city': city,
+        };
       }
+    } catch (e) {
+      print('Error in reverse geocoding: $e');
     }
     
-    // Find a city within the best district
-    String? bestCity;
-    if (bestCountry != null && bestDistrict != null) {
-      final cities = LocationService.getCities(bestCountry!, bestDistrict!);
-      if (cities.isNotEmpty) {
-        bestCity = cities.first; // Take the first city as default
-      }
-    }
-    
+    // Fallback to default values if geocoding fails
     return {
-      'country': bestCountry ?? 'Lebanon',
-      'district': bestDistrict ?? 'Beirut',
-      'city': bestCity ?? 'Beirut',
+      'country': 'Lebanon',
+      'district': 'Beirut',
+      'city': 'Beirut',
     };
   }
 
@@ -1533,29 +1566,31 @@ class _AddNewDialogState extends State<AddNewDialog> {
           initialLng: _lngController.text.isNotEmpty 
               ? double.tryParse(_lngController.text) 
               : null,
-          onLocationSelected: (double lat, double lng, String address) {
+          onLocationSelected: (double lat, double lng, String address) async {
             setState(() {
               _latController.text = lat.toString();
               _lngController.text = lng.toString();
               _locationAddressController.text = address;
-              
-              // Auto-fill the location dropdowns based on coordinates
-              final locationInfo = _findNearestLocation(lat, lng);
-              
+            });
+            
+            // Auto-fill the location dropdowns based on coordinates
+            final locationInfo = await _findNearestLocation(lat, lng);
+            
+            setState(() {
               _selectedCountry = locationInfo['country'];
               _selectedDistrict = locationInfo['district'];
               _selectedCity = locationInfo['city'];
               _selectedStreet = null; // Reset street selection
-              
-              // Show success message
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Location selected! Address fields have been auto-filled.'),
-                  backgroundColor: Colors.green,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
             });
+            
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Location selected! Address fields have been auto-filled.'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
           },
         );
       },
