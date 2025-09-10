@@ -367,7 +367,7 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 			Message: err.Error(),
 		})
 	}
-	street, err := getFormValue("street")
+	governorate, err := getFormValue("governorate")
 	if err != nil {
 		log.Printf("Error getting street: %v", err)
 		return c.JSON(http.StatusBadRequest, models.Response{
@@ -455,12 +455,12 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 		ID:   primitive.NewObjectID(),
 		Name: businessName,
 		Location: models.Address{
-			Country:  country,
-			District: district,
-			City:     city,
-			Street:   street,
-			Lat:      lat,
-			Lng:      lng,
+			Country:     country,
+			District:    district,
+			City:        city,
+			Governorate: governorate,
+			Lat:         lat,
+			Lng:         lng,
 		},
 		Phone:       phone,
 		Category:    category,
@@ -493,12 +493,12 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 			Phone:    phone,
 			WhatsApp: contactPhone,
 			Address: models.Address{
-				Country:  country,
-				District: district,
-				City:     city,
-				Street:   street,
-				Lat:      lat,
-				Lng:      lng,
+				Country:     country,
+				District:    district,
+				City:        city,
+				Governorate: governorate,
+				Lat:         lat,
+				Lng:         lng,
 			},
 		},
 		Branches:        []models.Branch{branch}, // Add the created branch
@@ -1061,7 +1061,7 @@ func (spc *SalesPersonController) CreateWholesaler(c echo.Context) error {
 			Message: err.Error(),
 		})
 	}
-	street, err := getFormValue("street")
+	governorate, err := getFormValue("governorate")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
@@ -1130,12 +1130,12 @@ func (spc *SalesPersonController) CreateWholesaler(c echo.Context) error {
 		ID:   primitive.NewObjectID(),
 		Name: businessName,
 		Location: models.Address{
-			Country:  country,
-			District: district,
-			City:     city,
-			Street:   street,
-			Lat:      lat,
-			Lng:      lng,
+			Country:     country,
+			District:    district,
+			City:        city,
+			Governorate: governorate,
+			Lat:         lat,
+			Lng:         lng,
 		},
 		Phone:       phone,
 		Category:    category,
@@ -1166,12 +1166,12 @@ func (spc *SalesPersonController) CreateWholesaler(c echo.Context) error {
 			Phone:    phone,
 			WhatsApp: contactPhone,
 			Address: models.Address{
-				Country:  country,
-				District: district,
-				City:     city,
-				Street:   street,
-				Lat:      lat,
-				Lng:      lng,
+				Country:     country,
+				District:    district,
+				City:        city,
+				Governorate: governorate,
+				Lat:         lat,
+				Lng:         lng,
 			},
 		},
 		Branches:        []models.Branch{wholesalerBranch}, // Add the created branch
@@ -1747,7 +1747,7 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 			Message: err.Error(),
 		})
 	}
-	street, err := getFormValue("street")
+	governorate, err := getFormValue("governorate")
 	if err != nil {
 		log.Printf("Error getting street: %v", err)
 		return c.JSON(http.StatusBadRequest, models.Response{
@@ -1844,17 +1844,17 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		Country:       country,
 		District:      district,
 		City:          city,
-		Street:        street,
+		Governorate:   governorate,
 		ContactInfo: models.ContactInfo{
 			Phone:    phone,
 			WhatsApp: contactPhone,
 			Address: models.Address{
-				Country:  country,
-				District: district,
-				City:     city,
-				Street:   street,
-				Lat:      lat,
-				Lng:      lng,
+				Country:     country,
+				District:    district,
+				City:        city,
+				Governorate: governorate,
+				Lat:         lat,
+				Lng:         lng,
 			},
 		},
 		LogoURL:         logoURL,
@@ -2688,10 +2688,10 @@ func (spc *SalesPersonController) GetServiceProviders(c echo.Context) error {
 			"phone":         s.Phone,
 			"email":         s.Email,
 			"address": map[string]interface{}{
-				"country":  s.Country,
-				"district": s.District,
-				"city":     s.City,
-				"street":   s.Street,
+				"country":     s.Country,
+				"governorate": s.Governorate,
+				"district":    s.District,
+				"city":        s.City,
 			},
 			"createdAt": s.CreatedAt,
 			"status":    s.CreationRequest,

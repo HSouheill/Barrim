@@ -25,7 +25,7 @@ type Company struct {
 	LogoURL          string               `json:"logoUrl,omitempty" bson:"logoUrl,omitempty"`
 	Balance          float64              `json:"balance" bson:"balance"`
 	Branches         []Branch             `json:"branches,omitempty" bson:"branches,omitempty"`
-	Sponsorship      bool                 `json:"sponsorship" bson:"sponsorship"`                           // Whether the company has active sponsorship
+	Sponsorship      bool                 `json:"sponsorship" bson:"sponsorship"` // Whether the company has active sponsorship
 	CreatedBy        primitive.ObjectID   `json:"createdBy" bson:"createdBy"`
 	CreatedAt        time.Time            `json:"createdAt" bson:"createdAt"`
 	UpdatedAt        time.Time            `json:"updatedAt" bson:"updatedAt"`
@@ -45,13 +45,12 @@ type SocialMedia struct {
 }
 
 type Address struct {
-	Country    string  `json:"country" bson:"country"`
-	District   string  `json:"district" bson:"district"`
-	City       string  `json:"city" bson:"city"`
-	Street     string  `json:"street" bson:"street"`
-	PostalCode string  `json:"postalCode" bson:"postalCode"`
-	Lat        float64 `json:"lat" bson:"lat"`
-	Lng        float64 `json:"lng" bson:"lng"`
+	Country     string  `json:"country" bson:"country"`
+	Governorate string  `json:"governorate" bson:"governorate"`
+	District    string  `json:"district" bson:"district"`
+	City        string  `json:"city" bson:"city"`
+	Lat         float64 `json:"lat" bson:"lat"`
+	Lng         float64 `json:"lng" bson:"lng"`
 }
 
 type Branch struct {
@@ -65,7 +64,7 @@ type Branch struct {
 	Images          []string           `json:"images" bson:"images"`
 	Videos          []string           `json:"videos,omitempty" bson:"videos"`
 	CostPerCustomer float64            `json:"costPerCustomer,omitempty" bson:"costPerCustomer,omitempty"`
-	Status          string             `json:"status" bson:"status"` // "pending", "approved", "rejected"
+	Status          string             `json:"status" bson:"status"`           // "pending", "approved", "rejected"
 	Sponsorship     bool               `json:"sponsorship" bson:"sponsorship"` // Whether the branch has active sponsorship
 	CreatedAt       time.Time          `json:"createdAt" bson:"createdAt"`
 	UpdatedAt       time.Time          `json:"updatedAt" bson:"updatedAt"`

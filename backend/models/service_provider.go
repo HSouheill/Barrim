@@ -54,10 +54,9 @@ type ServiceProvider struct {
 	ContactPerson string `json:"contactPerson,omitempty" bson:"contactPerson,omitempty"`
 	ContactPhone  string `json:"contactPhone,omitempty" bson:"contactPhone,omitempty"`
 	Country       string `json:"country,omitempty" bson:"country,omitempty"`
+	Governorate   string `json:"governorate,omitempty" bson:"governorate,omitempty"`
 	District      string `json:"district,omitempty" bson:"district,omitempty"`
 	City          string `json:"city,omitempty" bson:"city,omitempty"`
-	Street        string `json:"street,omitempty" bson:"street,omitempty"`
-	PostalCode    string `json:"postalCode,omitempty" bson:"postalCode,omitempty"`
 	LogoURL       string `json:"logo,omitempty" bson:"logo,omitempty"`
 	// Nested fields for backward compatibility
 	ContactInfo       ContactInfo        `json:"contactInfo,omitempty" bson:"contactInfo,omitempty"`

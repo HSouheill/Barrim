@@ -897,13 +897,12 @@ func (wc *WholesalerController) EditBranch(c echo.Context) error {
 
 	// Update address for the branch
 	address := models.Address{
-		Country:    getString(branchData, "country", existingBranch.Location.Country),
-		District:   getString(branchData, "district", existingBranch.Location.District),
-		City:       getString(branchData, "city", existingBranch.Location.City),
-		Street:     getString(branchData, "street", existingBranch.Location.Street),
-		PostalCode: getString(branchData, "postalCode", existingBranch.Location.PostalCode),
-		Lat:        existingBranch.Location.Lat,
-		Lng:        existingBranch.Location.Lng,
+		Country:     getString(branchData, "country", existingBranch.Location.Country),
+		District:    getString(branchData, "district", existingBranch.Location.District),
+		City:        getString(branchData, "city", existingBranch.Location.City),
+		Governorate: getString(branchData, "governorate", existingBranch.Location.Governorate),
+		Lat:         existingBranch.Location.Lat,
+		Lng:         existingBranch.Location.Lng,
 	}
 
 	// Handle latitude and longitude

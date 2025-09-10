@@ -368,11 +368,10 @@ func (cc *CompanyController) CreateBranch(c echo.Context) error {
 
 	// Create address for the branch
 	address := models.Address{
-		Country:    getString(branchData, "country", ""),
-		District:   getString(branchData, "district", ""),
-		City:       getString(branchData, "city", ""),
-		Street:     getString(branchData, "street", ""),
-		PostalCode: getString(branchData, "postalCode", ""),
+		Country:     getString(branchData, "country", ""),
+		Governorate: getString(branchData, "governorate", ""),
+		District:    getString(branchData, "district", ""),
+		City:        getString(branchData, "city", ""),
 	}
 
 	// Handle latitude and longitude
@@ -966,13 +965,12 @@ func (cc *CompanyController) UpdateBranch(c echo.Context) error {
 
 	// Update address for the branch
 	address := models.Address{
-		Country:    getString(branchData, "country", existingBranch.Location.Country),
-		District:   getString(branchData, "district", existingBranch.Location.District),
-		City:       getString(branchData, "city", existingBranch.Location.City),
-		Street:     getString(branchData, "street", existingBranch.Location.Street),
-		PostalCode: getString(branchData, "postalCode", existingBranch.Location.PostalCode),
-		Lat:        existingBranch.Location.Lat,
-		Lng:        existingBranch.Location.Lng,
+		Country:     getString(branchData, "country", existingBranch.Location.Country),
+		Governorate: getString(branchData, "governorate", existingBranch.Location.Governorate),
+		District:    getString(branchData, "district", existingBranch.Location.District),
+		City:        getString(branchData, "city", existingBranch.Location.City),
+		Lat:         existingBranch.Location.Lat,
+		Lng:         existingBranch.Location.Lng,
 	}
 
 	// Handle latitude and longitude

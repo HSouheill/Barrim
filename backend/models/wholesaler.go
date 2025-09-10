@@ -67,10 +67,9 @@ type WholesalerSignupWithLogoRequest struct {
 	Phone        string  `form:"phone"`
 	ReferralCode string  `form:"referralCode"`
 	Country      string  `form:"country"`
+	Governorate  string  `form:"governorate"`
 	District     string  `form:"district"`
 	City         string  `form:"city"`
-	Street       string  `form:"street"`
-	PostalCode   string  `form:"postalCode"`
 	Lat          float64 `form:"lat"`
 	Lng          float64 `form:"lng"`
 	Logo         string  `form:"logo"`

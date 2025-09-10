@@ -226,18 +226,17 @@ func (ac *AuthController) Signup(c echo.Context) error {
 			})
 		}
 		// Validate location fields
-		if req.Location.Country == "" || req.Location.City == "" || req.Location.Street == "" {
+		if req.Location.Country == "" || req.Location.Governorate == "" || req.Location.District == "" || req.Location.City == "" {
 			return c.JSON(http.StatusBadRequest, models.Response{
 				Status:  http.StatusBadRequest,
-				Message: "Country, city, and street are required in location",
+				Message: "Country, governorate, district, and city are required in location",
 			})
 		}
 		// Sanitize location fields
 		req.Location.Country = utils.SanitizeInput(req.Location.Country)
-		req.Location.City = utils.SanitizeInput(req.Location.City)
-		req.Location.Street = utils.SanitizeInput(req.Location.Street)
+		req.Location.Governorate = utils.SanitizeInput(req.Location.Governorate)
 		req.Location.District = utils.SanitizeInput(req.Location.District)
-		req.Location.PostalCode = utils.SanitizeInput(req.Location.PostalCode)
+		req.Location.City = utils.SanitizeInput(req.Location.City)
 
 		// Sanitize interested deals
 		for i, deal := range req.InterestedDeals {
@@ -302,9 +301,10 @@ func (ac *AuthController) Signup(c echo.Context) error {
 		req.CompanyData.BusinessName = utils.SanitizeInput(req.CompanyData.BusinessName)
 		req.CompanyData.Category = utils.SanitizeInput(req.CompanyData.Category)
 		req.CompanyData.SubCategory = utils.SanitizeInput(req.CompanyData.SubCategory)
-		req.CompanyData.Address.Street = utils.SanitizeInput(req.CompanyData.Address.Street)
-		req.CompanyData.Address.City = utils.SanitizeInput(req.CompanyData.Address.City)
 		req.CompanyData.Address.Country = utils.SanitizeInput(req.CompanyData.Address.Country)
+		req.CompanyData.Address.Governorate = utils.SanitizeInput(req.CompanyData.Address.Governorate)
+		req.CompanyData.Address.District = utils.SanitizeInput(req.CompanyData.Address.District)
+		req.CompanyData.Address.City = utils.SanitizeInput(req.CompanyData.Address.City)
 	}
 
 	if req.UserType == "wholesaler" && req.WholesalerData != nil {
@@ -336,6 +336,10 @@ func (ac *AuthController) Signup(c echo.Context) error {
 		req.WholesalerData.BusinessName = utils.SanitizeInput(req.WholesalerData.BusinessName)
 		req.WholesalerData.Category = utils.SanitizeInput(req.WholesalerData.Category)
 		req.WholesalerData.SubCategory = utils.SanitizeInput(req.WholesalerData.SubCategory)
+		req.WholesalerData.Address.Country = utils.SanitizeInput(req.WholesalerData.Address.Country)
+		req.WholesalerData.Address.Governorate = utils.SanitizeInput(req.WholesalerData.Address.Governorate)
+		req.WholesalerData.Address.District = utils.SanitizeInput(req.WholesalerData.Address.District)
+		req.WholesalerData.Address.City = utils.SanitizeInput(req.WholesalerData.Address.City)
 	}
 
 	// Generate OTP
@@ -427,10 +431,9 @@ func (ac *AuthController) SignupWithLogo(c echo.Context) error {
 
 	// Address fields
 	country := c.FormValue("country")
+	governorate := c.FormValue("governorate")
 	district := c.FormValue("district")
 	city := c.FormValue("city")
-	street := c.FormValue("street")
-	postalCode := c.FormValue("postalCode")
 
 	// Parse coordinates
 	var lat, lng float64 = 0, 0
@@ -465,13 +468,12 @@ func (ac *AuthController) SignupWithLogo(c echo.Context) error {
 			Category:     category,
 			SubCategory:  subCategory,
 			Address: models.Address{
-				Country:    country,
-				District:   district,
-				City:       city,
-				Street:     street,
-				PostalCode: postalCode,
-				Lat:        lat,
-				Lng:        lng,
+				Country:     country,
+				Governorate: governorate,
+				District:    district,
+				City:        city,
+				Lat:         lat,
+				Lng:         lng,
 			},
 			Logo:         logoPath,
 			ReferralCode: referralCode, // Add the referral code from form
@@ -1798,10 +1800,9 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 			ContactPerson:     user.FullName,
 			ContactPhone:      user.Phone,
 			Country:           "",
+			Governorate:       "",
 			District:          "",
 			City:              "",
-			Street:            "",
-			PostalCode:        "",
 			LogoURL:           user.LogoPath,
 			ContactInfo:       models.ContactInfo{},
 			ReferralCode:      referralCode,
@@ -1834,22 +1835,20 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		// Populate location fields if available
 		if user.Location != nil {
 			serviceProvider.Country = user.Location.Country
+			serviceProvider.Governorate = user.Location.Governorate
 			serviceProvider.District = user.Location.District
 			serviceProvider.City = user.Location.City
-			serviceProvider.Street = user.Location.Street
-			serviceProvider.PostalCode = user.Location.PostalCode
 
 			// Convert Location to Address for ContactInfo
 			serviceProvider.ContactInfo = models.ContactInfo{
 				Phone: user.Phone,
 				Address: models.Address{
-					Country:    user.Location.Country,
-					District:   user.Location.District,
-					City:       user.Location.City,
-					Street:     user.Location.Street,
-					PostalCode: user.Location.PostalCode,
-					Lat:        user.Location.Lat,
-					Lng:        user.Location.Lng,
+					Country:     user.Location.Country,
+					Governorate: user.Location.Governorate,
+					District:    user.Location.District,
+					City:        user.Location.City,
+					Lat:         user.Location.Lat,
+					Lng:         user.Location.Lng,
 				},
 			}
 		}

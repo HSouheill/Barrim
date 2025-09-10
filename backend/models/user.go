@@ -72,14 +72,13 @@ type OTPInfo struct {
 
 // Location model
 type Location struct {
-	City       string  `json:"city" bson:"city"`
-	Country    string  `json:"country" bson:"country"`
-	District   string  `json:"district" bson:"district"`
-	Street     string  `json:"street" bson:"street"`
-	PostalCode string  `json:"postalCode" bson:"postalCode"`
-	Lat        float64 `json:"lat" bson:"lat"`
-	Lng        float64 `json:"lng" bson:"lng"`
-	Allowed    bool    `json:"allowed" bson:"allowed"`
+	Country     string  `json:"country" bson:"country"`
+	Governorate string  `json:"governorate" bson:"governorate"`
+	District    string  `json:"district" bson:"district"`
+	City        string  `json:"city" bson:"city"`
+	Lat         float64 `json:"lat" bson:"lat"`
+	Lng         float64 `json:"lng" bson:"lng"`
+	Allowed     bool    `json:"allowed" bson:"allowed"`
 }
 
 type SocialLinks struct {
