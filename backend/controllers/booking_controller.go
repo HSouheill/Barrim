@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HSouheill/barrim_backend/middleware"
 	"github.com/HSouheill/barrim_backend/models"
 	"github.com/HSouheill/barrim_backend/utils"
 	"github.com/HSouheill/barrim_backend/websocket"
@@ -35,11 +36,29 @@ func NewBookingController(db *mongo.Client, hub *websocket.Hub) *BookingControll
 // CreateBooking handles the creation of a new booking
 func (c *BookingController) CreateBooking(ctx echo.Context) error {
 	// Get user from token
-	user, err := utils.GetUserFromToken(ctx, c.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(ctx)
+	if claims == nil {
 		return ctx.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthorized",
+		})
+	}
+
+	// Get full user from database
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	var user models.User
+	err = c.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "User not found",
 		})
 	}
 
@@ -235,11 +254,29 @@ func (c *BookingController) CreateBooking(ctx echo.Context) error {
 // GetUserBookings retrieves all bookings for the authenticated user
 func (c *BookingController) GetUserBookings(ctx echo.Context) error {
 	// Get user from token
-	user, err := utils.GetUserFromToken(ctx, c.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(ctx)
+	if claims == nil {
 		return ctx.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthorized",
+		})
+	}
+
+	// Get full user from database
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	var user models.User
+	err = c.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "User not found",
 		})
 	}
 
@@ -273,8 +310,8 @@ func (c *BookingController) GetUserBookings(ctx echo.Context) error {
 // GetProviderBookings retrieves all bookings for a service provider
 func (c *BookingController) GetProviderBookings(ctx echo.Context) error {
 	// Get user from token
-	user, err := utils.GetUserFromToken(ctx, c.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(ctx)
+	if claims == nil {
 		return ctx.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthorized",
@@ -282,10 +319,28 @@ func (c *BookingController) GetProviderBookings(ctx echo.Context) error {
 	}
 
 	// Ensure user is a service provider
-	if user.UserType != "serviceProvider" {
+	if claims.UserType != "serviceProvider" {
 		return ctx.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "Only service providers can access their bookings",
+		})
+	}
+
+	// Get full user from database
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	var user models.User
+	err = c.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "User not found",
 		})
 	}
 
@@ -577,11 +632,29 @@ func (c *BookingController) GetAvailableTimeSlots(ctx echo.Context) error {
 // UpdateBookingStatus updates the status of a booking
 func (c *BookingController) UpdateBookingStatus(ctx echo.Context) error {
 	// Get user from token
-	user, err := utils.GetUserFromToken(ctx, c.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(ctx)
+	if claims == nil {
 		return ctx.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthorized",
+		})
+	}
+
+	// Get full user from database
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	var user models.User
+	err = c.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return ctx.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "User not found",
 		})
 	}
 
@@ -884,19 +957,37 @@ func (bc *BookingController) AcceptBooking(c echo.Context) error {
 	}
 
 	// Get current user from token
-	user, err := utils.GetUserFromToken(c, bc.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil {
 		return c.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
-			Message: "Authentication failed: " + err.Error(),
+			Message: "Authentication failed",
 		})
 	}
 
 	// Ensure user is a service provider
-	if user.UserType != "serviceProvider" {
+	if claims.UserType != "serviceProvider" {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "Only service providers can accept or reject bookings",
+		})
+	}
+
+	// Get full user from database
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	var user models.User
+	err = bc.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "User not found",
 		})
 	}
 
@@ -1021,19 +1112,37 @@ func (bc *BookingController) AcceptBooking(c echo.Context) error {
 // GetPendingBookings retrieves all pending bookings for a service provider
 func (bc *BookingController) GetPendingBookings(c echo.Context) error {
 	// Get current user from token
-	user, err := utils.GetUserFromToken(c, bc.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil {
 		return c.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
-			Message: "Authentication failed: " + err.Error(),
+			Message: "Authentication failed",
 		})
 	}
 
 	// Ensure user is a service provider
-	if user.UserType != "serviceProvider" {
+	if claims.UserType != "serviceProvider" {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "Only service providers can access pending bookings",
+		})
+	}
+
+	// Get full user from database
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	var user models.User
+	err = bc.db.Database("barrim").Collection("users").FindOne(context.Background(), bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "User not found",
 		})
 	}
 
@@ -1115,9 +1224,9 @@ func (bc *BookingController) GetPendingBookings(c echo.Context) error {
 
 // GetAllBookingsForAdmin allows admins to get all bookings with pagination and filtering
 func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
-	// Get admin user from JWT token
-	adminUser, err := utils.GetUserFromToken(c, bc.db)
-	if err != nil {
+	// Get admin user from JWT token using middleware
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil {
 		return c.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthorized",
@@ -1125,7 +1234,7 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 	}
 
 	// Check if user is admin, super_admin, or manager
-	if adminUser.UserType != "admin" && adminUser.UserType != "super_admin" && adminUser.UserType != "manager" {
+	if claims.UserType != "admin" && claims.UserType != "super_admin" && claims.UserType != "manager" {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "Only admins, super admins, and managers can view all bookings",
@@ -1442,8 +1551,8 @@ func (bc *BookingController) DeleteBookingForAdmin(c echo.Context) error {
 	bookingID := c.Param("id")
 
 	// Get admin user from JWT token
-	adminUser, err := utils.GetUserFromToken(c, bc.db)
-	if err != nil {
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil {
 		return c.JSON(http.StatusUnauthorized, models.Response{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthorized",
@@ -1451,7 +1560,7 @@ func (bc *BookingController) DeleteBookingForAdmin(c echo.Context) error {
 	}
 
 	// Check if user is admin, super_admin, or manager
-	if adminUser.UserType != "admin" && adminUser.UserType != "super_admin" && adminUser.UserType != "manager" {
+	if claims.UserType != "admin" && claims.UserType != "super_admin" && claims.UserType != "manager" {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "Only admins, super admins, and managers can delete bookings",
