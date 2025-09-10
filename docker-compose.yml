@@ -93,6 +93,7 @@ services:
         BUILD_DATE: ${BUILD_DATE:-$(date +%Y%m%d_%H%M%S)}
         VERSION: ${VERSION:-latest}
         BUILD_TIMESTAMP: ${BUILD_TIMESTAMP:-$(date +%s)}
+        CACHE_BUST: ${CACHE_BUST:-$(date +%s)}
     container_name: barrim-admin-dashboard
     restart: unless-stopped
     ports:
