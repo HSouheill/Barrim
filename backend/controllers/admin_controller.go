@@ -4224,7 +4224,7 @@ func (ac *AdminController) UpdateSalesperson(c echo.Context) error {
 	}
 
 	// Parse request body
-	var updateRequest map[string]interface{}
+	updateRequest := make(map[string]interface{})
 	if err := c.Bind(&updateRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
