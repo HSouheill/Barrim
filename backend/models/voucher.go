@@ -12,7 +12,7 @@ type Voucher struct {
 	Name        string             `json:"name" bson:"name"`
 	Description string             `json:"description" bson:"description"`
 	Image       string             `json:"image" bson:"image"`
-	Price       int                `json:"price" bson:"price"` // Price in points
+	Points      int                `json:"points" bson:"points"` // Points required to purchase
 	IsActive    bool               `json:"isActive" bson:"isActive"`
 	CreatedBy   primitive.ObjectID `json:"createdBy" bson:"createdBy"` // Admin who created the voucher
 	CreatedAt   time.Time          `json:"createdAt" bson:"createdAt"`
@@ -35,7 +35,7 @@ type VoucherRequest struct {
 	Name        string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required"`
 	Image       string `json:"image" validate:"required"`
-	Price       int    `json:"price" validate:"required,min=1"`
+	Points      int    `json:"points" validate:"required,min=1"`
 }
 
 // VoucherPurchaseRequest represents the request body for purchasing a voucher
