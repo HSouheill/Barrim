@@ -17,6 +17,7 @@ func RegisterFileRoutes(e *echo.Echo) {
 	e.GET("/uploads/*", ServeFile)
 	e.GET("/uploads/bookings/*", ServeFile)
 	e.GET("/uploads/thumbnails/*", ServeFile)
+	e.GET("/uploads/vouchers/*", ServeFile)
 	e.GET("/uploads/:filename", ServeImage)
 }
 
@@ -33,6 +34,7 @@ func ServeImage(c echo.Context) error {
 		filepath.Join("uploads", "serviceprovider", path),
 		filepath.Join("uploads", "profiles", path),
 		filepath.Join("uploads", "logos", path),
+		filepath.Join("uploads", "vouchers", path),
 	}
 
 	for _, filePath := range potentialPaths {

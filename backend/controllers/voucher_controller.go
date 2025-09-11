@@ -146,7 +146,7 @@ func (vc *VoucherController) CreateVoucher(c echo.Context) error {
 	})
 }
 
-// CreateVoucherJSON creates a new voucher without image upload (Admin only)
+// CreateVoucherJSON creates a new voucher with image URL download and save (Admin only)
 func (vc *VoucherController) CreateVoucherJSON(c echo.Context) error {
 	// Check if user is admin
 	claims := middleware.GetUserFromToken(c)
@@ -185,12 +185,30 @@ func (vc *VoucherController) CreateVoucherJSON(c echo.Context) error {
 		})
 	}
 
+	// Download and save image if URL is provided
+	var imagePath string
+	if req.Image != "" {
+		imagePath, err = vc.downloadAndSaveImage(req.Image)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Failed to download and save image",
+				Data:    err.Error(),
+			})
+		}
+	} else {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Image URL is required",
+		})
+	}
+
 	// Create voucher
 	voucher := models.Voucher{
 		ID:          primitive.NewObjectID(),
 		Name:        req.Name,
 		Description: req.Description,
-		Image:       req.Image, // Use provided image URL
+		Image:       imagePath, // Use saved image path
 		Points:      req.Points,
 		IsActive:    true,
 		CreatedBy:   createdByID,
@@ -204,6 +222,10 @@ func (vc *VoucherController) CreateVoucherJSON(c echo.Context) error {
 
 	_, err = collection.InsertOne(ctx, voucher)
 	if err != nil {
+		// If database insert fails, delete the downloaded image
+		if imagePath != "" {
+			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
+		}
 		log.Printf("Error creating voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
@@ -947,6 +969,79 @@ func (vc *VoucherController) saveVoucherImage(file *multipart.FileHeader) (strin
 	// Copy file content
 	if _, err = io.Copy(dst, src); err != nil {
 		return "", fmt.Errorf("error copying file: %v", err)
+	}
+
+	// Return the relative path for storage in database
+	return fmt.Sprintf("/uploads/vouchers/%s", uniqueFilename), nil
+}
+
+// downloadAndSaveImage downloads an image from URL and saves it to /uploads/vouchers
+func (vc *VoucherController) downloadAndSaveImage(imageURL string) (string, error) {
+	// Download the image
+	resp, err := http.Get(imageURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to download image: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download image: HTTP %d", resp.StatusCode)
+	}
+
+	// Check content type
+	contentType := resp.Header.Get("Content-Type")
+	allowedTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/webp": true,
+	}
+
+	if !allowedTypes[contentType] {
+		return "", fmt.Errorf("invalid content type: %s", contentType)
+	}
+
+	// Read the image data
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read image data: %v", err)
+	}
+
+	// Validate file size (max 5MB)
+	if len(imageData) > 5*1024*1024 {
+		return "", fmt.Errorf("image too large: %d bytes (max 5MB)", len(imageData))
+	}
+
+	// Generate unique filename
+	ext := filepath.Ext(imageURL)
+	if ext == "" {
+		// Try to determine extension from content type
+		switch contentType {
+		case "image/jpeg":
+			ext = ".jpg"
+		case "image/png":
+			ext = ".png"
+		case "image/gif":
+			ext = ".gif"
+		case "image/webp":
+			ext = ".webp"
+		default:
+			ext = ".jpg" // default
+		}
+	}
+
+	uniqueFilename := fmt.Sprintf("voucher_%s%s", uuid.New().String(), ext)
+
+	// Create uploads/vouchers directory if it doesn't exist
+	uploadDir := "uploads/vouchers"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return "", fmt.Errorf("error creating upload directory: %v", err)
+	}
+
+	// Save the image
+	filePath := filepath.Join(uploadDir, uniqueFilename)
+	if err := os.WriteFile(filePath, imageData, 0644); err != nil {
+		return "", fmt.Errorf("error saving image: %v", err)
 	}
 
 	// Return the relative path for storage in database
