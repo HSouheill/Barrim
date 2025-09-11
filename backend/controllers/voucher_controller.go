@@ -43,11 +43,19 @@ func (vc *VoucherController) CreateVoucher(c echo.Context) error {
 	}
 
 	// Parse multipart form
+	if err := c.Request().ParseMultipartForm(10 << 20); err != nil { // 10MB max
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Failed to parse form data",
+			Data:    err.Error(),
+		})
+	}
+
 	form, err := c.MultipartForm()
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Failed to parse form data",
+			Message: "Failed to get multipart form",
 			Data:    err.Error(),
 		})
 	}
@@ -138,6 +146,79 @@ func (vc *VoucherController) CreateVoucher(c echo.Context) error {
 	})
 }
 
+// CreateVoucherJSON creates a new voucher without image upload (Admin only)
+func (vc *VoucherController) CreateVoucherJSON(c echo.Context) error {
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" && claims.UserType != "super_admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Access denied. Admin privileges required.",
+		})
+	}
+
+	var req models.VoucherRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+			Data:    err.Error(),
+		})
+	}
+
+	// Validate request
+	validate := validator.New()
+	if err := validate.Struct(req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Validation failed",
+			Data:    err.Error(),
+		})
+	}
+
+	// Convert UserID to ObjectID
+	createdByID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Create voucher
+	voucher := models.Voucher{
+		ID:          primitive.NewObjectID(),
+		Name:        req.Name,
+		Description: req.Description,
+		Image:       req.Image, // Use provided image URL
+		Points:      req.Points,
+		IsActive:    true,
+		CreatedBy:   createdByID,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Insert into database
+	collection := vc.DB.Collection("vouchers")
+	ctx := context.Background()
+
+	_, err = collection.InsertOne(ctx, voucher)
+	if err != nil {
+		log.Printf("Error creating voucher: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create voucher",
+			Data:    err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusCreated, models.Response{
+		Status:  http.StatusCreated,
+		Message: "Voucher created successfully",
+		Data:    voucher,
+	})
+}
+
 // GetAllVouchers retrieves all vouchers (Admin only)
 func (vc *VoucherController) GetAllVouchers(c echo.Context) error {
 	// Check if user is admin
@@ -204,11 +285,19 @@ func (vc *VoucherController) UpdateVoucher(c echo.Context) error {
 	}
 
 	// Parse multipart form
+	if err := c.Request().ParseMultipartForm(10 << 20); err != nil { // 10MB max
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Failed to parse form data",
+			Data:    err.Error(),
+		})
+	}
+
 	form, err := c.MultipartForm()
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Failed to parse form data",
+			Message: "Failed to get multipart form",
 			Data:    err.Error(),
 		})
 	}
