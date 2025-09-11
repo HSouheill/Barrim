@@ -138,6 +138,19 @@ func main() {
 
 	// Ensure uploads directory exists
 	os.MkdirAll("uploads", 0755)
+	os.MkdirAll("uploads/vouchers", 0755)
+	os.MkdirAll("uploads/bookings", 0755)
+	os.MkdirAll("uploads/category", 0755)
+	os.MkdirAll("uploads/certificates", 0755)
+	os.MkdirAll("uploads/companies", 0755)
+	os.MkdirAll("uploads/logo", 0755)
+	os.MkdirAll("uploads/logos", 0755)
+	os.MkdirAll("uploads/profiles", 0755)
+	os.MkdirAll("uploads/serviceprovider", 0755)
+	os.MkdirAll("uploads/videos", 0755)
+	os.MkdirAll("uploads/thumbnails", 0755)
+	os.MkdirAll("uploads/reviews", 0755)
+
 	// Add this to your Echo server setup
 	e.Static("/uploads", "uploads")
 

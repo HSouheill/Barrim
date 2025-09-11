@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,7 +56,7 @@ func ServeFile(c echo.Context) error {
 	if path == "" {
 		return c.JSON(http.StatusNotFound, models.Response{
 			Status:  http.StatusNotFound,
-			Message: "File not found",
+			Message: "File not found - no path provided",
 		})
 	}
 
@@ -64,25 +65,30 @@ func ServeFile(c echo.Context) error {
 	if cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
-			Message: "Access denied",
+			Message: "Access denied - invalid path",
 		})
 	}
 
 	// Construct full file path
 	fullPath := filepath.Join("uploads", cleanPath)
 
+	// Debug logging
+	log.Printf("Attempting to serve file: %s", fullPath)
+
 	// Check if file exists
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			log.Printf("File not found: %s", fullPath)
 			return c.JSON(http.StatusNotFound, models.Response{
 				Status:  http.StatusNotFound,
-				Message: "File not found",
+				Message: "File not found: " + fullPath,
 			})
 		}
+		log.Printf("Error accessing file %s: %v", fullPath, err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Error accessing file",
+			Message: "Error accessing file: " + err.Error(),
 		})
 	}
 
@@ -90,7 +96,7 @@ func ServeFile(c echo.Context) error {
 	if info.IsDir() {
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
-			Message: "Access denied",
+			Message: "Access denied - directory listing not allowed",
 		})
 	}
 
@@ -98,6 +104,7 @@ func ServeFile(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "public, max-age=31536000") // Cache for 1 year
 	c.Response().Header().Set("Expires", time.Now().AddDate(1, 0, 0).Format(time.RFC1123))
 
+	log.Printf("Successfully serving file: %s", fullPath)
 	// Serve the file
 	return c.File(fullPath)
 }
