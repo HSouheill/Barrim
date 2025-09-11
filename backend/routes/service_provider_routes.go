@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterServiceProviderRoutes sets up all service provider-related routes
-func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database) {
+func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database, serviceProviderVoucherController *controllers.ServiceProviderVoucherController) {
 	log.Println("Registering service provider routes...")
 
 	serviceProviderSubscriptionController := controllers.NewServiceProviderSubscriptionController(db)
@@ -117,6 +117,33 @@ func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database) {
 		return serviceProviderController.ToggleEntityStatus(c)
 	})
 	log.Println("Registered admin /toggle-status/:id endpoint")
+
+	// ============= Voucher Routes =============
+	
+	// Service provider voucher routes
+	protected.GET("/vouchers/available", func(c echo.Context) error {
+		log.Printf("Received request for available vouchers from %s", c.Request().RemoteAddr)
+		return serviceProviderVoucherController.GetAvailableVouchersForServiceProvider(c)
+	})
+	log.Println("Registered /vouchers/available endpoint")
+
+	protected.POST("/vouchers/purchase", func(c echo.Context) error {
+		log.Printf("Received voucher purchase request from %s", c.Request().RemoteAddr)
+		return serviceProviderVoucherController.PurchaseVoucherForServiceProvider(c)
+	})
+	log.Println("Registered /vouchers/purchase endpoint")
+
+	protected.GET("/vouchers/purchased", func(c echo.Context) error {
+		log.Printf("Received request for purchased vouchers from %s", c.Request().RemoteAddr)
+		return serviceProviderVoucherController.GetServiceProviderVouchers(c)
+	})
+	log.Println("Registered /vouchers/purchased endpoint")
+
+	protected.PUT("/vouchers/:id/use", func(c echo.Context) error {
+		log.Printf("Received voucher use request from %s", c.Request().RemoteAddr)
+		return serviceProviderVoucherController.UseVoucherForServiceProvider(c)
+	})
+	log.Println("Registered /vouchers/:id/use endpoint")
 
 	log.Println("Finished registering all service provider routes")
 }

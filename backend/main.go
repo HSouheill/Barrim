@@ -103,17 +103,20 @@ func main() {
 	companyReferralController := controllers.NewCompanyReferralController(client)
 	subscriptionController := controllers.NewSubscriptionController(barrimDB)
 	branchSubscriptionController := controllers.NewBranchSubscriptionController(barrimDB)
+	companyVoucherController := controllers.NewCompanyVoucherController(barrimDB)
+	serviceProviderVoucherController := controllers.NewServiceProviderVoucherController(barrimDB)
+	wholesalerVoucherController := controllers.NewWholesalerVoucherController(barrimDB)
 
 	// Register company routes
-	routes.RegisterCompanyRoutes(e, companyController, companyReferralController, subscriptionController, branchSubscriptionController)
+	routes.RegisterCompanyRoutes(e, companyController, companyReferralController, subscriptionController, branchSubscriptionController, companyVoucherController)
 
 	// Register wholesaler routes (including subscription and referral routes)
 	// Use the same barrimDB instance consistently
-	routes.RegisterWholesalerRoutes(e, barrimDB)
+	routes.RegisterWholesalerRoutes(e, barrimDB, wholesalerVoucherController)
 	routes.RegisterWholesalerReferralRoutes(e, client)
 
 	// Register service provider routes
-	routes.RegisterServiceProviderRoutes(e, barrimDB)
+	routes.RegisterServiceProviderRoutes(e, barrimDB, serviceProviderVoucherController)
 
 	// Add public WebSocket endpoint (no authentication required for initial connection)
 	e.GET("/api/ws", func(c echo.Context) error {

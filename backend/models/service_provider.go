@@ -61,6 +61,7 @@ type ServiceProvider struct {
 	// Nested fields for backward compatibility
 	ContactInfo       ContactInfo        `json:"contactInfo,omitempty" bson:"contactInfo,omitempty"`
 	ReferralCode      string             `json:"referralCode,omitempty" bson:"referralCode,omitempty"`
+	Points            int                `json:"points" bson:"points"`
 	CommissionPercent float64            `bson:"commissionPercent,omitempty" json:"commissionPercent,omitempty"`
 	Sponsorship       bool               `json:"sponsorship,omitempty" bson:"sponsorship,omitempty"` // Whether the service provider has active sponsorship
 	CreatedBy         primitive.ObjectID `json:"createdBy,omitempty" bson:"createdBy,omitempty"`

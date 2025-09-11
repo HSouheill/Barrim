@@ -10,7 +10,7 @@ import (
 )
 
 // RegisterWholesalerRoutes sets up all wholesaler-related routes
-func RegisterWholesalerRoutes(e *echo.Echo, db *mongo.Database) {
+func RegisterWholesalerRoutes(e *echo.Echo, db *mongo.Database, wholesalerVoucherController *controllers.WholesalerVoucherController) {
 	log.Println("Registering wholesaler routes...")
 
 	// Create controllers - use the same database instance
@@ -66,5 +66,15 @@ func RegisterWholesalerRoutes(e *echo.Echo, db *mongo.Database) {
 
 	// Sponsorship routes for wholesaler branches
 	wholesalerGroup.POST("/sponsorship/:branchId/request", wholesalerBranchSubscriptionController.CreateWholesalerBranchSponsorshipRequest)
+
+	// ============= Voucher Routes =============
+	
+	// Wholesaler voucher routes
+	protected.GET("/vouchers/available", wholesalerVoucherController.GetAvailableVouchersForWholesaler)
+	protected.POST("/vouchers/purchase", wholesalerVoucherController.PurchaseVoucherForWholesaler)
+	protected.GET("/vouchers/purchased", wholesalerVoucherController.GetWholesalerVouchers)
+	protected.PUT("/vouchers/:id/use", wholesalerVoucherController.UseVoucherForWholesaler)
+
+	log.Println("Registered wholesaler voucher endpoints")
 
 }

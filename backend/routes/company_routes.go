@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func RegisterCompanyRoutes(e *echo.Echo, companyController *controllers.CompanyController, companyReferralController *controllers.CompanyReferralController, subscriptionController *controllers.SubscriptionController, companySubscriptionController *controllers.BranchSubscriptionController) {
+func RegisterCompanyRoutes(e *echo.Echo, companyController *controllers.CompanyController, companyReferralController *controllers.CompanyReferralController, subscriptionController *controllers.SubscriptionController, companySubscriptionController *controllers.BranchSubscriptionController, companyVoucherController *controllers.CompanyVoucherController) {
 	// Company-specific routes (restricted to company user type)
 	companyGroup := e.Group("/api/companies")
 	companyGroup.Use(customMiddleware.JWTMiddleware())
@@ -82,6 +82,14 @@ func RegisterCompanyRoutes(e *echo.Echo, companyController *controllers.CompanyC
 	// Additional company-specific referral routes can be added here if needed in the future
 	// companyReferralGroup.GET("/stats", companyReferralController.GetCompanyReferralStats)
 	// companyReferralGroup.GET("/history", companyReferralController.GetCompanyReferralHistory)
+
+	// ============= Voucher Routes =============
+
+	// Company voucher routes
+	companyGroup.GET("/vouchers/available", companyVoucherController.GetAvailableVouchersForCompany)
+	companyGroup.POST("/vouchers/purchase", companyVoucherController.PurchaseVoucherForCompany)
+	companyGroup.GET("/vouchers/purchased", companyVoucherController.GetCompanyVouchers)
+	companyGroup.PUT("/vouchers/:id/use", companyVoucherController.UseVoucherForCompany)
 
 	// Example for wholesaler branch subscription routes (to be added in wholesaler_routes.go):
 	// wholesalerGroup.POST("/subscription/:branchId/request", wholesalerBranchSubscriptionController.CreateBranchSubscriptionRequest)

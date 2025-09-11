@@ -596,8 +596,20 @@ func (vc *VoucherController) GetAvailableVouchers(c echo.Context) error {
 		})
 	}
 
-	// Get all active vouchers
-	cursor, err := collection.Find(ctx, bson.M{"isActive": true})
+	// Get vouchers available for this user (either global user vouchers or specific to this user)
+	cursor, err := collection.Find(ctx, bson.M{
+		"isActive": true,
+		"$or": []bson.M{
+			{
+				"targetUserType": "user",
+				"isGlobal":       true,
+			},
+			{
+				"targetUserType": "user",
+				"targetUserId":   userID,
+			},
+		},
+	})
 	if err != nil {
 		log.Printf("Error retrieving vouchers: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -909,6 +921,151 @@ func (vc *VoucherController) UseVoucher(c echo.Context) error {
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Voucher used successfully",
+	})
+}
+
+// CreateUserSpecificVoucher creates a voucher for a specific user (Admin only)
+func (vc *VoucherController) CreateUserSpecificVoucher(c echo.Context) error {
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" && claims.UserType != "super_admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Access denied. Admin privileges required.",
+		})
+	}
+
+	var req models.UserSpecificVoucherRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+			Data:    err.Error(),
+		})
+	}
+
+	// Validate request
+	validate := validator.New()
+	if err := validate.Struct(req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Validation failed",
+			Data:    err.Error(),
+		})
+	}
+
+	// Convert UserID to ObjectID
+	createdByID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid admin user ID",
+		})
+	}
+
+	// Convert TargetUserID to ObjectID
+	targetUserID, err := primitive.ObjectIDFromHex(req.TargetUserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid target user ID",
+		})
+	}
+
+	// Verify target user exists
+	ctx := context.Background()
+	var targetUserExists bool
+	var collectionName string
+
+	switch req.TargetUserType {
+	case "user":
+		collectionName = "users"
+	case "company":
+		collectionName = "companies"
+	case "serviceProvider":
+		collectionName = "serviceproviders"
+	case "wholesaler":
+		collectionName = "wholesalers"
+	default:
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid target user type",
+		})
+	}
+
+	collection := vc.DB.Collection(collectionName)
+	count, err := collection.CountDocuments(ctx, bson.M{"_id": targetUserID})
+	if err != nil {
+		log.Printf("Error checking target user existence: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to verify target user",
+			Data:    err.Error(),
+		})
+	}
+	targetUserExists = count > 0
+
+	if !targetUserExists {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Target user not found",
+		})
+	}
+
+	// Download and save image if URL is provided
+	var imagePath string
+	if req.Image != "" {
+		imagePath, err = vc.downloadAndSaveImage(req.Image)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Failed to download and save image",
+				Data:    err.Error(),
+			})
+		}
+	} else {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Image URL is required",
+		})
+	}
+
+	// Create voucher
+	voucher := models.Voucher{
+		ID:             primitive.NewObjectID(),
+		Name:           req.Name,
+		Description:    req.Description,
+		Image:          imagePath,
+		Points:         req.Points,
+		IsActive:       true,
+		CreatedBy:      createdByID,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+		TargetUserID:   targetUserID,
+		TargetUserType: req.TargetUserType,
+		IsGlobal:       req.IsGlobal,
+	}
+
+	// Insert into database
+	vouchersCollection := vc.DB.Collection("vouchers")
+	_, err = vouchersCollection.InsertOne(ctx, voucher)
+	if err != nil {
+		// If database insert fails, delete the downloaded image
+		if imagePath != "" {
+			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
+		}
+		log.Printf("Error creating user-specific voucher: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create user-specific voucher",
+			Data:    err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusCreated, models.Response{
+		Status:  http.StatusCreated,
+		Message: "User-specific voucher created successfully",
+		Data:    voucher,
 	})
 }
 

@@ -193,6 +193,7 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	voucherController := controllers.NewVoucherController(db)
 	protected.POST("/vouchers", voucherController.CreateVoucher)
 	protected.POST("/vouchers/json", voucherController.CreateVoucherJSON)
+	protected.POST("/vouchers/user-specific", voucherController.CreateUserSpecificVoucher)
 	protected.GET("/vouchers", voucherController.GetAllVouchers)
 	protected.PUT("/vouchers/:id", voucherController.UpdateVoucher)
 	protected.DELETE("/vouchers/:id", voucherController.DeleteVoucher)
