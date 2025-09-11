@@ -43,6 +43,13 @@ func RegisterUserRoutes(e *echo.Echo, db *mongo.Client, userController *controll
 	r.POST("/users/handle-referral", referralController.HandleReferral)
 	r.GET("/users/referral-data", referralController.GetReferralData)
 
+	// Voucher routes
+	voucherController := controllers.NewVoucherController(db.Database("barrim"))
+	r.GET("/vouchers", voucherController.GetAvailableVouchers)
+	r.POST("/vouchers/purchase", voucherController.PurchaseVoucher)
+	r.GET("/vouchers/my-vouchers", voucherController.GetUserVouchers)
+	r.PUT("/vouchers/:id/use", voucherController.UseVoucher)
+
 	// Review routes
 	r.POST("/reviews", reviewController.CreateReview)
 	r.POST("/reviews/:id/reply", reviewController.PostReviewReply)

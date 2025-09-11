@@ -189,6 +189,14 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	// Debug entity (for troubleshooting)
 	protected.GET("/debug/:entityType/:id", adminController.DebugEntity)
 
+	// Voucher management routes
+	voucherController := controllers.NewVoucherController(db)
+	protected.POST("/vouchers", voucherController.CreateVoucher)
+	protected.GET("/vouchers", voucherController.GetAllVouchers)
+	protected.PUT("/vouchers/:id", voucherController.UpdateVoucher)
+	protected.DELETE("/vouchers/:id", voucherController.DeleteVoucher)
+	protected.PUT("/vouchers/:id/toggle-status", voucherController.ToggleVoucherStatus)
+
 	// Pending requests from admin-created salespersons
 	protected.GET("/pending-requests", adminController.GetPendingRequestsFromAdminSalespersons)
 	protected.POST("/pending-requests/process", adminController.ProcessPendingRequest)
