@@ -596,19 +596,10 @@ func (vc *VoucherController) GetAvailableVouchers(c echo.Context) error {
 		})
 	}
 
-	// Get vouchers available for this user (either global user vouchers or specific to this user)
+	// Get vouchers available for users
 	cursor, err := collection.Find(ctx, bson.M{
-		"isActive": true,
-		"$or": []bson.M{
-			{
-				"targetUserType": "user",
-				"isGlobal":       true,
-			},
-			{
-				"targetUserType": "user",
-				"targetUserId":   userID,
-			},
-		},
+		"isActive":       true,
+		"targetUserType": "user",
 	})
 	if err != nil {
 		log.Printf("Error retrieving vouchers: %v", err)
@@ -924,8 +915,8 @@ func (vc *VoucherController) UseVoucher(c echo.Context) error {
 	})
 }
 
-// CreateUserSpecificVoucher creates a voucher for a specific user (Admin only)
-func (vc *VoucherController) CreateUserSpecificVoucher(c echo.Context) error {
+// CreateUserTypeVoucher creates a voucher for a specific user type (Admin only)
+func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 	// Check if user is admin
 	claims := middleware.GetUserFromToken(c)
 	if claims.UserType != "admin" && claims.UserType != "super_admin" {
@@ -935,7 +926,7 @@ func (vc *VoucherController) CreateUserSpecificVoucher(c echo.Context) error {
 		})
 	}
 
-	var req models.UserSpecificVoucherRequest
+	var req models.UserTypeVoucherRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
@@ -960,55 +951,6 @@ func (vc *VoucherController) CreateUserSpecificVoucher(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Invalid admin user ID",
-		})
-	}
-
-	// Convert TargetUserID to ObjectID
-	targetUserID, err := primitive.ObjectIDFromHex(req.TargetUserID)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid target user ID",
-		})
-	}
-
-	// Verify target user exists
-	ctx := context.Background()
-	var targetUserExists bool
-	var collectionName string
-
-	switch req.TargetUserType {
-	case "user":
-		collectionName = "users"
-	case "company":
-		collectionName = "companies"
-	case "serviceProvider":
-		collectionName = "serviceproviders"
-	case "wholesaler":
-		collectionName = "wholesalers"
-	default:
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid target user type",
-		})
-	}
-
-	collection := vc.DB.Collection(collectionName)
-	count, err := collection.CountDocuments(ctx, bson.M{"_id": targetUserID})
-	if err != nil {
-		log.Printf("Error checking target user existence: %v", err)
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to verify target user",
-			Data:    err.Error(),
-		})
-	}
-	targetUserExists = count > 0
-
-	if !targetUserExists {
-		return c.JSON(http.StatusNotFound, models.Response{
-			Status:  http.StatusNotFound,
-			Message: "Target user not found",
 		})
 	}
 
@@ -1041,30 +983,29 @@ func (vc *VoucherController) CreateUserSpecificVoucher(c echo.Context) error {
 		CreatedBy:      createdByID,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
-		TargetUserID:   targetUserID,
 		TargetUserType: req.TargetUserType,
-		IsGlobal:       req.IsGlobal,
 	}
 
 	// Insert into database
 	vouchersCollection := vc.DB.Collection("vouchers")
+	ctx := context.Background()
 	_, err = vouchersCollection.InsertOne(ctx, voucher)
 	if err != nil {
 		// If database insert fails, delete the downloaded image
 		if imagePath != "" {
 			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
 		}
-		log.Printf("Error creating user-specific voucher: %v", err)
+		log.Printf("Error creating user-type voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to create user-specific voucher",
+			Message: "Failed to create user-type voucher",
 			Data:    err.Error(),
 		})
 	}
 
 	return c.JSON(http.StatusCreated, models.Response{
 		Status:  http.StatusCreated,
-		Message: "User-specific voucher created successfully",
+		Message: "User-type voucher created successfully",
 		Data:    voucher,
 	})
 }

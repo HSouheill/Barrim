@@ -17,10 +17,8 @@ type Voucher struct {
 	CreatedBy   primitive.ObjectID `json:"createdBy" bson:"createdBy"` // Admin who created the voucher
 	CreatedAt   time.Time          `json:"createdAt" bson:"createdAt"`
 	UpdatedAt   time.Time          `json:"updatedAt" bson:"updatedAt"`
-	// User-specific voucher fields
-	TargetUserID   primitive.ObjectID `json:"targetUserId,omitempty" bson:"targetUserId,omitempty"`     // Specific user this voucher is for
-	TargetUserType string             `json:"targetUserType,omitempty" bson:"targetUserType,omitempty"` // "user", "company", "serviceProvider", "wholesaler"
-	IsGlobal       bool               `json:"isGlobal" bson:"isGlobal"`                                 // If true, available to all users of the type
+	// User-type specific voucher fields
+	TargetUserType string `json:"targetUserType,omitempty" bson:"targetUserType,omitempty"` // "user", "company", "serviceProvider", "wholesaler"
 }
 
 // VoucherPurchase represents a user's purchase of a voucher
@@ -42,15 +40,13 @@ type VoucherRequest struct {
 	Points      int    `json:"points" validate:"required,min=1"`
 }
 
-// UserSpecificVoucherRequest represents the request body for creating user-specific vouchers
-type UserSpecificVoucherRequest struct {
+// UserTypeVoucherRequest represents the request body for creating user-type specific vouchers
+type UserTypeVoucherRequest struct {
 	Name           string `json:"name" validate:"required"`
 	Description    string `json:"description" validate:"required"`
 	Image          string `json:"image" validate:"required"`
 	Points         int    `json:"points" validate:"required,min=1"`
-	TargetUserID   string `json:"targetUserId" validate:"required"`
 	TargetUserType string `json:"targetUserType" validate:"required,oneof=user company serviceProvider wholesaler"`
-	IsGlobal       bool   `json:"isGlobal"`
 }
 
 // VoucherPurchaseRequest represents the request body for purchasing a voucher

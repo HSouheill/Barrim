@@ -51,19 +51,10 @@ func (wvc *WholesalerVoucherController) GetAvailableVouchersForWholesaler(c echo
 		})
 	}
 
-	// Get vouchers available for this wholesaler (either global wholesaler vouchers or specific to this wholesaler)
+	// Get vouchers available for wholesalers
 	cursor, err := collection.Find(ctx, bson.M{
-		"isActive": true,
-		"$or": []bson.M{
-			{
-				"targetUserType": "wholesaler",
-				"isGlobal":       true,
-			},
-			{
-				"targetUserType": "wholesaler",
-				"targetUserId":   wholesalerID,
-			},
-		},
+		"isActive":       true,
+		"targetUserType": "wholesaler",
 	})
 	if err != nil {
 		log.Printf("Error retrieving vouchers: %v", err)

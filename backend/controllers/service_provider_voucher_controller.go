@@ -51,19 +51,10 @@ func (spvc *ServiceProviderVoucherController) GetAvailableVouchersForServiceProv
 		})
 	}
 
-	// Get vouchers available for this service provider (either global service provider vouchers or specific to this service provider)
+	// Get vouchers available for service providers
 	cursor, err := collection.Find(ctx, bson.M{
-		"isActive": true,
-		"$or": []bson.M{
-			{
-				"targetUserType": "serviceProvider",
-				"isGlobal":       true,
-			},
-			{
-				"targetUserType": "serviceProvider",
-				"targetUserId":   serviceProviderID,
-			},
-		},
+		"isActive":       true,
+		"targetUserType": "serviceProvider",
 	})
 	if err != nil {
 		log.Printf("Error retrieving vouchers: %v", err)

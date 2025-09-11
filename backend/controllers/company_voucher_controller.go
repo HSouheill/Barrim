@@ -51,19 +51,10 @@ func (cvc *CompanyVoucherController) GetAvailableVouchersForCompany(c echo.Conte
 		})
 	}
 
-	// Get vouchers available for this company (either global company vouchers or specific to this company)
+	// Get vouchers available for companies
 	cursor, err := collection.Find(ctx, bson.M{
-		"isActive": true,
-		"$or": []bson.M{
-			{
-				"targetUserType": "company",
-				"isGlobal":       true,
-			},
-			{
-				"targetUserType": "company",
-				"targetUserId":   companyID,
-			},
-		},
+		"isActive":       true,
+		"targetUserType": "company",
 	})
 	if err != nil {
 		log.Printf("Error retrieving vouchers: %v", err)
