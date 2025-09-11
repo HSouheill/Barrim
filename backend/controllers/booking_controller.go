@@ -1363,8 +1363,8 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 		}
 
 		// Get service provider information
-		var serviceProvider models.User
-		err = bc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": booking.ServiceProviderID}).Decode(&serviceProvider)
+		var serviceProvider models.ServiceProvider
+		err = bc.db.Database("barrim").Collection("serviceProviders").FindOne(ctx, bson.M{"_id": booking.ServiceProviderID}).Decode(&serviceProvider)
 		if err != nil {
 			log.Printf("Error fetching service provider info for booking %s: %v", booking.ID.Hex(), err)
 		}
@@ -1379,11 +1379,13 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 				"userType": user.UserType,
 			},
 			"serviceProvider": map[string]interface{}{
-				"id":       serviceProvider.ID,
-				"fullName": serviceProvider.FullName,
-				"email":    serviceProvider.Email,
-				"phone":    serviceProvider.Phone,
-				"userType": serviceProvider.UserType,
+				"id":            serviceProvider.ID,
+				"businessName":  serviceProvider.BusinessName,
+				"email":         serviceProvider.Email,
+				"phone":         serviceProvider.Phone,
+				"contactPerson": serviceProvider.ContactPerson,
+				"category":      serviceProvider.Category,
+				"status":        serviceProvider.Status,
 			},
 		}
 
