@@ -1,14 +1,9 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/booking_model.dart';
-import '../utils/auth_manager.dart';
-import '../utils/secure_storage.dart';
 import 'api_constant.dart';
+import 'api_services.dart';
 
 class AdminBookingService {
   final String baseUrl;
-  final SecureStorage _secureStorage = SecureStorage();
-  final AuthManager _authManager = AuthManager();
 
   AdminBookingService({required this.baseUrl});
 
@@ -21,13 +16,6 @@ class AdminBookingService {
     return 'https://$baseUrl';
   }
 
-  Future<Map<String, String>> _getHeaders() async {
-    final token = await _secureStorage.getToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': token != null ? 'Bearer $token' : '',
-    };
-  }
 
   // Get all bookings for admin with pagination and filtering
   Future<Map<String, dynamic>> getAllBookingsForAdmin({
@@ -36,6 +24,10 @@ class AdminBookingService {
     String? serviceProviderId,
     String? status,
     String? userId,
+    String? date,
+    String? isEmergency,
+    String? dateRangeStart,
+    String? dateRangeEnd,
   }) async {
     try {
       final queryParams = <String, String>{
@@ -52,17 +44,27 @@ class AdminBookingService {
       if (userId != null && userId.isNotEmpty) {
         queryParams['userId'] = userId;
       }
+      if (date != null && date.isNotEmpty) {
+        queryParams['date'] = date;
+      }
+      if (isEmergency != null && isEmergency.isNotEmpty) {
+        queryParams['isEmergency'] = isEmergency;
+      }
+      if (dateRangeStart != null && dateRangeStart.isNotEmpty) {
+        queryParams['dateRangeStart'] = dateRangeStart;
+      }
+      if (dateRangeEnd != null && dateRangeEnd.isNotEmpty) {
+        queryParams['dateRangeEnd'] = dateRangeEnd;
+      }
 
       final uri = Uri.parse('$secureBaseUrl${ApiConstants.getAllBookingsForAdmin}')
           .replace(queryParameters: queryParams);
 
-      final headers = await _getHeaders();
       print('Making request to: $uri');
-      print('Headers: $headers');
 
-      final response = await http.get(
-        uri,
-        headers: headers,
+      final response = await ApiService.makeAuthenticatedRequest(
+        'get',
+        uri.toString(),
       );
 
       print('Response status: ${response.statusCode}');
@@ -73,8 +75,8 @@ class AdminBookingService {
       if (response.statusCode == 200) {
         final bookingsData = responseData['data'];
         
-        // Handle both enriched and simple booking data
-        List<Booking> bookings;
+        // Handle both enriched and simple booking data - return JSON for UI consumption
+        List<Map<String, dynamic>> bookingsJson;
         if (bookingsData['bookings'] is List) {
           final bookingsList = bookingsData['bookings'] as List;
           
@@ -84,7 +86,7 @@ class AdminBookingService {
             // Check if it's enriched data (has nested objects)
             if (firstBooking.containsKey('booking') && firstBooking.containsKey('user')) {
               // Enriched data structure
-              bookings = bookingsList.map((enrichedBooking) {
+              bookingsJson = bookingsList.map((enrichedBooking) {
                 final bookingData = enrichedBooking['booking'] as Map<String, dynamic>;
                 final userData = enrichedBooking['user'] as Map<String, dynamic>;
                 final serviceProviderData = enrichedBooking['serviceProvider'] as Map<String, dynamic>;
@@ -94,25 +96,27 @@ class AdminBookingService {
                 bookingJson['userName'] = userData['fullName'];
                 bookingJson['serviceProviderName'] = serviceProviderData['fullName'];
                 
-                return Booking.fromJson(bookingJson);
+                return bookingJson;
               }).toList();
             } else {
               // Simple data structure
-              bookings = bookingsList.map((json) => Booking.fromJson(json)).toList();
+              bookingsJson = bookingsList.map((json) => json as Map<String, dynamic>).toList();
             }
           } else {
-            bookings = [];
+            bookingsJson = [];
           }
         } else {
-          bookings = [];
+          bookingsJson = [];
         }
 
         return {
           'success': true,
           'message': responseData['message'],
           'data': {
-            'bookings': bookings,
+            'bookings': bookingsJson,
             'pagination': bookingsData['pagination'],
+            'statistics': bookingsData['statistics'],
+            'filters': bookingsData['filters'],
           },
         };
       } else if (response.statusCode == 403) {
@@ -147,9 +151,9 @@ class AdminBookingService {
     try {
       final uri = Uri.parse('$secureBaseUrl${ApiConstants.deleteBooking}/$bookingId');
 
-      final response = await http.delete(
-        uri,
-        headers: await _getHeaders(),
+      final response = await ApiService.makeAuthenticatedRequest(
+        'delete',
+        uri.toString(),
       );
 
       final responseData = jsonDecode(response.body);

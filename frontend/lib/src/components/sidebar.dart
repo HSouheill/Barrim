@@ -21,6 +21,7 @@ import '../screens/admin/requests.dart';
 import '../screens/admin_sponsorship.dart';
 import '../screens/bookings_and_reviews.dart';
 import '../screens/categories/categories_screen.dart';
+import '../screens/voucher/voucher_screen.dart';
 import '../../main.dart' as main;
 
 
@@ -245,6 +246,19 @@ MaterialPageRoute(builder: (context) => const DashboardPage()),                 
                         MaterialPageRoute(builder: (context) => const BookingsAndReviewsScreen()),
                       );
 
+                  },
+                ),
+
+                _buildMenuItem(
+                  Icons.card_giftcard,
+                  'Vouchers',
+                  onTap: () {
+                    onCollapse();
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      Navigator.of(parentContext).pushReplacement(
+                        MaterialPageRoute(builder: (context) => const VoucherScreen()),
+                      );
+                    });
                   },
                 ),
 

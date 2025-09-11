@@ -40,6 +40,14 @@ class _SessionWrapperState extends State<SessionWrapper> {
             _sessionError = isValid ? null : 'Session validation failed';
           });
         }
+      }).catchError((error) {
+        debugPrint('Error during session initialization: $error');
+        if (mounted) {
+          setState(() {
+            _isSessionValid = false;
+            _sessionError = 'Session initialization failed: ${error.toString()}';
+          });
+        }
       });
       
       // Set initial state to allow login page to show immediately
@@ -58,22 +66,26 @@ class _SessionWrapperState extends State<SessionWrapper> {
 
   void _listenToSessionEvents() {
     _sessionManager.sessionStatusStream.listen((isValid) {
-      setState(() {
-        _isSessionValid = isValid;
-      });
-      
-      if (!isValid) {
-        _handleSessionExpired();
+      if (mounted) {
+        setState(() {
+          _isSessionValid = isValid;
+        });
+        
+        if (!isValid) {
+          _handleSessionExpired();
+        }
       }
     });
 
     _sessionManager.sessionErrorStream.listen((error) {
-      setState(() {
-        _sessionError = error;
-      });
-      
-      if (error.contains('expired') || error.contains('invalid')) {
-        _handleSessionExpired();
+      if (mounted) {
+        setState(() {
+          _sessionError = error;
+        });
+        
+        if (error.contains('expired') || error.contains('invalid')) {
+          _handleSessionExpired();
+        }
       }
     });
   }

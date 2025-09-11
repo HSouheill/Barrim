@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path/path.dart' as path;
 import '../models/user_model.dart';
 import '../utils/session_manager.dart';
 import '../utils/performance_config.dart';
@@ -102,6 +105,11 @@ class ApiService {
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userInfoKey = 'user_info';
+  
+  // Temporary in-memory storage for debugging
+  static String? _tempToken;
+  static String? _tempRefreshToken;
+  static String? _tempUserInfo;
 
   // Session manager instance
   static final SessionManager _sessionManager = SessionManager();
@@ -113,7 +121,24 @@ class ApiService {
 
   // Get auth token from secure storage
   static Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    // Try temporary storage first
+    if (_tempToken != null) {
+      print('=== GETTING TOKEN (TEMP) ===');
+      print('Token found in temp storage: true');
+      print('Token length: ${_tempToken!.length}');
+      print('Token preview: ${_tempToken!.substring(0, 20)}...');
+      return _tempToken;
+    }
+    
+    final token = await _storage.read(key: _tokenKey);
+    print('=== GETTING TOKEN (STORAGE) ===');
+    print('Token key: $_tokenKey');
+    print('Token found: ${token != null}');
+    if (token != null) {
+      print('Token length: ${token.length}');
+      print('Token preview: ${token.substring(0, 20)}...');
+    }
+    return token;
   }
 
   // Get refresh token from secure storage
@@ -153,13 +178,30 @@ class ApiService {
   // Save auth data to secure storage
   static Future<void> _saveAuthData(LoginResult loginResult) async {
     try {
-      // Store tokens
+      print('=== SAVING AUTH DATA ===');
+      print('Token key: $_tokenKey');
+      print('Refresh token key: $_refreshTokenKey');
+      print('User info key: $_userInfoKey');
+      
+      // Store tokens in both temporary and secure storage
+      _tempToken = loginResult.token;
+      _tempRefreshToken = loginResult.refreshToken;
+      
       await _storage.write(key: _tokenKey, value: loginResult.token);
       await _storage.write(key: _refreshTokenKey, value: loginResult.refreshToken);
       
       // Store user info
       final userInfo = loginResult.user.toJson();
+      _tempUserInfo = json.encode(userInfo);
       await _storage.write(key: _userInfoKey, value: json.encode(userInfo));
+      
+      print('Tokens saved successfully (both temp and storage)');
+      
+      // Verify tokens were saved
+      final savedToken = await _storage.read(key: _tokenKey);
+      final savedRefreshToken = await _storage.read(key: _refreshTokenKey);
+      print('Verification - Token saved: ${savedToken != null}');
+      print('Verification - Refresh token saved: ${savedRefreshToken != null}');
       
       // Initialize session manager
       await _sessionManager.initialize();
@@ -189,6 +231,11 @@ class ApiService {
 
   // Clear all auth data from secure storage
   static Future<void> clearAuthData() async {
+    // Clear temporary storage
+    _tempToken = null;
+    _tempRefreshToken = null;
+    _tempUserInfo = null;
+    
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userInfoKey);
@@ -257,10 +304,17 @@ class ApiService {
     final token = await getToken();
     final headers = Map<String, String>.from(_headers);
 
+    print('=== GETTING AUTH HEADERS ===');
+    print('Token retrieved: ${token != null ? '${token.substring(0, 20)}...' : 'null'}');
+
     if (token != null) {
       headers['Authorization'] = 'Bearer $token';
+      print('Authorization header added: Bearer ${token.substring(0, 20)}...');
+    } else {
+      print('No token found - no Authorization header added');
     }
 
+    print('Final headers: $headers');
     return headers;
   }
 
@@ -296,14 +350,22 @@ class ApiService {
       final isLoginRequest = url.contains('/login') || url.contains('/admin/login');
       
       // Check if token needs refresh before making request (skip for login requests)
-      if (!isLoginRequest && await _sessionManager.needsTokenRefresh()) {
-        await _sessionManager.refreshToken();
-      }
+      // Temporarily disabled to debug auth issues
+      // if (!isLoginRequest && await _sessionManager.needsTokenRefresh()) {
+      //   await _sessionManager.refreshToken();
+      // }
 
       // For login requests, use the provided headers directly
       // For other requests, use getAuthHeaders if no headers provided
       final requestHeaders = isLoginRequest ? (headers ?? _headers) : (headers ?? await getAuthHeaders());
       final uri = Uri.parse(url);
+
+      print('=== MAKING REQUEST ===');
+      print('URL: $url');
+      print('Method: $method');
+      print('Is login request: $isLoginRequest');
+      print('Headers provided: ${headers != null}');
+      print('Final request headers: $requestHeaders');
 
       http.Response response;
       switch (method.toLowerCase()) {
@@ -589,7 +651,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -611,7 +673,58 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  // Get all users (admin only)
+  static Future<ApiResponse> getAllUsers() async {
+    try {
+      final headers = await getAuthHeaders();
+      final response = await _makeRequest(
+        'get',
+        '${baseUrl}${ApiConstants.allUsers}',
+        headers: headers,
+      );
+
+      final result = _handleResponse(response);
+
+      if (result.success && result.data != null) {
+        final List<User> users = [];
+
+        // Parse the users array from the response
+        if (result.data is Map && result.data['users'] is List) {
+          try {
+            for (var userJson in result.data['users']) {
+              if (userJson is Map<String, dynamic>) {
+                users.add(User.fromJson(userJson));
+              }
+            }
+          } catch (e) {
+            print('Error parsing users: $e');
+            return ApiResponse(
+              success: false,
+              message: 'Failed to parse user data: ${e.toString()}',
+            );
+          }
+        }
+
+        return ApiResponse(
+          success: true,
+          message: result.message,
+          data: {
+            'count': result.data['count'] ?? users.length,
+            'users': users,
+          },
+        );
+      }
+
+      return result;
+    } catch (e) {
+      return ApiResponse(
+        success: false,
+        message: 'Failed to load users: ${e.toString()}',
       );
     }
   }
@@ -673,7 +786,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -717,7 +830,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -736,7 +849,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -755,7 +868,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -818,7 +931,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -865,7 +978,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
       );
     }
   }
@@ -1237,7 +1350,530 @@ class ApiService {
     } catch (e) {
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  // Public method to make authenticated requests
+  static Future<http.Response> makeAuthenticatedRequest(
+    String method,
+    String url, {
+    Map<String, String>? headers,
+    dynamic body,
+  }) async {
+    return await _makeRequest(method, url, headers: headers, body: body);
+  }
+
+  // Voucher management methods
+  static Future<ApiResponse> createVoucherJSON({
+    required String name,
+    required String description,
+    required int points,
+    required String imageUrl,
+  }) async {
+    try {
+      final voucherRequest = {
+        'name': name,
+        'description': description,
+        'image': imageUrl,
+        'points': points,
+      };
+
+      final response = await _makeRequest(
+        'POST',
+        ApiConstants.createVoucherJSON,
+        body: jsonEncode(voucherRequest),
+      );
+
+      if (response.statusCode == 201) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher created successfully',
+          data: responseData['data'],
+        );
+      } else {
+        // Check if response is HTML (error page)
+        if (response.body.trim().startsWith('<!DOCTYPE') || 
+            response.body.trim().startsWith('<html')) {
+          return ApiResponse(
+            success: false,
+            message: 'Voucher service is currently unavailable. Please try again later.',
+          );
+        }
+        
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to create voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error creating voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Failed to create voucher. Please try again.',
+      );
+    }
+  }
+
+  static Future<ApiResponse> createVoucher({
+    required String name,
+    required String description,
+    required int points,
+    required File imageFile,
+  }) async {
+    try {
+      // Get auth headers
+      final headers = await getAuthHeaders();
+      
+      // Create multipart request
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createVoucher}');
+      final request = http.MultipartRequest('POST', uri);
+      
+      // Add headers
+      request.headers.addAll(headers);
+      
+      // Add form fields
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['points'] = points.toString();
+      
+      // Add image file
+      final imageStream = http.ByteStream(imageFile.openRead());
+      final imageLength = await imageFile.length();
+      final multipartFile = http.MultipartFile(
+        'image',
+        imageStream,
+        imageLength,
+        filename: path.basename(imageFile.path),
+      );
+      request.files.add(multipartFile);
+      
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+
+      if (response.statusCode == 201) {
+        // Check if response is HTML (error page)
+       
+        
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher created successfully',
+          data: responseData['data'],
+        );
+      } else {
+        
+        
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to create voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error creating voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  // Web-compatible createVoucher method
+  static Future<ApiResponse> createVoucherWeb({
+    required String name,
+    required String description,
+    required int points,
+    required Uint8List imageBytes,
+    String? filename,
+  }) async {
+    try {
+      // Get auth headers
+      final headers = await getAuthHeaders();
+      
+      // Create multipart request
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createVoucher}');
+      final request = http.MultipartRequest('POST', uri);
+      
+      // Add headers
+      request.headers.addAll(headers);
+      
+      // Add form fields
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['points'] = points.toString();
+      
+      // Add image file from bytes
+      final multipartFile = http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: filename ?? 'voucher_image.jpg',
+      );
+      request.files.add(multipartFile);
+      
+      // Send request with timeout
+      final streamedResponse = await request.send().timeout(
+        const Duration(minutes: 2), // Increased timeout for image uploads
+        onTimeout: () => throw Exception('Upload timeout: Please try again with a smaller image'),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 201) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher created successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to create voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error creating voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  static Future<ApiResponse> getAllVouchers() async {
+    try {
+      final response = await _makeRequest(
+        'GET',
+        '${baseUrl}${ApiConstants.getAllVouchers}',
+      );
+
+      if (response.statusCode == 200) {
+        // Check if response is HTML (error page)
+        if (response.body.trim().startsWith('<!DOCTYPE') || 
+            response.body.trim().startsWith('<html')) {
+          return ApiResponse(
+            success: false,
+            message: 'Voucher service is currently unavailable. Please try again later.',
+          );
+        }
+        
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Vouchers retrieved successfully',
+          data: responseData['data'],
+        );
+      } else {
+        // Check if response is HTML (error page)
+        if (response.body.trim().startsWith('<!DOCTYPE') || 
+            response.body.trim().startsWith('<html')) {
+          return ApiResponse(
+            success: false,
+            message: 'Voucher service is currently unavailable. Please try again later.',
+          );
+        }
+        
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to retrieve vouchers',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error retrieving vouchers: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Failed to load vouchers. Please try again.',
+      );
+    }
+  }
+
+  static Future<ApiResponse> updateVoucher({
+    required String voucherId,
+    required String name,
+    required String description,
+    required int points,
+    required String imageUrl,
+  }) async {
+    try {
+      final voucherRequest = {
+        'name': name,
+        'description': description,
+        'image': imageUrl,
+        'points': points,
+      };
+
+      final response = await _makeRequest(
+        'PUT',
+        '${ApiConstants.updateVoucher}/$voucherId',
+        body: jsonEncode(voucherRequest),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher updated successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to update voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error updating voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  static Future<ApiResponse> updateVoucherWithImage({
+    required String voucherId,
+    required String name,
+    required String description,
+    required int points,
+    required File imageFile,
+  }) async {
+    try {
+      final headers = await getAuthHeaders();
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.updateVoucher}/$voucherId');
+      final request = http.MultipartRequest('PUT', uri);
+      
+      request.headers.addAll(headers);
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['points'] = points.toString();
+      
+      final multipartFile = http.MultipartFile(
+        'image',
+        http.ByteStream(imageFile.openRead()),
+        await imageFile.length(),
+        filename: path.basename(imageFile.path),
+      );
+      request.files.add(multipartFile);
+      
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher updated successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to update voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error updating voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  // Web-compatible updateVoucherWithImage method
+  static Future<ApiResponse> updateVoucherWithImageWeb({
+    required String voucherId,
+    required String name,
+    required String description,
+    required int points,
+    required Uint8List imageBytes,
+    String? filename,
+  }) async {
+    try {
+      final headers = await getAuthHeaders();
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.updateVoucher}/$voucherId');
+      final request = http.MultipartRequest('PUT', uri);
+      
+      request.headers.addAll(headers);
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['points'] = points.toString();
+      
+      final multipartFile = http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: filename ?? 'voucher_image.jpg',
+      );
+      request.files.add(multipartFile);
+      
+      // Send request with timeout
+      final streamedResponse = await request.send().timeout(
+        const Duration(minutes: 2), // Increased timeout for image uploads
+        onTimeout: () => throw Exception('Upload timeout: Please try again with a smaller image'),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher updated successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to update voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error updating voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  static Future<ApiResponse> deleteVoucher(String voucherId) async {
+    try {
+      final response = await _makeRequest(
+        'DELETE',
+        '${ApiConstants.deleteVoucher}/$voucherId',
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher deleted successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to delete voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error deleting voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  static Future<ApiResponse> toggleVoucherStatus(String voucherId) async {
+    try {
+      final response = await _makeRequest(
+        'PUT',
+        '${ApiConstants.toggleVoucherStatus}/$voucherId/toggle-status',
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher status updated successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to toggle voucher status',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error toggling voucher status: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Operation failed. Please try again.',
       );
     }
   }

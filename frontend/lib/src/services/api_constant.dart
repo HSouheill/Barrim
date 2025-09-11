@@ -110,4 +110,12 @@ class ApiConstants {
   static const String getSponsorship = '/api/admin/sponsorships/';
   static const String updateSponsorship = '/api/admin/sponsorships/';
   static const String deleteSponsorship = '/api/admin/sponsorships/';
+  
+  // Voucher endpoints
+  static const String createVoucher = '/api/admin/vouchers';
+  static const String createVoucherJSON = '/api/admin/vouchers/json';
+  static const String getAllVouchers = '/api/admin/vouchers';
+  static const String updateVoucher = '/api/admin/vouchers';
+  static const String deleteVoucher = '/api/admin/vouchers';
+  static const String toggleVoucherStatus = '/api/admin/vouchers';
 }

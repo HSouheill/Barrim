@@ -18,7 +18,6 @@ class SessionManager {
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userInfoKey = 'user_info';
   static const String _lastActivityKey = 'last_activity';
-  static const String _sessionTimeoutKey = 'session_timeout';
 
   // Session configuration
   static const Duration _defaultSessionTimeout = Duration(hours: 24);
@@ -59,9 +58,13 @@ class SessionManager {
       // Handle stream-related errors gracefully
       if (e.toString().toLowerCase().contains('stream') ||
           e.toString().toLowerCase().contains('addstream')) {
-        _sessionErrorController.add('Session initialization failed. Please try logging in again.');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Session initialization failed. Please try logging in again.');
+        }
       } else {
-        _sessionErrorController.add('Failed to initialize session: ${e.toString()}');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Failed to initialize session: ${e.toString()}');
+        }
       }
     }
   }
@@ -69,18 +72,22 @@ class SessionManager {
   // Load session data from storage
   Future<void> _loadSessionData() async {
     try {
+      print('=== SESSION MANAGER LOADING DATA ===');
       final token = await _storage.read(key: _tokenKey).timeout(
         const Duration(seconds: 3),
         onTimeout: () {
           throw Exception('Token read timeout');
         },
       );
+      print('Session manager - Token found: ${token != null}');
+      
       final lastActivityStr = await _storage.read(key: _lastActivityKey).timeout(
         const Duration(seconds: 3),
         onTimeout: () {
           throw Exception('Last activity read timeout');
         },
       );
+      print('Session manager - Last activity found: ${lastActivityStr != null}');
       
       if (lastActivityStr != null) {
         _lastActivity = DateTime.parse(lastActivityStr);
@@ -99,9 +106,10 @@ class SessionManager {
   // Start session monitoring
   Future<void> _startSessionMonitoring() async {
     _sessionTimer?.cancel();
-    _sessionTimer = Timer.periodic(PerformanceConfig.sessionCheckInterval, (timer) async {
-      await _checkSessionStatus();
-    });
+    // Temporarily disable automatic session monitoring to debug auth issues
+    // _sessionTimer = Timer.periodic(PerformanceConfig.sessionCheckInterval, (timer) async {
+    //   await _checkSessionStatus();
+    // });
   }
 
   // Start activity monitoring
@@ -116,13 +124,18 @@ class SessionManager {
   Future<void> _checkSessionStatus() async {
     try {
       final token = await _storage.read(key: _tokenKey);
+      print('=== SESSION STATUS CHECK ===');
+      print('Token found: ${token != null}');
+      
       if (token == null) {
+        print('No token found - clearing session');
         await _clearSession();
         return;
       }
 
       // Check if token is expired
       if (JwtDecoder.isExpired(token)) {
+        print('Token is expired - attempting refresh');
         await _attemptTokenRefresh();
         return;
       }
@@ -132,17 +145,27 @@ class SessionManager {
       final expirationTime = DateTime.fromMillisecondsSinceEpoch(decodedToken['exp'] * 1000);
       final timeUntilExpiry = expirationTime.difference(DateTime.now());
 
+      print('Time until expiry: ${timeUntilExpiry.inMinutes} minutes');
+      print('Refresh threshold: ${_tokenRefreshThreshold.inMinutes} minutes');
+
       if (timeUntilExpiry < _tokenRefreshThreshold) {
+        print('Token needs refresh - attempting refresh');
         await _attemptTokenRefresh();
+      } else {
+        print('Token is still valid');
       }
     } catch (e) {
       debugPrint('Error checking session status: $e');
       // Handle stream-related errors gracefully
       if (e.toString().toLowerCase().contains('stream') ||
           e.toString().toLowerCase().contains('addstream')) {
-        _sessionErrorController.add('Session validation failed. Please try logging in again.');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Session validation failed. Please try logging in again.');
+        }
       } else {
-        _sessionErrorController.add('Session validation error: ${e.toString()}');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Session validation error: ${e.toString()}');
+        }
       }
       await _clearSession();
     }
@@ -153,7 +176,9 @@ class SessionManager {
     if (_lastActivity != null) {
       final timeSinceLastActivity = DateTime.now().difference(_lastActivity!);
       if (timeSinceLastActivity > _activityTimeout) {
-        _sessionErrorController.add('Session expired due to inactivity');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Session expired due to inactivity');
+        }
         _clearSession();
       }
     }
@@ -182,7 +207,9 @@ class SessionManager {
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
         if (responseData['data']?['valid'] == true) {
-          _sessionStatusController.add(true);
+          if (!_sessionStatusController.isClosed) {
+            _sessionStatusController.add(true);
+          }
           return true;
         }
       }
@@ -199,8 +226,12 @@ class SessionManager {
   // Attempt to refresh token
   Future<bool> _attemptTokenRefresh() async {
     try {
+      print('=== ATTEMPTING TOKEN REFRESH ===');
       final refreshToken = await _storage.read(key: _refreshTokenKey);
+      print('Refresh token found: ${refreshToken != null}');
+      
       if (refreshToken == null) {
+        print('No refresh token - clearing session');
         await _clearSession();
         return false;
       }
@@ -209,14 +240,19 @@ class SessionManager {
         Uri.parse('${ApiService.baseUrl}${ApiConstants.refreshToken}'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $refreshToken',
         },
+        body: json.encode({
+          'refreshToken': refreshToken,
+        }),
       ).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('Token refresh request timeout');
         },
       );
+
+      print('Refresh token response status: ${response.statusCode}');
+      print('Refresh token response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
@@ -244,7 +280,9 @@ class SessionManager {
           // Update activity timestamp
           updateActivity();
           
-          _sessionStatusController.add(true);
+          if (!_sessionStatusController.isClosed) {
+            _sessionStatusController.add(true);
+          }
           return true;
         }
       } else if (response.statusCode == 401) {
@@ -262,7 +300,9 @@ class SessionManager {
       // Handle stream-related errors gracefully
       if (e.toString().toLowerCase().contains('stream') ||
           e.toString().toLowerCase().contains('addstream')) {
-        _sessionErrorController.add('Token refresh failed. Please try logging in again.');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Token refresh failed. Please try logging in again.');
+        }
       }
       await _clearSession();
       return false;
@@ -330,7 +370,9 @@ class SessionManager {
       // Handle stream-related errors gracefully
       if (e.toString().toLowerCase().contains('stream') ||
           e.toString().toLowerCase().contains('addstream')) {
-        _sessionErrorController.add('Session validation failed. Please try logging in again.');
+        if (!_sessionErrorController.isClosed) {
+          _sessionErrorController.add('Session validation failed. Please try logging in again.');
+        }
       }
       return false;
     }
@@ -367,13 +409,20 @@ class SessionManager {
 
   // Clear session
   Future<void> _clearSession() async {
+    print('=== CLEARING SESSION ===');
+    print('Clearing token, refresh token, user info, and last activity');
+    
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userInfoKey);
     await _storage.delete(key: _lastActivityKey);
     
     _lastActivity = null;
-    _sessionStatusController.add(false);
+    if (!_sessionStatusController.isClosed) {
+      _sessionStatusController.add(false);
+    }
+    
+    print('Session cleared successfully');
   }
 
   // Public method to clear session
@@ -430,8 +479,9 @@ class SessionManager {
   void dispose() {
     _sessionTimer?.cancel();
     _activityTimer?.cancel();
-    _sessionStatusController.close();
-    _sessionErrorController.close();
+    // Don't close stream controllers for singleton - they might be used elsewhere
+    // _sessionStatusController.close();
+    // _sessionErrorController.close();
   }
 
   // Get session timeout duration

@@ -66,25 +66,25 @@ class User {
       phone: json['phone'],
       points: json['points'] ?? 0,
       referrals: json['referrals'] != null
-          ? List<String>.from(json['referrals'])
+          ? List<String>.from(json['referrals'] as List)
           : null,
       referralCode: json['referralCode'],
       interestedDeals: json['interestedDeals'] != null
-          ? List<String>.from(json['interestedDeals'])
+          ? List<String>.from(json['interestedDeals'] as List)
           : null,
       location: json['location'] != null
-          ? Location.fromJson(json['location'])
+          ? Location.fromJson(json['location'] as Map<String, dynamic>)
           : null,
       serviceProviderInfo: json['serviceProviderInfo'] != null
-          ? ServiceProviderInfo.fromJson(json['serviceProviderInfo'])
+          ? ServiceProviderInfo.fromJson(json['serviceProviderInfo'] as Map<String, dynamic>)
           : null,
       logoPath: json['logoPath'],
       profilePic: json['profilePic'],
       favoriteBranches: json['favoriteBranches'] != null
-          ? List<String>.from(json['favoriteBranches'])
+          ? List<String>.from(json['favoriteBranches'] as List)
           : null,
       favoriteServiceProviders: json['favoriteServiceProviders'] != null
-          ? List<String>.from(json['favoriteServiceProviders'])
+          ? List<String>.from(json['favoriteServiceProviders'] as List)
           : null,
       googleId: json['googleId'],
       googleEmail: json['googleEmail'],

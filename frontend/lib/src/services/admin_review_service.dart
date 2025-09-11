@@ -1,14 +1,9 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/review_model.dart';
-import '../utils/auth_manager.dart';
-import '../utils/secure_storage.dart';
 import 'api_constant.dart';
+import 'api_services.dart';
 
 class AdminReviewService {
   final String baseUrl;
-  final SecureStorage _secureStorage = SecureStorage();
-  final AuthManager _authManager = AuthManager();
 
   AdminReviewService({required this.baseUrl});
 
@@ -21,13 +16,6 @@ class AdminReviewService {
     return 'https://$baseUrl';
   }
 
-  Future<Map<String, String>> _getHeaders() async {
-    final token = await _secureStorage.getToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': token != null ? 'Bearer $token' : '',
-    };
-  }
 
   // Get all reviews for admin with pagination and filtering
   Future<Map<String, dynamic>> getAllReviewsForAdmin({
@@ -56,13 +44,11 @@ class AdminReviewService {
       final uri = Uri.parse('$secureBaseUrl${ApiConstants.getAllReviewsForAdmin}')
           .replace(queryParameters: queryParams);
 
-      final headers = await _getHeaders();
       print('Making review request to: $uri');
-      print('Review headers: $headers');
 
-      final response = await http.get(
-        uri,
-        headers: headers,
+      final response = await ApiService.makeAuthenticatedRequest(
+        'get',
+        uri.toString(),
       );
 
       print('Review response status: ${response.statusCode}');
@@ -74,8 +60,8 @@ class AdminReviewService {
         final reviewsData = responseData['data'];
         final enrichedReviews = reviewsData['reviews'] as List;
         
-        // Convert enriched reviews to Review objects
-        final reviews = enrichedReviews.map((enrichedReview) {
+        // Convert enriched reviews to JSON format for UI consumption
+        final reviewsJson = enrichedReviews.map((enrichedReview) {
           final reviewData = enrichedReview['review'] as Map<String, dynamic>;
           final userData = enrichedReview['user'] as Map<String, dynamic>;
           final serviceProviderData = enrichedReview['serviceProvider'] as Map<String, dynamic>;
@@ -85,14 +71,14 @@ class AdminReviewService {
           reviewJson['userName'] = userData['fullName'];
           reviewJson['serviceProviderName'] = serviceProviderData['fullName'];
           
-          return Review.fromJson(reviewJson);
+          return reviewJson;
         }).toList();
 
         return {
           'success': true,
           'message': responseData['message'],
           'data': {
-            'reviews': reviews,
+            'reviews': reviewsJson,
             'pagination': reviewsData['pagination'],
           },
         };
@@ -128,9 +114,9 @@ class AdminReviewService {
     try {
       final uri = Uri.parse('$secureBaseUrl${ApiConstants.deleteReview}/$reviewId');
 
-      final response = await http.delete(
-        uri,
-        headers: await _getHeaders(),
+      final response = await ApiService.makeAuthenticatedRequest(
+        'delete',
+        uri.toString(),
       );
 
       final responseData = jsonDecode(response.body);

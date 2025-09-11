@@ -24,9 +24,9 @@ class _DashboardPageState extends State<DashboardPage> {
   // Selected time period for analytics
   String _selectedPeriod = 'Month';
 
-  // State variables for active users
-  List<ActiveUser> _activeUsers = [];
-  List<ActiveUser> _filteredUsers = [];
+  // State variables for all users
+  List<User> _allUsers = [];
+  List<User> _filteredUsers = [];
   bool _isLoading = true;
   String _errorMessage = '';
   String _selectedFilter = 'all';
@@ -77,7 +77,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _searchController.addListener(_onSearchChanged);
     _salespersonSearchController.addListener(_onSalespersonSearchChanged);
     _adminService = AdminService(baseUrl: 'https://barrim.online');
-    _fetchActiveUsers();
+    _fetchAllUsers();
     _fetchSalespersons();
     _loadSearchHistory();
   }
@@ -125,19 +125,23 @@ class _DashboardPageState extends State<DashboardPage> {
         item.toLowerCase().contains(query.toLowerCase())));
     
     // Add user data matches
-    suggestions.addAll(_activeUsers
-        .where((user) => 
-            user.fullName.toLowerCase().contains(query.toLowerCase()) ||
-            user.email.toLowerCase().contains(query.toLowerCase()))
-        .map((user) => user.fullName)
-        .take(3));
+    if (_allUsers.isNotEmpty) {
+      suggestions.addAll(_allUsers
+          .where((user) => 
+              user.fullName.toLowerCase().contains(query.toLowerCase()) ||
+              user.email.toLowerCase().contains(query.toLowerCase()))
+          .map((user) => user.fullName)
+          .take(3));
+    }
     
     // Add user type matches
-    suggestions.addAll(_activeUsers
-        .map((user) => user.userType)
-        .where((type) => type.toLowerCase().contains(query.toLowerCase()))
-        .toSet()
-        .take(2));
+    if (_allUsers.isNotEmpty) {
+      suggestions.addAll(_allUsers
+          .map((user) => user.userType)
+          .where((type) => type.toLowerCase().contains(query.toLowerCase()))
+          .toSet()
+          .take(2));
+    }
     
     setState(() {
       _searchSuggestions = suggestions.take(8).toList();
@@ -316,20 +320,26 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Fetch active users from API
-  Future<void> _fetchActiveUsers() async {
+  // Fetch all users from API
+  Future<void> _fetchAllUsers() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
     try {
-      final response = await ApiService.getActiveUsers();
+      final response = await ApiService.getAllUsers();
 
-      if (response.success) {
+      if (response.success && response.data != null) {
         setState(() {
-          _activeUsers = (response.data['users'] as List).cast<ActiveUser>();
-          _filteredUsers = List.from(_activeUsers);
+          final usersList = response.data['users'] as List?;
+          if (usersList != null) {
+            _allUsers = usersList.cast<User>();
+            _filteredUsers = List.from(_allUsers);
+          } else {
+            _allUsers = [];
+            _filteredUsers = [];
+          }
           _isLoading = false;
         });
         _applyFilters(); // Apply current filters to the new data
@@ -341,7 +351,7 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to load active users: ${e.toString()}';
+        _errorMessage = 'Failed to load users: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -509,9 +519,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   // Directly display content based on selected tab
                   Expanded(
                     child: RefreshIndicator(
-                      onRefresh: _selectedTabIndex == 0 ? _fetchActiveUsers : _fetchSalespersons,
+                      onRefresh: _selectedTabIndex == 0 ? _fetchAllUsers : _fetchSalespersons,
                       child: _selectedTabIndex == 0 
-                          ? _buildActiveUsersList()
+                          ? _buildAllUsersList()
                           : _selectedTabIndex == 1 
                               ? _buildSalespersonsList()
                               : _buildGeneralAnalytics(),
@@ -602,7 +612,7 @@ class _DashboardPageState extends State<DashboardPage> {
                      fontSize: 16,
                    ),
                    decoration: InputDecoration(
-                     hintText: 'Search users, emails, or user types...',
+                     hintText: 'Search all users, emails, or user types...',
                      hintStyle: TextStyle(
                        color: Colors.grey.shade500,
                        fontSize: 14,
@@ -748,7 +758,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Method to apply both search and filter
   void _applyFilters() {
-    List<ActiveUser> filtered = List.from(_activeUsers);
+    List<User> filtered = List.from(_allUsers);
     
     // Apply type filter
     if (_selectedFilter != 'all') {
@@ -795,7 +805,7 @@ class _DashboardPageState extends State<DashboardPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildTab('Active Users', 0, _activeUsers.length.toString()),
+          _buildTab('All Users', 0, _allUsers.length.toString()),
           const SizedBox(width: 16),
           _buildTab('Salespersons', 1, _salespersons.length.toString()),
           const SizedBox(width: 16),
@@ -1069,7 +1079,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildActiveUsersList() {
+  Widget _buildAllUsersList() {
     // Show loading indicator if data is being loaded
     if (_isLoading) {
       return const Expanded(
@@ -1095,7 +1105,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _fetchActiveUsers,
+                onPressed: _fetchAllUsers,
                 child: const Text('Retry'),
               ),
             ],
@@ -1106,30 +1116,27 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // Show empty state if no active users
     if (_filteredUsers.isEmpty) {
-      return Expanded(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.people_outline, color: Colors.grey.shade400, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                _activeUsers.isEmpty 
-                    ? 'No active users at the moment'
-                    : 'No users match the selected filter',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, color: Colors.grey.shade400, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _allUsers.isEmpty 
+                  ? 'No users at the moment'
+                  : 'No users match the selected filter',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
         ),
       );
     }
 
-    // Show list of active users
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: ListView.builder(
+    // Show list of all users
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
           itemCount: _filteredUsers.length,
           itemBuilder: (context, index) {
             final user = _filteredUsers[index];
@@ -1227,27 +1234,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: user.isActive 
-                                          ? Colors.green.withOpacity(0.1)
-                                          : Colors.grey.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      user.isActive ? 'Active' : 'Inactive',
-                                      style: TextStyle(
-                                        color: user.isActive ? Colors.green : Colors.grey,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
                             ],
@@ -1262,11 +1248,11 @@ class _DashboardPageState extends State<DashboardPage> {
                     
                     const SizedBox(height: 12),
                     
-                    // Time connected
+                    // User info
                     Row(
                       children: [
                         Icon(
-                          Icons.access_time,
+                          Icons.phone,
                           size: 16,
                           color: Colors.grey.shade600,
                         ),
@@ -1275,19 +1261,12 @@ class _DashboardPageState extends State<DashboardPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Last Activity: ${user.lastActivity != null ? _formatLastActivity(user.lastActivity) : 'Never'}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (user.timeConnected != 'unknown')
+                              if (user.phone != null && user.phone!.isNotEmpty)
                                 Text(
-                                  'Connected: ${user.timeConnected}',
+                                  'Phone: ${user.phone!}',
                                   style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
                                   ),
                                 ),
                             ],
@@ -1312,8 +1291,8 @@ class _DashboardPageState extends State<DashboardPage> {
             );
           },
         ),
-      ),
-    );
+      );
+    
   }
 
   Widget _buildSalespersonsList() {
@@ -1353,30 +1332,27 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // Show empty state if no salespersons
     if (_filteredSalespersons.isEmpty) {
-      return Expanded(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.people_outline, color: Colors.grey.shade400, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                _salespersons.isEmpty 
-                    ? 'No salespersons at the moment'
-                    : 'No salespersons match the selected filter',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, color: Colors.grey.shade400, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _salespersons.isEmpty 
+                  ? 'No salespersons at the moment'
+                  : 'No salespersons match the selected filter',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
         ),
       );
     }
 
     // Show list of salespersons
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: ListView.builder(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
           itemCount: _filteredSalespersons.length,
           itemBuilder: (context, index) {
             final salesperson = _filteredSalespersons[index];
@@ -1562,8 +1538,8 @@ class _DashboardPageState extends State<DashboardPage> {
             );
           },
         ),
-      ),
-    );
+      );
+    
   }
 
   Widget _buildSalespersonSearchBar() {
@@ -1695,20 +1671,16 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildUserDetails(ActiveUser user) {
+  Widget _buildUserDetails(User user) {
     final List<Widget> details = [];
     
-    // Add status information based on user type
-    if (user.status != null) {
-      details.add(_buildDetailRow('Status', user.status!));
+    // Add user information
+    if (user.points > 0) {
+      details.add(_buildDetailRow('Points', user.points.toString()));
     }
     
-    if (user.branchStatus != null) {
-      details.add(_buildDetailRow('Branch Status', user.branchStatus!));
-    }
-    
-    if (user.salespersonEmail != null) {
-      details.add(_buildDetailRow('Salesperson', user.salespersonEmail!));
+    if (user.location != null) {
+      details.add(_buildDetailRow('Location', '${user.location!.city}, ${user.location!.country}'));
     }
     
     if (details.isEmpty) {
@@ -2041,7 +2013,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // Method to show user details dialog
-  void _showUserDetailsDialog(ActiveUser user) {
+  void _showUserDetailsDialog(User user) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -2054,13 +2026,11 @@ class _DashboardPageState extends State<DashboardPage> {
               children: [
                 _buildDetailRow('Email', user.email),
                 _buildDetailRow('User Type', _formatUserType(user.userType)),
-                _buildDetailRow('Status', user.isActive ? 'Active' : 'Inactive'),
-                if (user.status != null) _buildDetailRow('Status', user.status!),
-                if (user.branchStatus != null) _buildDetailRow('Branch Status', user.branchStatus!),
-                if (user.salesManagerEmail != null) _buildDetailRow('Sales Manager', user.salesManagerEmail!),
-                if (user.salespersonEmail != null) _buildDetailRow('Salesperson', user.salespersonEmail!),
-                if (user.lastActivity != null) _buildDetailRow('Last Activity', _formatLastActivity(user.lastActivity)),
-                _buildDetailRow('Time Connected', user.timeConnected),
+                if (user.phone != null && user.phone!.isNotEmpty) _buildDetailRow('Phone', user.phone!),
+                if (user.points > 0) _buildDetailRow('Points', user.points.toString()),
+                if (user.location != null) _buildDetailRow('Location', '${user.location!.city}, ${user.location!.country}'),
+                _buildDetailRow('Created', _formatDate(user.createdAt)),
+                _buildDetailRow('Updated', _formatDate(user.updatedAt)),
               ],
             ),
           ),

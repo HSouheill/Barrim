@@ -20,6 +20,7 @@
         "intl",
         "jwt_decoder",
         "latlong2",
+        "path",
         "shared_preferences"
       ],
       "devDependencies": [
@@ -114,6 +115,11 @@
         "meta",
         "path"
       ]
+    },
+    {
+      "name": "path",
+      "version": "1.9.1",
+      "dependencies": []
     },
     {
       "name": "image_picker",
@@ -254,11 +260,6 @@
         "clock",
         "collection"
       ]
-    },
-    {
-      "name": "path",
-      "version": "1.9.1",
-      "dependencies": []
     },
     {
       "name": "matcher",

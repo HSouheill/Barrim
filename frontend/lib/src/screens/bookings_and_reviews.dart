@@ -39,6 +39,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
   int _totalBookingPages = 1;
   int _totalBookingCount = 0;
   final int _bookingLimit = 20;
+  Map<String, dynamic>? _bookingStatistics;
 
   // Filter states
   String? _selectedServiceProviderId;
@@ -46,6 +47,10 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
   bool? _selectedVerified;
   String? _selectedBookingStatus;
   String? _selectedBookingUserId;
+  String? _selectedBookingDate;
+  String? _selectedIsEmergency;
+  String? _selectedDateRangeStart;
+  String? _selectedDateRangeEnd;
 
   @override
   void initState() {
@@ -191,6 +196,10 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
         serviceProviderId: _selectedServiceProviderId,
         status: _selectedBookingStatus,
         userId: _selectedBookingUserId,
+        date: _selectedBookingDate,
+        isEmergency: _selectedIsEmergency,
+        dateRangeStart: _selectedDateRangeStart,
+        dateRangeEnd: _selectedDateRangeEnd,
       );
 
       if (result['success']) {
@@ -201,6 +210,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
               .toList();
           _totalBookingPages = data['pagination']['totalPages'];
           _totalBookingCount = data['pagination']['totalCount'];
+          _bookingStatistics = data['statistics'];
         });
       } else {
         final message = result['message'];
@@ -415,43 +425,99 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Filter Bookings'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'Service Provider ID',
-                hintText: 'Enter service provider ID',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Service Provider ID',
+                  hintText: 'Enter service provider ID',
+                ),
+                onChanged: (value) => _selectedServiceProviderId = value.isEmpty ? null : value,
               ),
-              onChanged: (value) => _selectedServiceProviderId = value.isEmpty ? null : value,
-            ),
-            SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'User ID',
-                hintText: 'Enter user ID',
+              SizedBox(height: 16),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'User ID',
+                  hintText: 'Enter user ID',
+                ),
+                onChanged: (value) => _selectedBookingUserId = value.isEmpty ? null : value,
               ),
-              onChanged: (value) => _selectedBookingUserId = value.isEmpty ? null : value,
-            ),
-            SizedBox(height: 16),
-            DropdownButtonFormField<String?>(
-              decoration: InputDecoration(labelText: 'Status'),
-              value: _selectedBookingStatus,
-              items: [
-                DropdownMenuItem(value: null, child: Text('All Statuses')),
-                DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                DropdownMenuItem(value: 'confirmed', child: Text('Confirmed')),
-                DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
-              ],
-              onChanged: (value) => _selectedBookingStatus = value,
-            ),
-          ],
+              SizedBox(height: 16),
+              DropdownButtonFormField<String?>(
+                decoration: InputDecoration(labelText: 'Status'),
+                value: _selectedBookingStatus,
+                items: [
+                  DropdownMenuItem(value: null, child: Text('All Statuses')),
+                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                  DropdownMenuItem(value: 'confirmed', child: Text('Confirmed')),
+                  DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                  DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                ],
+                onChanged: (value) => _selectedBookingStatus = value,
+              ),
+              SizedBox(height: 16),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Specific Date (YYYY-MM-DD)',
+                  hintText: 'e.g., 2024-01-15',
+                ),
+                onChanged: (value) => _selectedBookingDate = value.isEmpty ? null : value,
+              ),
+              SizedBox(height: 16),
+              DropdownButtonFormField<String?>(
+                decoration: InputDecoration(labelText: 'Emergency Status'),
+                value: _selectedIsEmergency,
+                items: [
+                  DropdownMenuItem(value: null, child: Text('All Bookings')),
+                  DropdownMenuItem(value: 'true', child: Text('Emergency Only')),
+                  DropdownMenuItem(value: 'false', child: Text('Non-Emergency Only')),
+                ],
+                onChanged: (value) => _selectedIsEmergency = value,
+              ),
+              SizedBox(height: 16),
+              Text('Date Range (Optional)'),
+              SizedBox(height: 8),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Start Date (YYYY-MM-DD)',
+                  hintText: 'e.g., 2024-01-01',
+                ),
+                onChanged: (value) => _selectedDateRangeStart = value.isEmpty ? null : value,
+              ),
+              SizedBox(height: 8),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'End Date (YYYY-MM-DD)',
+                  hintText: 'e.g., 2024-01-31',
+                ),
+                onChanged: (value) => _selectedDateRangeEnd = value.isEmpty ? null : value,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedServiceProviderId = null;
+                _selectedBookingUserId = null;
+                _selectedBookingStatus = null;
+                _selectedBookingDate = null;
+                _selectedIsEmergency = null;
+                _selectedDateRangeStart = null;
+                _selectedDateRangeEnd = null;
+                _currentBookingPage = 1;
+              });
+              Navigator.of(context).pop();
+              _loadBookings();
+            },
+            child: Text('Clear All'),
           ),
           TextButton(
             onPressed: () {
@@ -669,6 +735,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
           
           const SizedBox(height: 16),
           
+          
           // Bookings List
           Expanded(
             child: _isLoadingBookings
@@ -844,11 +911,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
               'Booking Date: ${DateFormat('MMM dd, yyyy').format(booking.bookingDate)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Amount: \$${booking.amount.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 16, color: Colors.green[700]),
-            ),
+           
             if (booking.notes?.isNotEmpty == true) ...[
               const SizedBox(height: 8),
               Text(
@@ -918,6 +981,37 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
           IconButton(
             onPressed: currentPage < totalPages ? () => onPageChanged(currentPage + 1) : null,
             icon: Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: color.withOpacity(0.8),
+            ),
           ),
         ],
       ),
