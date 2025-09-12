@@ -683,90 +683,90 @@ func (vc *VoucherController) PurchaseVoucher(c echo.Context) error {
 
 	ctx := context.Background()
 
-	// Start a transaction
-	session, err := vc.DB.Client().StartSession()
+	// Get the voucher
+	vouchersCollection := vc.DB.Collection("vouchers")
+	var voucher models.Voucher
+	err = vouchersCollection.FindOne(ctx, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to start transaction",
-		})
-	}
-	defer session.EndSession(ctx)
-
-	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
-		// Get the voucher
-		vouchersCollection := vc.DB.Collection("vouchers")
-		var voucher models.Voucher
-		err := vouchersCollection.FindOne(sc, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				return nil, echo.NewHTTPError(http.StatusNotFound, "Voucher not found or inactive")
-			}
-			return nil, err
-		}
-
-		// Get user's current points
-		usersCollection := vc.DB.Collection("users")
-		var user models.User
-		err = usersCollection.FindOne(sc, bson.M{"_id": userID}).Decode(&user)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check if user has enough points
-		if user.Points < voucher.Points {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, "Insufficient points")
-		}
-
-		// Check if user already purchased this voucher
-		purchasesCollection := vc.DB.Collection("voucher_purchases")
-		var existingPurchase models.VoucherPurchase
-		err = purchasesCollection.FindOne(sc, bson.M{
-			"userId":    userID,
-			"voucherId": voucherID,
-		}).Decode(&existingPurchase)
-		if err == nil {
-			return nil, echo.NewHTTPError(http.StatusConflict, "You have already purchased this voucher")
-		}
-
-		// Create purchase record (automatically marked as used)
-		purchase := models.VoucherPurchase{
-			ID:          primitive.NewObjectID(),
-			UserID:      userID,
-			VoucherID:   voucherID,
-			PointsUsed:  voucher.Points,
-			PurchasedAt: time.Now(),
-			IsUsed:      true,       // Automatically mark as used
-			UsedAt:      time.Now(), // Record usage timestamp
-		}
-
-		_, err = purchasesCollection.InsertOne(sc, purchase)
-		if err != nil {
-			return nil, err
-		}
-
-		// Deduct points from user
-		_, err = usersCollection.UpdateByID(sc, userID, bson.M{
-			"$inc": bson.M{"points": -voucher.Points},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return purchase, nil
-	})
-
-	if err != nil {
-		if httpErr, ok := err.(*echo.HTTPError); ok {
-			return c.JSON(httpErr.Code, models.Response{
-				Status:  httpErr.Code,
-				Message: httpErr.Message.(string),
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Voucher not found or inactive",
 			})
 		}
-		log.Printf("Error purchasing voucher: %v", err)
+		log.Printf("Error retrieving voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to purchase voucher",
+			Message: "Failed to retrieve voucher",
+			Data:    err.Error(),
+		})
+	}
+
+	// Get user's current points
+	usersCollection := vc.DB.Collection("users")
+	var user models.User
+	err = usersCollection.FindOne(ctx, bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		log.Printf("Error retrieving user: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve user information",
+			Data:    err.Error(),
+		})
+	}
+
+	// Check if user has enough points
+	if user.Points < voucher.Points {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Insufficient points",
+		})
+	}
+
+	// Check if user already purchased this voucher
+	purchasesCollection := vc.DB.Collection("voucher_purchases")
+	var existingPurchase models.VoucherPurchase
+	err = purchasesCollection.FindOne(ctx, bson.M{
+		"userId":    userID,
+		"voucherId": voucherID,
+	}).Decode(&existingPurchase)
+	if err == nil {
+		return c.JSON(http.StatusConflict, models.Response{
+			Status:  http.StatusConflict,
+			Message: "You have already purchased this voucher",
+		})
+	}
+
+	// Create purchase record (automatically marked as used)
+	purchase := models.VoucherPurchase{
+		ID:          primitive.NewObjectID(),
+		UserID:      userID,
+		VoucherID:   voucherID,
+		PointsUsed:  voucher.Points,
+		PurchasedAt: time.Now(),
+		IsUsed:      true,       // Automatically mark as used
+		UsedAt:      time.Now(), // Record usage timestamp
+	}
+
+	_, err = purchasesCollection.InsertOne(ctx, purchase)
+	if err != nil {
+		log.Printf("Error creating purchase record: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create purchase record",
+			Data:    err.Error(),
+		})
+	}
+
+	// Deduct points from user
+	_, err = usersCollection.UpdateByID(ctx, userID, bson.M{
+		"$inc": bson.M{"points": -voucher.Points},
+	})
+	if err != nil {
+		log.Printf("Error deducting points: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to deduct points",
 			Data:    err.Error(),
 		})
 	}
