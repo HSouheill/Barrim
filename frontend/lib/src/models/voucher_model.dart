@@ -9,6 +9,9 @@ class Voucher {
   final String createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? targetUserId;
+  final String? targetUserType;
+  final bool? isGlobal;
 
   Voucher({
     required this.id,
@@ -20,6 +23,9 @@ class Voucher {
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.targetUserId,
+    this.targetUserType,
+    this.isGlobal,
   });
 
   factory Voucher.fromJson(Map<String, dynamic> json) {
@@ -37,6 +43,9 @@ class Voucher {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
+      targetUserId: json['targetUserId'],
+      targetUserType: json['targetUserType'],
+      isGlobal: json['isGlobal'],
     );
   }
 
@@ -51,6 +60,9 @@ class Voucher {
       'createdBy': createdBy,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'targetUserId': targetUserId,
+      'targetUserType': targetUserType,
+      'isGlobal': isGlobal,
     };
   }
 
@@ -64,6 +76,9 @@ class Voucher {
     String? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? targetUserId,
+    String? targetUserType,
+    bool? isGlobal,
   }) {
     return Voucher(
       id: id ?? this.id,
@@ -75,6 +90,9 @@ class Voucher {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      targetUserId: targetUserId ?? this.targetUserId,
+      targetUserType: targetUserType ?? this.targetUserType,
+      isGlobal: isGlobal ?? this.isGlobal,
     );
   }
 }
@@ -124,6 +142,42 @@ class VoucherResponse {
               .map((v) => Voucher.fromJson(v))
               .toList()
           : [],
+    );
+  }
+}
+
+class UserTypeVoucherRequest {
+  final String name;
+  final String description;
+  final int points;
+  final String imageUrl;
+  final String targetUserType;
+
+  UserTypeVoucherRequest({
+    required this.name,
+    required this.description,
+    required this.points,
+    required this.imageUrl,
+    required this.targetUserType,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'description': description,
+      'points': points,
+      'image': imageUrl,
+      'targetUserType': targetUserType,
+    };
+  }
+
+  factory UserTypeVoucherRequest.fromJson(Map<String, dynamic> json) {
+    return UserTypeVoucherRequest(
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      points: json['points'] ?? 0,
+      imageUrl: json['image'] ?? '',
+      targetUserType: json['targetUserType'] ?? '',
     );
   }
 }

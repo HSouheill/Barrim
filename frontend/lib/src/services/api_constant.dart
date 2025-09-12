@@ -113,7 +113,7 @@ class ApiConstants {
   
   // Voucher endpoints
   static const String createVoucher = '/api/admin/vouchers';
-  static const String createVoucherJSON = '/api/admin/vouchers/json';
+  static const String createUserTypeVoucher = '/api/admin/vouchers/user-type';
   static const String getAllVouchers = '/api/admin/vouchers';
   static const String updateVoucher = '/api/admin/vouchers';
   static const String deleteVoucher = '/api/admin/vouchers';

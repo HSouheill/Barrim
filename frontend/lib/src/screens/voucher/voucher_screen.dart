@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import '../../components/sidebar.dart';
+import '../../components/header.dart';
 import '../../services/api_services.dart';
 import '../../services/api_constant.dart';
 import '../../models/voucher_model.dart';
@@ -15,51 +17,62 @@ class VoucherScreen extends StatefulWidget {
   State<VoucherScreen> createState() => _VoucherScreenState();
 }
 
-class _VoucherScreenState extends State<VoucherScreen> {
+class _VoucherScreenState extends State<VoucherScreen> with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   // State variables
   List<Voucher> _vouchers = [];
   bool _isLoading = false;
   String _errorMessage = '';
-  String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
+  int _refreshCounter = 0;
   
-  // Form controllers for creating new voucher
+  // Sidebar state
+  bool _isSidebarOpen = false;
+  
+  // Tab state
+  int _selectedTabIndex = 0;
+  late TabController _tabController;
+  final List<String> _tabLabels = ['All', 'Users', 'Companies', 'Service Providers', 'Wholesalers'];
+  final List<String> _tabUserTypes = ['all', 'user', 'company', 'serviceProvider', 'wholesaler'];
+  
+  // Form controllers for voucher creation
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _pointsController = TextEditingController();
-  
+  String _targetUserType = 'user';
   bool _isCreatingVoucher = false;
-  bool _showCreateForm = false;
-  bool _isEditingVoucher = false;
-  String? _editingVoucherId;
+  
+  // Image picker variables
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
   bool _isProcessingImage = false;
+  
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: _tabLabels.length, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {
+          _selectedTabIndex = _tabController.index;
+        });
+      }
+    });
     _fetchVouchers();
-    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _tabController.dispose();
     _nameController.dispose();
     _descriptionController.dispose();
     _pointsController.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() {
-    setState(() {
-      _searchQuery = _searchController.text;
-    });
-  }
+
 
   Future<void> _fetchVouchers() async {
     setState(() {
@@ -81,8 +94,12 @@ class _VoucherScreenState extends State<VoucherScreen> {
           
           // Debug: Print voucher image URLs
           for (var voucher in _vouchers) {
+            print('=== VOUCHER DEBUG ===');
             print('Voucher: ${voucher.name}');
             print('Raw image field: ${voucher.image}');
+            print('Constructed URL: ${_getImageUrl(voucher.image)}');
+            print('Target User Type: ${voucher.targetUserType}');
+            print('=== END VOUCHER DEBUG ===');
           }
           
         } else {
@@ -107,54 +124,35 @@ class _VoucherScreenState extends State<VoucherScreen> {
 
   Future<void> _pickImage() async {
     try {
-      setState(() {
-        _isProcessingImage = true;
-      });
-
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: kIsWeb ? 800 : 1024, // Smaller for web to reduce processing time
-        maxHeight: kIsWeb ? 800 : 1024,
-        imageQuality: kIsWeb ? 70 : 80, // Lower quality for web
+        maxWidth: kIsWeb ? 800 : 1200,
+        maxHeight: kIsWeb ? 600 : 1200,
+        imageQuality: kIsWeb ? 85 : 90,
       );
-      
+
       if (image != null) {
+        setState(() {
+          _isProcessingImage = true;
+        });
+
         if (kIsWeb) {
-          // For web platform, read bytes asynchronously
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Processing image...'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-          
+          // For web, read as bytes
           final Uint8List bytes = await image.readAsBytes();
           setState(() {
             _selectedImageBytes = bytes;
-            _selectedImage = null; // Clear file reference for web
+            _selectedImage = null;
             _isProcessingImage = false;
           });
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image processed successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
         } else {
-          // For mobile platforms, use File
+          // For mobile, use File
           setState(() {
             _selectedImage = File(image.path);
-            _selectedImageBytes = null; // Clear bytes for mobile
+            _selectedImageBytes = null;
             _isProcessingImage = false;
           });
         }
-      } else {
-        setState(() {
-          _isProcessingImage = false;
-        });
       }
     } catch (e) {
       setState(() {
@@ -169,12 +167,240 @@ class _VoucherScreenState extends State<VoucherScreen> {
     }
   }
 
+  void _showCreateVoucherDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Create New Voucher'),
+            content: SizedBox(
+              width: 400,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Voucher Name',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter voucher name';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 3,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter description';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _pointsController,
+                      decoration: const InputDecoration(
+                        labelText: 'Points',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter points';
+                        }
+                        if (int.tryParse(value) == null) {
+                          return 'Please enter a valid number';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // Image upload section
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Voucher Image',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                if (_selectedImage != null || _selectedImageBytes != null)
+                                  Container(
+                                    height: 120,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey[300]!),
+                                    ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: kIsWeb
+                              ? Image.memory(
+                                  _selectedImageBytes!,
+                                  fit: BoxFit.cover,
+                                  key: ValueKey('preview_$_refreshCounter'),
+                                )
+                              : Image.file(
+                                  _selectedImage!,
+                                  fit: BoxFit.cover,
+                                  key: ValueKey('preview_$_refreshCounter'),
+                                ),
+                        ),
+                                  )
+                                else
+                                  Container(
+                                    height: 120,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.grey[300]!,
+                                        style: BorderStyle.solid,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.image_outlined,
+                                          size: 40,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'No image selected',
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: _isProcessingImage ? null : _pickImage,
+                                        icon: _isProcessingImage
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : const Icon(Icons.upload, size: 18),
+                                        label: Text(_isProcessingImage ? 'Processing...' : 'Select Image'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF5B87EA),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                        ),
+                                      ),
+                                    ),
+                                    if (_selectedImage != null || _selectedImageBytes != null) ...[
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            _selectedImage = null;
+                                            _selectedImageBytes = null;
+                                          });
+                                        },
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        tooltip: 'Remove Image',
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _targetUserType,
+                      decoration: const InputDecoration(
+                        labelText: 'Target User Type',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'user', child: Text('User')),
+                        DropdownMenuItem(value: 'company', child: Text('Company')),
+                        DropdownMenuItem(value: 'serviceProvider', child: Text('Service Provider')),
+                        DropdownMenuItem(value: 'wholesaler', child: Text('Wholesaler')),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          _targetUserType = value ?? 'user';
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: _isCreatingVoucher ? null : () {
+                  Navigator.of(context).pop();
+                  _clearForm();
+                },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: _isCreatingVoucher ? null : () => _createVoucherFromDialog(setDialogState),
+                child: _isCreatingVoucher
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Create Voucher'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-  Future<void> _createVoucher() async {
+  Future<void> _createVoucherFromDialog(StateSetter setDialogState) async {
     if (!_formKey.currentState!.validate()) return;
     
     // Check if image is selected
-    if ((kIsWeb && _selectedImageBytes == null) || (!kIsWeb && _selectedImage == null)) {
+    if (_selectedImage == null && _selectedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select an image for the voucher'),
@@ -184,36 +410,54 @@ class _VoucherScreenState extends State<VoucherScreen> {
       return;
     }
 
-    setState(() {
+    setDialogState(() {
       _isCreatingVoucher = true;
     });
 
     try {
-      final response = kIsWeb 
-        ? await ApiService.createVoucherWeb(
-            name: _nameController.text.trim(),
-            description: _descriptionController.text.trim(),
-            points: int.parse(_pointsController.text),
-            imageBytes: _selectedImageBytes!,
-            filename: 'voucher_image.jpg',
-          )
-        : await ApiService.createVoucher(
-            name: _nameController.text.trim(),
-            description: _descriptionController.text.trim(),
-            points: int.parse(_pointsController.text),
-            imageFile: _selectedImage!,
-          );
+      ApiResponse response;
+      
+      if (kIsWeb && _selectedImageBytes != null) {
+        // For web, use createUserTypeVoucherWithImage with bytes
+        response = await ApiService.createUserTypeVoucherWithImage(
+          name: _nameController.text.trim(),
+          description: _descriptionController.text.trim(),
+          points: int.parse(_pointsController.text.trim()),
+          imageBytes: _selectedImageBytes!,
+          targetUserType: _targetUserType,
+        );
+      } else if (!kIsWeb && _selectedImage != null) {
+        // For mobile, read file as bytes and use createUserTypeVoucherWithImage
+        final bytes = await _selectedImage!.readAsBytes();
+        response = await ApiService.createUserTypeVoucherWithImage(
+          name: _nameController.text.trim(),
+          description: _descriptionController.text.trim(),
+          points: int.parse(_pointsController.text.trim()),
+          imageBytes: bytes,
+          targetUserType: _targetUserType,
+        );
+      } else {
+        throw Exception('No image selected');
+      }
 
       if (response.success) {
-        // Clear form
+        print('=== VOUCHER CREATION SUCCESS ===');
+        print('Response data: ${response.data}');
+        print('Response message: ${response.message}');
+        
+        Navigator.of(context).pop();
         _clearForm();
         
-        // Hide form and refresh vouchers
+        // Add a longer delay to ensure the server has processed the image
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        // Force refresh by incrementing counter
         setState(() {
-          _showCreateForm = false;
+          _refreshCounter++;
         });
         
-        _fetchVouchers();
+        // Refresh the voucher list
+        await _fetchVouchers();
         
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -230,107 +474,14 @@ class _VoucherScreenState extends State<VoucherScreen> {
         );
       }
     } catch (e) {
-      String errorMessage = 'Error creating voucher: $e';
-      if (e.toString().contains('timeout')) {
-        errorMessage = 'Upload timeout: Please try again with a smaller image or check your internet connection.';
-      } else if (e.toString().contains('network')) {
-        errorMessage = 'Network error: Please check your internet connection and try again.';
-      }
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(errorMessage),
+          content: Text('Error creating voucher: $e'),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
         ),
       );
     } finally {
-      setState(() {
-        _isCreatingVoucher = false;
-      });
-    }
-  }
-
-  Future<void> _updateVoucher() async {
-    if (!_formKey.currentState!.validate()) return;
-    
-    // Check if image is selected for update
-    if ((kIsWeb && _selectedImageBytes == null) || (!kIsWeb && _selectedImage == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select an image for the voucher'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isCreatingVoucher = true;
-    });
-
-    try {
-      final response = kIsWeb 
-        ? await ApiService.updateVoucherWithImageWeb(
-            voucherId: _editingVoucherId!,
-            name: _nameController.text.trim(),
-            description: _descriptionController.text.trim(),
-            points: int.parse(_pointsController.text),
-            imageBytes: _selectedImageBytes!,
-            filename: 'voucher_image.jpg',
-          )
-        : await ApiService.updateVoucherWithImage(
-            voucherId: _editingVoucherId!,
-            name: _nameController.text.trim(),
-            description: _descriptionController.text.trim(),
-            points: int.parse(_pointsController.text),
-            imageFile: _selectedImage!,
-          );
-
-      if (response.success) {
-        // Clear form
-        _clearForm();
-        
-        // Hide form and refresh vouchers
-        setState(() {
-          _showCreateForm = false;
-          _isEditingVoucher = false;
-          _editingVoucherId = null;
-        });
-        
-        _fetchVouchers();
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Voucher updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      String errorMessage = 'Error updating voucher: $e';
-      if (e.toString().contains('timeout')) {
-        errorMessage = 'Upload timeout: Please try again with a smaller image or check your internet connection.';
-      } else if (e.toString().contains('network')) {
-        errorMessage = 'Network error: Please check your internet connection and try again.';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-    } finally {
-      setState(() {
+      setDialogState(() {
         _isCreatingVoucher = false;
       });
     }
@@ -340,22 +491,17 @@ class _VoucherScreenState extends State<VoucherScreen> {
     _nameController.clear();
     _descriptionController.clear();
     _pointsController.clear();
+    _targetUserType = 'user';
     _selectedImage = null;
     _selectedImageBytes = null;
   }
 
-  void _editVoucher(Voucher voucher) {
-    setState(() {
-      _isEditingVoucher = true;
-      _editingVoucherId = voucher.id;
-      _nameController.text = voucher.name;
-      _descriptionController.text = voucher.description;
-      _pointsController.text = voucher.points.toString();
-      _selectedImage = null; // Reset image selection for editing
-      _selectedImageBytes = null; // Reset image bytes for editing
-      _showCreateForm = true;
-    });
-  }
+
+
+
+
+
+
 
   Future<void> _deleteVoucher(Voucher voucher) async {
     final confirmed = await showDialog<bool>(
@@ -438,29 +584,60 @@ class _VoucherScreenState extends State<VoucherScreen> {
     }
   }
 
-  List<Voucher> get _filteredVouchers {
-    if (_searchQuery.isEmpty) return _vouchers;
-    
-    return _vouchers.where((voucher) {
-      return voucher.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-             voucher.description.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-  }
 
   String _getImageUrl(String? imagePath) {
-    if (imagePath == null || imagePath.isEmpty) return '';
+    print('=== Image URL Debug ===');
+    print('Raw imagePath: $imagePath');
+    print('ApiConstants.baseUrl: ${ApiConstants.baseUrl}');
+    
+    if (imagePath == null || imagePath.isEmpty) {
+      print('Image path is null or empty');
+      return '';
+    }
     
     if (imagePath.startsWith('http')) {
-      return imagePath;
+      print('Image path is already a full URL: $imagePath');
+      // Add cache busting parameter with refresh counter
+      final separator = imagePath.contains('?') ? '&' : '?';
+      return '$imagePath${separator}t=${DateTime.now().millisecondsSinceEpoch}&r=$_refreshCounter';
     }
     
     // Ensure path starts with /
     String path = imagePath.startsWith('/') ? imagePath : '/$imagePath';
+    print('Processed path: $path');
     
-    // Construct the full URL
-    final fullUrl = '${ApiConstants.baseUrl}$path';
-    print('Image URL constructed: $fullUrl');
+    // Construct the full URL with cache busting and refresh counter
+    final fullUrl = '${ApiConstants.baseUrl}$path?t=${DateTime.now().millisecondsSinceEpoch}&r=$_refreshCounter';
+    print('Final constructed URL: $fullUrl');
+    print('=== End Image URL Debug ===');
     return fullUrl;
+  }
+
+  String _formatTargetUserType(String userType) {
+    switch (userType.toLowerCase()) {
+      case 'user':
+        return 'For Users';
+      case 'company':
+        return 'For Companies';
+      case 'serviceprovider':
+        return 'For Service Providers';
+      case 'wholesaler':
+        return 'For Wholesalers';
+      default:
+        return 'For ${userType[0].toUpperCase()}${userType.substring(1)}';
+    }
+  }
+
+  List<Voucher> _getFilteredVouchers() {
+    if (_selectedTabIndex == 0) {
+      // Show all vouchers
+      return _vouchers;
+    }
+    
+    final selectedUserType = _tabUserTypes[_selectedTabIndex];
+    return _vouchers.where((voucher) {
+      return voucher.targetUserType == selectedUserType;
+    }).toList();
   }
 
   @override
@@ -468,333 +645,162 @@ class _VoucherScreenState extends State<VoucherScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: const Text('Voucher Management'),
-        backgroundColor: const Color(0xFF5B87EA),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        ),
-      ),
-      drawer: Sidebar(
-        parentContext: context,
-        onCollapse: () {
-          if (_scaffoldKey.currentState!.isDrawerOpen) {
-            _scaffoldKey.currentState!.closeDrawer();
-          }
-        },
-      ),
-      body: Row(
+      body: Column(
         children: [
-          // Main content
+          // Header Component
+          Container(
+            padding: const EdgeInsets.all(20),
+            child: HeaderComponent(
+              logoPath: 'assets/logo/logo.png',
+              scaffoldKey: _scaffoldKey,
+              onMenuPressed: () {
+                setState(() {
+                  _isSidebarOpen = !_isSidebarOpen;
+                });
+              },
+            ),
+          ),
+          
+          // Main content area with overlay sidebar
           Expanded(
-            child: Column(
+            child: Stack(
               children: [
-                // Header section
+                // Main content area (full width)
                 Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
                     children: [
-                      // Search bar
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.1),
-                                spreadRadius: 1,
-                                blurRadius: 5,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: const InputDecoration(
-                              hintText: 'Search vouchers...',
-                              prefixIcon: Icon(Icons.search, color: Colors.grey),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
+                      // Page title
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: const Text(
+                          'Voucher Management',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0D1752),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      
                       // Create voucher button
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _showCreateForm = !_showCreateForm;
-                          });
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create Voucher'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2079C2),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
+                      Container(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _showCreateVoucherDialog,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Create Voucher'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF5B87EA),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Tabs
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: TabBar(
+                          controller: _tabController,
+                          isScrollable: true,
+                          indicator: BoxDecoration(
+                            color: const Color(0xFF5B87EA),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                          labelColor: Colors.white,
+                          unselectedLabelColor: Colors.grey[600],
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
                           ),
+                          unselectedLabelStyle: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                          tabAlignment: TabAlignment.start,
+                          tabs: _tabLabels.map((label) {
+                            return Tab(
+                              text: label,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                
+                      // Vouchers list
+                      Expanded(
+                        child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                          child: _buildVouchersList(),
                         ),
                       ),
                     ],
                   ),
                 ),
                 
-                // Create voucher form
-                if (_showCreateForm)
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
+                // Right Sidebar (overlay)
+                if (_isSidebarOpen)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 280,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(-2, 0),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _isEditingVoucher ? 'Edit Voucher' : 'Create New Voucher',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0D1752),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _nameController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Voucher Name',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.card_giftcard),
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.trim().isEmpty) {
-                                      return 'Please enter voucher name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _pointsController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Points Required',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.stars),
-                                  ),
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                  ],
-                                  validator: (value) {
-                                    if (value == null || value.trim().isEmpty) {
-                                      return 'Please enter points';
-                                    }
-                                    if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                                      return 'Please enter valid points';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _descriptionController,
-                            decoration: const InputDecoration(
-                              labelText: 'Description',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.description),
-                            ),
-                            maxLines: 3,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Please enter description';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          // Image picker section
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[300]!),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.all(12.0),
-                                  child: Text(
-                                    'Voucher Image *',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                if ((kIsWeb && _selectedImageBytes != null) || (!kIsWeb && _selectedImage != null)) ...[
-                                  Container(
-                                    margin: const EdgeInsets.all(12),
-                                    height: 200,
-                                    width: double.infinity,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey[300]!),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: kIsWeb 
-                                        ? Image.memory(
-                                            _selectedImageBytes!,
-                                            fit: BoxFit.cover,
-                                          )
-                                        : Image.file(
-                                            _selectedImage!,
-                                            fit: BoxFit.cover,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                                Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          onPressed: _isProcessingImage ? null : _pickImage,
-                                          icon: _isProcessingImage 
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                  strokeWidth: 2,
-                                                ),
-                                              )
-                                            : const Icon(Icons.photo_library),
-                                          label: Text(
-                                            _isProcessingImage 
-                                              ? 'Processing...'
-                                              : (kIsWeb && _selectedImageBytes == null) || (!kIsWeb && _selectedImage == null) 
-                                                  ? 'Select Image' 
-                                                  : 'Change Image'
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF2079C2),
-                                            foregroundColor: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      if ((kIsWeb && _selectedImageBytes != null) || (!kIsWeb && _selectedImage != null)) ...[
-                                        const SizedBox(width: 12),
-                                        IconButton(
-                                          onPressed: () {
+                        child: Sidebar(
+                          parentContext: context,
+                          onCollapse: () {
                                             setState(() {
-                                              _selectedImage = null;
-                                              _selectedImageBytes = null;
+                              _isSidebarOpen = false;
                                             });
                                           },
-                                          icon: const Icon(Icons.delete, color: Colors.red),
-                                          tooltip: 'Remove Image',
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _showCreateForm = false;
-                                    _isEditingVoucher = false;
-                                    _editingVoucherId = null;
-                                  });
-                                  _clearForm();
-                                },
-                                child: const Text('Cancel'),
-                              ),
-                              const SizedBox(width: 16),
-                              ElevatedButton(
-                                onPressed: _isCreatingVoucher ? null : (_isEditingVoucher ? _updateVoucher : _createVoucher),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2079C2),
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: _isCreatingVoucher
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : Text(_isEditingVoucher ? 'Update Voucher' : 'Create Voucher'),
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                
-                // Vouchers list
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: _buildVouchersList(),
-                  ),
                 ),
               ],
             ),
@@ -802,9 +808,12 @@ class _VoucherScreenState extends State<VoucherScreen> {
         ],
       ),
     );
+    
   }
 
   Widget _buildVouchersList() {
+    final filteredVouchers = _getFilteredVouchers();
+    
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(
@@ -858,7 +867,7 @@ class _VoucherScreenState extends State<VoucherScreen> {
       );
     }
 
-    if (_filteredVouchers.isEmpty) {
+    if (filteredVouchers.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -870,12 +879,12 @@ class _VoucherScreenState extends State<VoucherScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              _searchQuery.isEmpty
-                  ? 'No vouchers found. Create your first voucher!'
-                  : 'No vouchers match your search.',
-              style: TextStyle(
+              _selectedTabIndex == 0 
+                ? 'No vouchers found. Create your first voucher!'
+                : 'No vouchers found for ${_tabLabels[_selectedTabIndex]}.',
+              style: const TextStyle(
                 fontSize: 16,
-                color: Colors.grey[600],
+                color: Colors.grey,
               ),
               textAlign: TextAlign.center,
             ),
@@ -898,9 +907,11 @@ class _VoucherScreenState extends State<VoucherScreen> {
           ),
           child: Row(
             children: [
-              const Text(
-                'Vouchers',
-                style: TextStyle(
+              Text(
+                _selectedTabIndex == 0 
+                  ? 'All Vouchers'
+                  : '${_tabLabels[_selectedTabIndex]} Vouchers',
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF0D1752),
@@ -908,7 +919,7 @@ class _VoucherScreenState extends State<VoucherScreen> {
               ),
               const Spacer(),
               Text(
-                '${_filteredVouchers.length} voucher${_filteredVouchers.length == 1 ? '' : 's'}',
+                '${filteredVouchers.length} voucher${filteredVouchers.length == 1 ? '' : 's'}',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[600],
@@ -920,9 +931,9 @@ class _VoucherScreenState extends State<VoucherScreen> {
         // List
         Expanded(
           child: ListView.builder(
-            itemCount: _filteredVouchers.length,
+            itemCount: filteredVouchers.length,
             itemBuilder: (context, index) {
-              final voucher = _filteredVouchers[index];
+              final voucher = filteredVouchers[index];
               return _buildVoucherCard(voucher);
             },
           ),
@@ -933,6 +944,7 @@ class _VoucherScreenState extends State<VoucherScreen> {
 
   Widget _buildVoucherCard(Voucher voucher) {
     return Container(
+      key: ValueKey('${voucher.id}_$_refreshCounter'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -966,6 +978,7 @@ class _VoucherScreenState extends State<VoucherScreen> {
                         child: Image.network(
                           _getImageUrl(voucher.image),
                           fit: BoxFit.cover,
+                          key: ValueKey('${voucher.id}_image_$_refreshCounter'),
                           loadingBuilder: (context, child, loadingProgress) {
                             if (loadingProgress == null) return child;
                             return const Center(
@@ -976,8 +989,12 @@ class _VoucherScreenState extends State<VoucherScreen> {
                             );
                           },
                           errorBuilder: (context, error, stackTrace) {
-                            print('Image loading failed for ${voucher.name}: $error');
-                            print('Failed URL: ${_getImageUrl(voucher.image)}');
+                            print('=== Image Loading Error ===');
+                            print('Voucher: ${voucher.name}');
+                            print('Raw image field: ${voucher.image}');
+                            print('Constructed URL: ${_getImageUrl(voucher.image)}');
+                            print('Error: $error');
+                            print('Stack trace: $stackTrace');
                             
                             // Try alternative URL if the original contains '/vouchers/'
                             if (voucher.image != null && voucher.image!.contains('/vouchers/')) {
@@ -988,7 +1005,9 @@ class _VoucherScreenState extends State<VoucherScreen> {
                               return Image.network(
                                 alternativeUrl,
                                 fit: BoxFit.cover,
+                                key: ValueKey('${voucher.id}_alt_image_$_refreshCounter'),
                                 errorBuilder: (context, error, stackTrace) {
+                                  print('Alternative URL also failed: $error');
                                   return const Icon(
                                     Icons.card_giftcard,
                                     color: Color(0xFF2079C2),
@@ -998,6 +1017,7 @@ class _VoucherScreenState extends State<VoucherScreen> {
                               );
                             }
                             
+                            print('=== End Image Loading Error ===');
                             return const Icon(
                               Icons.card_giftcard,
                               color: Color(0xFF2079C2),
@@ -1037,6 +1057,41 @@ class _VoucherScreenState extends State<VoucherScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
+                    // Target user type
+                    if (voucher.targetUserType != null && voucher.targetUserType!.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF5B87EA).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF5B87EA).withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person,
+                              size: 14,
+                              color: const Color(0xFF5B87EA),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTargetUserType(voucher.targetUserType!),
+                              style: const TextStyle(
+                                color: Color(0xFF5B87EA),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Row(
                       children: [
                         Container(
@@ -1078,14 +1133,6 @@ class _VoucherScreenState extends State<VoucherScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              IconButton(
-                onPressed: () => _editVoucher(voucher),
-                icon: const Icon(Icons.edit, size: 20),
-                tooltip: 'Edit Voucher',
-                style: IconButton.styleFrom(
-                  foregroundColor: const Color(0xFF2079C2),
-                ),
-              ),
               IconButton(
                 onPressed: () => _toggleVoucherStatus(voucher),
                 icon: Icon(

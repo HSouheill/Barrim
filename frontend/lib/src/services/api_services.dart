@@ -1366,65 +1366,6 @@ class ApiService {
   }
 
   // Voucher management methods
-  static Future<ApiResponse> createVoucherJSON({
-    required String name,
-    required String description,
-    required int points,
-    required String imageUrl,
-  }) async {
-    try {
-      final voucherRequest = {
-        'name': name,
-        'description': description,
-        'image': imageUrl,
-        'points': points,
-      };
-
-      final response = await _makeRequest(
-        'POST',
-        ApiConstants.createVoucherJSON,
-        body: jsonEncode(voucherRequest),
-      );
-
-      if (response.statusCode == 201) {
-        final responseData = jsonDecode(response.body);
-        return ApiResponse(
-          success: true,
-          message: responseData['message'] ?? 'Voucher created successfully',
-          data: responseData['data'],
-        );
-      } else {
-        // Check if response is HTML (error page)
-        if (response.body.trim().startsWith('<!DOCTYPE') || 
-            response.body.trim().startsWith('<html')) {
-          return ApiResponse(
-            success: false,
-            message: 'Voucher service is currently unavailable. Please try again later.',
-          );
-        }
-        
-        try {
-          final responseData = jsonDecode(response.body);
-          return ApiResponse(
-            success: false,
-            message: responseData['message'] ?? 'Failed to create voucher',
-            data: responseData['data'],
-          );
-        } catch (jsonError) {
-          return ApiResponse(
-            success: false,
-            message: 'Server error: ${response.statusCode} - ${response.body}',
-          );
-        }
-      }
-    } catch (e) {
-      print('Error creating voucher: $e');
-      return ApiResponse(
-        success: false,
-        message: 'Failed to create voucher. Please try again.',
-      );
-    }
-  }
 
   static Future<ApiResponse> createVoucher({
     required String name,
@@ -1806,7 +1747,7 @@ class ApiService {
     try {
       final response = await _makeRequest(
         'DELETE',
-        '${ApiConstants.deleteVoucher}/$voucherId',
+        '${baseUrl}${ApiConstants.deleteVoucher}/$voucherId',
       );
 
       if (response.statusCode == 200) {
@@ -1844,7 +1785,7 @@ class ApiService {
     try {
       final response = await _makeRequest(
         'PUT',
-        '${ApiConstants.toggleVoucherStatus}/$voucherId/toggle-status',
+        '${baseUrl}${ApiConstants.toggleVoucherStatus}/$voucherId/toggle-status',
       );
 
       if (response.statusCode == 200) {
@@ -1874,6 +1815,133 @@ class ApiService {
       return ApiResponse(
         success: false,
         message: 'Operation failed. Please try again.',
+      );
+    }
+  }
+
+  // Create user-type voucher with image upload
+  static Future<ApiResponse> createUserTypeVoucherWithImage({
+    required String name,
+    required String description,
+    required int points,
+    required Uint8List imageBytes,
+    required String targetUserType,
+    String? filename,
+  }) async {
+    try {
+      // Get auth headers
+      final headers = await getAuthHeaders();
+      
+      // Create multipart request
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createUserTypeVoucher}');
+      final request = http.MultipartRequest('POST', uri);
+      
+      // Add headers
+      request.headers.addAll(headers);
+      
+      // Add form fields
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['points'] = points.toString();
+      request.fields['targetUserType'] = targetUserType;
+      
+      // Add image file
+      final multipartFile = http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: filename ?? 'voucher_image.jpg',
+      );
+      request.files.add(multipartFile);
+      
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'Voucher created successfully',
+          data: responseData['data'],
+        );
+      } else {
+        final errorData = json.decode(response.body);
+        return ApiResponse(
+          success: false,
+          message: errorData['message'] ?? 'Failed to create voucher',
+        );
+      }
+    } catch (e) {
+      return ApiResponse(
+        success: false,
+        message: 'Error creating voucher: $e',
+      );
+    }
+  }
+
+  // Create user-type voucher
+  static Future<ApiResponse> createUserTypeVoucher({
+    required String name,
+    required String description,
+    required int points,
+    required String imageUrl,
+    required String targetUserType,
+  }) async {
+    try {
+      final token = await SessionManager().getToken();
+      if (token == null) {
+        return ApiResponse(
+          success: false,
+          message: 'Authentication required',
+        );
+      }
+
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.createUserTypeVoucher}');
+      
+      final requestBody = {
+        'name': name,
+        'description': description,
+        'points': points,
+        'image': imageUrl,
+        'targetUserType': targetUserType,
+      };
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      if (response.statusCode == 201) {
+        final responseData = jsonDecode(response.body);
+        return ApiResponse(
+          success: true,
+          message: responseData['message'] ?? 'User-type voucher created successfully',
+          data: responseData['data'],
+        );
+      } else {
+        try {
+          final responseData = jsonDecode(response.body);
+          return ApiResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to create user-type voucher',
+            data: responseData['data'],
+          );
+        } catch (jsonError) {
+          return ApiResponse(
+            success: false,
+            message: 'Server error: ${response.statusCode} - ${response.body}',
+          );
+        }
+      }
+    } catch (e) {
+      print('Error creating user-type voucher: $e');
+      return ApiResponse(
+        success: false,
+        message: 'Failed to create user-type voucher. Please try again.',
       );
     }
   }
