@@ -974,10 +974,10 @@ func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 
 	// Convert points to int
 	points, err := strconv.Atoi(pointsStr)
-	if err != nil || points <= 0 {
+	if err != nil || points < 0 {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Points must be a positive integer",
+			Message: "Points must be a non-negative integer (0 or greater)",
 		})
 	}
 

@@ -45,7 +45,7 @@ type VoucherRequest struct {
 type UserTypeVoucherRequest struct {
 	Name           string `form:"name" validate:"required"`
 	Description    string `form:"description" validate:"required"`
-	Points         int    `form:"points" validate:"required,min=1"`
+	Points         int    `form:"points" validate:"required,min=0"`
 	TargetUserType string `form:"targetUserType" validate:"required,oneof=user company serviceProvider wholesaler"`
 	// Image is handled as multipart file upload, not form field
 }
