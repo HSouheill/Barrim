@@ -643,7 +643,7 @@ func (vc *VoucherController) GetAvailableVouchers(c echo.Context) error {
 	})
 }
 
-// PurchaseVoucher allows a user to purchase a voucher with points
+// PurchaseVoucher allows a user to purchase a voucher with points and automatically marks it as used
 func (vc *VoucherController) PurchaseVoucher(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
 	userID, err := primitive.ObjectIDFromHex(claims.UserID)
@@ -729,14 +729,15 @@ func (vc *VoucherController) PurchaseVoucher(c echo.Context) error {
 			return nil, echo.NewHTTPError(http.StatusConflict, "You have already purchased this voucher")
 		}
 
-		// Create purchase record
+		// Create purchase record (automatically marked as used)
 		purchase := models.VoucherPurchase{
 			ID:          primitive.NewObjectID(),
 			UserID:      userID,
 			VoucherID:   voucherID,
 			PointsUsed:  voucher.Points,
 			PurchasedAt: time.Now(),
-			IsUsed:      false,
+			IsUsed:      true,       // Automatically mark as used
+			UsedAt:      time.Now(), // Record usage timestamp
 		}
 
 		_, err = purchasesCollection.InsertOne(sc, purchase)
@@ -772,7 +773,7 @@ func (vc *VoucherController) PurchaseVoucher(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
-		Message: "Voucher purchased successfully",
+		Message: "Voucher purchased and used successfully",
 	})
 }
 
