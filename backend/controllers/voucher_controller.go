@@ -915,7 +915,7 @@ func (vc *VoucherController) UseVoucher(c echo.Context) error {
 	})
 }
 
-// CreateUserTypeVoucher creates a voucher for a specific user type (Admin only)
+// CreateUserTypeVoucher creates a voucher for a specific user type with image upload (Admin only)
 func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 	// Check if user is admin
 	claims := middleware.GetUserFromToken(c)
@@ -926,22 +926,57 @@ func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 		})
 	}
 
-	var req models.UserTypeVoucherRequest
-	if err := c.Bind(&req); err != nil {
+	// Parse multipart form
+	if err := c.Request().ParseMultipartForm(10 << 20); err != nil { // 10MB max
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid request body",
+			Message: "Failed to parse form data",
 			Data:    err.Error(),
 		})
 	}
 
-	// Validate request
-	validate := validator.New()
-	if err := validate.Struct(req); err != nil {
+	form, err := c.MultipartForm()
+	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Validation failed",
+			Message: "Failed to get multipart form",
 			Data:    err.Error(),
+		})
+	}
+
+	// Get form data
+	name := c.FormValue("name")
+	description := c.FormValue("description")
+	pointsStr := c.FormValue("points")
+	targetUserType := c.FormValue("targetUserType")
+
+	if name == "" || description == "" || pointsStr == "" || targetUserType == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Name, description, points, and targetUserType are required",
+		})
+	}
+
+	// Validate targetUserType
+	validUserTypes := map[string]bool{
+		"user":            true,
+		"company":         true,
+		"serviceProvider": true,
+		"wholesaler":      true,
+	}
+	if !validUserTypes[targetUserType] {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid targetUserType. Must be one of: user, company, serviceProvider, wholesaler",
+		})
+	}
+
+	// Convert points to int
+	points, err := strconv.Atoi(pointsStr)
+	if err != nil || points <= 0 {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Points must be a positive integer",
 		})
 	}
 
@@ -954,36 +989,36 @@ func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 		})
 	}
 
-	// Download and save image if URL is provided
+	// Handle image upload
 	var imagePath string
-	if req.Image != "" {
-		imagePath, err = vc.downloadAndSaveImage(req.Image)
+	if files := form.File["image"]; len(files) > 0 {
+		imagePath, err = vc.saveVoucherImage(files[0])
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Failed to download and save image",
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save image",
 				Data:    err.Error(),
 			})
 		}
 	} else {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Image URL is required",
+			Message: "Image is required",
 		})
 	}
 
 	// Create voucher
 	voucher := models.Voucher{
 		ID:             primitive.NewObjectID(),
-		Name:           req.Name,
-		Description:    req.Description,
+		Name:           name,
+		Description:    description,
 		Image:          imagePath,
-		Points:         req.Points,
+		Points:         points,
 		IsActive:       true,
 		CreatedBy:      createdByID,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
-		TargetUserType: req.TargetUserType,
+		TargetUserType: targetUserType,
 	}
 
 	// Insert into database
@@ -991,7 +1026,7 @@ func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 	ctx := context.Background()
 	_, err = vouchersCollection.InsertOne(ctx, voucher)
 	if err != nil {
-		// If database insert fails, delete the downloaded image
+		// If database insert fails, delete the uploaded image
 		if imagePath != "" {
 			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
 		}

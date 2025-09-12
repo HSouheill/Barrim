@@ -41,12 +41,13 @@ type VoucherRequest struct {
 }
 
 // UserTypeVoucherRequest represents the request body for creating user-type specific vouchers
+// Note: This is now used for multipart form data, not JSON
 type UserTypeVoucherRequest struct {
-	Name           string `json:"name" validate:"required"`
-	Description    string `json:"description" validate:"required"`
-	Image          string `json:"image" validate:"required"`
-	Points         int    `json:"points" validate:"required,min=1"`
-	TargetUserType string `json:"targetUserType" validate:"required,oneof=user company serviceProvider wholesaler"`
+	Name           string `form:"name" validate:"required"`
+	Description    string `form:"description" validate:"required"`
+	Points         int    `form:"points" validate:"required,min=1"`
+	TargetUserType string `form:"targetUserType" validate:"required,oneof=user company serviceProvider wholesaler"`
+	// Image is handled as multipart file upload, not form field
 }
 
 // VoucherPurchaseRequest represents the request body for purchasing a voucher
