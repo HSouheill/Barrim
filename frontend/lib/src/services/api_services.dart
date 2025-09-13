@@ -1239,8 +1239,8 @@ class ApiService {
     }
   }
 
-  // Fetch all entities (users) for admin
-  static Future<List<Map<String, dynamic>>> getAllEntities() async {
+  // Fetch all entities (users, companies, wholesalers, service providers) for admin
+  static Future<ApiResponse> getAllEntities() async {
     try {
       final headers = await getAuthHeaders();
       final response = await _makeRequest(
@@ -1248,16 +1248,23 @@ class ApiService {
         '${baseUrl}${ApiConstants.getAllEntities}',
         headers: headers,
       );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        // Assuming the response is { data: [ ...entities ] }
-        return List<Map<String, dynamic>>.from(data['data'] ?? []);
-      } else {
-        throw Exception('Failed to fetch entities: \\${response.statusCode}');
+
+      final result = _handleResponse(response);
+
+      if (result.success && result.data != null) {
+        return ApiResponse(
+          success: true,
+          message: result.message,
+          data: result.data,
+        );
       }
+
+      return result;
     } catch (e) {
-      print('Error fetching all entities: $e');
-      rethrow;
+      return ApiResponse(
+        success: false,
+        message: 'Failed to load entities: ${e.toString()}',
+      );
     }
   }
 

@@ -12,6 +12,7 @@ class AddCategoryPopup extends StatefulWidget {
   final String? initialName;
   final String? initialColor;
   final String? initialImageUrl;
+  final List<String>? initialSubcategories;
 
   const AddCategoryPopup({
     Key? key,
@@ -19,6 +20,7 @@ class AddCategoryPopup extends StatefulWidget {
     this.initialName,
     this.initialColor,
     this.initialImageUrl,
+    this.initialSubcategories,
   }) : super(key: key);
 
   @override
@@ -117,6 +119,11 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
     _colorController.text = widget.initialColor ?? '#1708FF';
     _selectedColor = widget.initialColor ?? '#1708FF';
     _selectedImageUrl = widget.initialImageUrl;
+    
+    // Initialize subcategories controller with existing subcategories
+    if (widget.initialSubcategories != null && widget.initialSubcategories!.isNotEmpty) {
+      _subcategoriesController.text = widget.initialSubcategories!.join(', ');
+    }
     
     // Initialize recent colors with some defaults
     _recentColors = [

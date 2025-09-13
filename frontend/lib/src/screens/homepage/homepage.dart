@@ -8,6 +8,8 @@ import '../../services/api_services.dart';
 import '../../services/admin_service.dart';
 import '../../models/user_model.dart';
 import '../../models/salesperson_model.dart';
+import '../../models/company_model.dart' as company_model;
+import '../../models/pending_request_models.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -24,9 +26,16 @@ class _DashboardPageState extends State<DashboardPage> {
   // Selected time period for analytics
   String _selectedPeriod = 'Month';
 
-  // State variables for all users
+  // State variables for all entities
   List<User> _allUsers = [];
   List<User> _filteredUsers = [];
+  List<company_model.Company> _allCompanies = [];
+  List<company_model.Company> _filteredCompanies = [];
+  List<Wholesaler> _allWholesalers = [];
+  List<Wholesaler> _filteredWholesalers = [];
+  List<User> _allServiceProviders = [];
+  List<User> _filteredServiceProviders = [];
+  
   bool _isLoading = true;
   String _errorMessage = '';
   String _selectedFilter = 'all';
@@ -77,7 +86,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _searchController.addListener(_onSearchChanged);
     _salespersonSearchController.addListener(_onSalespersonSearchChanged);
     _adminService = AdminService(baseUrl: 'https://barrim.online');
-    _fetchAllUsers();
+    _fetchAllEntities();
     _fetchSalespersons();
     _loadSearchHistory();
   }
@@ -320,26 +329,58 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Fetch all users from API
-  Future<void> _fetchAllUsers() async {
+  // Fetch all entities from API
+  Future<void> _fetchAllEntities() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
     try {
-      final response = await ApiService.getAllUsers();
+      final response = await ApiService.getAllEntities();
 
       if (response.success && response.data != null) {
         setState(() {
+          // Parse users
           final usersList = response.data['users'] as List?;
           if (usersList != null) {
-            _allUsers = usersList.cast<User>();
+            _allUsers = usersList.map((json) => User.fromJson(json)).toList();
             _filteredUsers = List.from(_allUsers);
           } else {
             _allUsers = [];
             _filteredUsers = [];
           }
+
+          // Parse companies
+          final companiesList = response.data['companies'] as List?;
+          if (companiesList != null) {
+            _allCompanies = companiesList.map((json) => company_model.Company.fromJson(json)).toList();
+            _filteredCompanies = List.from(_allCompanies);
+          } else {
+            _allCompanies = [];
+            _filteredCompanies = [];
+          }
+
+          // Parse wholesalers
+          final wholesalersList = response.data['wholesalers'] as List?;
+          if (wholesalersList != null) {
+            _allWholesalers = wholesalersList.map((json) => Wholesaler.fromJson(json)).toList();
+            _filteredWholesalers = List.from(_allWholesalers);
+          } else {
+            _allWholesalers = [];
+            _filteredWholesalers = [];
+          }
+
+          // Parse service providers
+          final serviceProvidersList = response.data['serviceProviders'] as List?;
+          if (serviceProvidersList != null) {
+            _allServiceProviders = serviceProvidersList.map((json) => User.fromJson(json)).toList();
+            _filteredServiceProviders = List.from(_allServiceProviders);
+          } else {
+            _allServiceProviders = [];
+            _filteredServiceProviders = [];
+          }
+
           _isLoading = false;
         });
         _applyFilters(); // Apply current filters to the new data
@@ -351,7 +392,7 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to load users: ${e.toString()}';
+        _errorMessage = 'Failed to load entities: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -509,22 +550,37 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                   ),
-                  _selectedTabIndex == 0 ? _buildSearchBar() : _selectedTabIndex == 1 ? _buildSalespersonSearchBar() : const SizedBox.shrink(),
+                  // Add tabs
+                  _buildTabs(),
                   
-                  // Search statistics
+                  // Show search bar based on selected tab
+                  _selectedTabIndex == 0 ? _buildSearchBar() : 
+                  _selectedTabIndex == 1 ? _buildCompanySearchBar() :
+                  _selectedTabIndex == 2 ? _buildWholesalerSearchBar() :
+                  _selectedTabIndex == 3 ? _buildServiceProviderSearchBar() :
+                  _selectedTabIndex == 4 ? _buildSalespersonSearchBar() : 
+                  const SizedBox.shrink(),
                   
-                  // Add summary section
-                  // _buildSummarySection(),
-                  // Add filter section
-                  // Directly display content based on selected tab
+                  // Display content based on selected tab
                   Expanded(
                     child: RefreshIndicator(
-                      onRefresh: _selectedTabIndex == 0 ? _fetchAllUsers : _fetchSalespersons,
+                      onRefresh: _selectedTabIndex == 0 ? _fetchAllEntities : 
+                                _selectedTabIndex == 1 ? _fetchAllEntities :
+                                _selectedTabIndex == 2 ? _fetchAllEntities :
+                                _selectedTabIndex == 3 ? _fetchAllEntities :
+                                _selectedTabIndex == 4 ? _fetchSalespersons :
+                                _fetchAllEntities,
                       child: _selectedTabIndex == 0 
                           ? _buildAllUsersList()
                           : _selectedTabIndex == 1 
-                              ? _buildSalespersonsList()
-                              : _buildGeneralAnalytics(),
+                              ? _buildCompaniesList()
+                              : _selectedTabIndex == 2
+                                  ? _buildWholesalersList()
+                                  : _selectedTabIndex == 3
+                                      ? _buildServiceProvidersList()
+                                      : _selectedTabIndex == 4
+                                          ? _buildSalespersonsList()
+                                          : _buildGeneralAnalytics(),
                     ),
                   ),
                 ],
@@ -758,6 +814,26 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Method to apply both search and filter
   void _applyFilters() {
+    // Apply filters based on selected tab
+    switch (_selectedTabIndex) {
+      case 0: // Users
+        _applyUserFilters();
+        break;
+      case 1: // Companies
+        _applyCompanyFilters();
+        break;
+      case 2: // Wholesalers
+        _applyWholesalerFilters();
+        break;
+      case 3: // Service Providers
+        _applyServiceProviderFilters();
+        break;
+      default:
+        _applyUserFilters();
+    }
+  }
+
+  void _applyUserFilters() {
     List<User> filtered = List.from(_allUsers);
     
     // Apply type filter
@@ -800,17 +876,134 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
+  void _applyCompanyFilters() {
+    List<company_model.Company> filtered = List.from(_allCompanies);
+    
+    // Apply search filter based on selected category
+    if (_searchQuery.isNotEmpty) {
+      switch (_selectedSearchCategory) {
+        case 'name':
+          filtered = filtered
+              .where((company) => company.businessName.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'email':
+          filtered = filtered
+              .where((company) => company.email.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'category':
+          filtered = filtered
+              .where((company) => company.category.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        default: // 'all'
+          filtered = filtered
+              .where((company) => 
+                  company.businessName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  company.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  company.category.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+      }
+    }
+    
+    setState(() {
+      _filteredCompanies = filtered;
+    });
+  }
+
+  void _applyWholesalerFilters() {
+    List<Wholesaler> filtered = List.from(_allWholesalers);
+    
+    // Apply search filter based on selected category
+    if (_searchQuery.isNotEmpty) {
+      switch (_selectedSearchCategory) {
+        case 'name':
+          filtered = filtered
+              .where((wholesaler) => wholesaler.businessName.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'email':
+          filtered = filtered
+              .where((wholesaler) => wholesaler.email.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'category':
+          filtered = filtered
+              .where((wholesaler) => wholesaler.category.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        default: // 'all'
+          filtered = filtered
+              .where((wholesaler) => 
+                  wholesaler.businessName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  wholesaler.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  wholesaler.category.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+      }
+    }
+    
+    setState(() {
+      _filteredWholesalers = filtered;
+    });
+  }
+
+  void _applyServiceProviderFilters() {
+    List<User> filtered = List.from(_allServiceProviders);
+    
+    // Apply search filter based on selected category
+    if (_searchQuery.isNotEmpty) {
+      switch (_selectedSearchCategory) {
+        case 'name':
+          filtered = filtered
+              .where((sp) => sp.fullName.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'email':
+          filtered = filtered
+              .where((sp) => sp.email.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'service':
+          filtered = filtered
+              .where((sp) => sp.serviceProviderInfo?.serviceType.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false)
+              .toList();
+          break;
+        default: // 'all'
+          filtered = filtered
+              .where((sp) => 
+                  sp.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  sp.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  (sp.serviceProviderInfo?.serviceType.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false))
+              .toList();
+      }
+    }
+    
+    setState(() {
+      _filteredServiceProviders = filtered;
+    });
+  }
+
   Widget _buildTabs() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          _buildTab('All Users', 0, _allUsers.length.toString()),
-          const SizedBox(width: 16),
-          _buildTab('Salespersons', 1, _salespersons.length.toString()),
-          const SizedBox(width: 16),
-          _buildTab('General Analytics', 2, null),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _buildTab('Users', 0, _allUsers.length.toString()),
+            const SizedBox(width: 12),
+            _buildTab('Companies', 1, _allCompanies.length.toString()),
+            const SizedBox(width: 12),
+            _buildTab('Wholesalers', 2, _allWholesalers.length.toString()),
+            const SizedBox(width: 12),
+            _buildTab('Service Providers', 3, _allServiceProviders.length.toString()),
+            const SizedBox(width: 12),
+            _buildTab('Salespersons', 4, _salespersons.length.toString()),
+            const SizedBox(width: 12),
+            _buildTab('Analytics', 5, null),
+          ],
+        ),
       ),
     );
   }
@@ -1105,7 +1298,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _fetchAllUsers,
+                onPressed: _fetchAllEntities,
                 child: const Text('Retry'),
               ),
             ],
@@ -1542,6 +1735,222 @@ class _DashboardPageState extends State<DashboardPage> {
     
   }
 
+  Widget _buildCompanySearchBar() {
+    return Column(
+      children: [
+        // Search categories
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildSearchCategoryChip('all', 'All', Icons.search),
+                _buildSearchCategoryChip('name', 'Name', Icons.business),
+                _buildSearchCategoryChip('email', 'Email', Icons.email),
+                _buildSearchCategoryChip('category', 'Category', Icons.category),
+              ],
+            ),
+          ),
+        ),
+        
+        // Enhanced search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(
+                color: Color(0xFF0D1C4B),
+                fontSize: 16,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search companies by name, email, or category...',
+                hintStyle: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: Colors.grey.shade400,
+                  size: 24,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                        onPressed: _clearSearch,
+                        tooltip: 'Clear search',
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWholesalerSearchBar() {
+    return Column(
+      children: [
+        // Search categories
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildSearchCategoryChip('all', 'All', Icons.search),
+                _buildSearchCategoryChip('name', 'Name', Icons.store),
+                _buildSearchCategoryChip('email', 'Email', Icons.email),
+                _buildSearchCategoryChip('category', 'Category', Icons.category),
+              ],
+            ),
+          ),
+        ),
+        
+        // Enhanced search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(
+                color: Color(0xFF0D1C4B),
+                fontSize: 16,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search wholesalers by name, email, or category...',
+                hintStyle: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: Colors.grey.shade400,
+                  size: 24,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                        onPressed: _clearSearch,
+                        tooltip: 'Clear search',
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServiceProviderSearchBar() {
+    return Column(
+      children: [
+        // Search categories
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildSearchCategoryChip('all', 'All', Icons.search),
+                _buildSearchCategoryChip('name', 'Name', Icons.build),
+                _buildSearchCategoryChip('email', 'Email', Icons.email),
+                _buildSearchCategoryChip('service', 'Service', Icons.category),
+              ],
+            ),
+          ),
+        ),
+        
+        // Enhanced search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(
+                color: Color(0xFF0D1C4B),
+                fontSize: 16,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search service providers by name, email, or service type...',
+                hintStyle: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: Colors.grey.shade400,
+                  size: 24,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                        onPressed: _clearSearch,
+                        tooltip: 'Clear search',
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSalespersonSearchBar() {
     return Column(
       children: [
@@ -1646,6 +2055,681 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildSearchCategoryChip(String key, String label, IconData icon) {
+    final isSelected = _selectedSearchCategory == key;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: () => _onSearchCategoryChanged(key),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF0D1C4B) : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF0D1C4B) : Colors.grey.shade300,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompaniesList() {
+    // Show loading indicator if data is being loaded
+    if (_isLoading) {
+      return const Expanded(
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Show error message if loading failed
+    if (_errorMessage.isNotEmpty) {
+      return Expanded(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage,
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _fetchAllEntities,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show empty state if no companies
+    if (_filteredCompanies.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.business_outlined, color: Colors.grey.shade400, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _allCompanies.isEmpty 
+                  ? 'No companies at the moment'
+                  : 'No companies match the selected filter',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show list of companies
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
+          itemCount: _filteredCompanies.length,
+          itemBuilder: (context, index) {
+            final company = _filteredCompanies[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Company header with avatar and status
+                    Row(
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.business,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                company.businessName,
+                                style: const TextStyle(
+                                  color: Color(0xFF0D1C4B),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                company.email,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      company.category,
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Company details section
+                    _buildCompanyDetails(company),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Company info
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Phone: ${company.contactInfo.phone}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        // Add expand/collapse button for more details
+                        IconButton(
+                          icon: Icon(
+                            Icons.more_vert,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _showCompanyDetailsDialog(company);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    
+  }
+
+  Widget _buildWholesalersList() {
+    // Show loading indicator if data is being loaded
+    if (_isLoading) {
+      return const Expanded(
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Show error message if loading failed
+    if (_errorMessage.isNotEmpty) {
+      return Expanded(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage,
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _fetchAllEntities,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show empty state if no wholesalers
+    if (_filteredWholesalers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.store_outlined, color: Colors.grey.shade400, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _allWholesalers.isEmpty 
+                  ? 'No wholesalers at the moment'
+                  : 'No wholesalers match the selected filter',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show list of wholesalers
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
+          itemCount: _filteredWholesalers.length,
+          itemBuilder: (context, index) {
+            final wholesaler = _filteredWholesalers[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Wholesaler header with avatar and status
+                    Row(
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.store,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                wholesaler.businessName,
+                                style: const TextStyle(
+                                  color: Color(0xFF0D1C4B),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                wholesaler.email,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      wholesaler.category,
+                                      style: TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Wholesaler details section
+                    _buildWholesalerDetails(wholesaler),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Wholesaler info
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Phone: ${wholesaler.contactInfo.phone}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        // Add expand/collapse button for more details
+                        IconButton(
+                          icon: Icon(
+                            Icons.more_vert,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _showWholesalerDetailsDialog(wholesaler);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    
+  }
+
+  Widget _buildServiceProvidersList() {
+    // Show loading indicator if data is being loaded
+    if (_isLoading) {
+      return const Expanded(
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Show error message if loading failed
+    if (_errorMessage.isNotEmpty) {
+      return Expanded(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage,
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _fetchAllEntities,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show empty state if no service providers
+    if (_filteredServiceProviders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.build_outlined, color: Colors.grey.shade400, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _allServiceProviders.isEmpty 
+                  ? 'No service providers at the moment'
+                  : 'No service providers match the selected filter',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show list of service providers
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
+          itemCount: _filteredServiceProviders.length,
+          itemBuilder: (context, index) {
+            final serviceProvider = _filteredServiceProviders[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Service provider header with avatar and status
+                    Row(
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.purple,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.build,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: serviceProvider.isActive ? Colors.green : Colors.grey,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                serviceProvider.fullName,
+                                style: const TextStyle(
+                                  color: Color(0xFF0D1C4B),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                serviceProvider.email,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      serviceProvider.serviceProviderInfo?.serviceType ?? 'Service Provider',
+                                      style: TextStyle(
+                                        color: Colors.purple,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Service provider details section
+                    _buildServiceProviderDetails(serviceProvider),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Service provider info
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (serviceProvider.phone != null && serviceProvider.phone!.isNotEmpty)
+                                Text(
+                                  'Phone: ${serviceProvider.phone!}',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        // Add expand/collapse button for more details
+                        IconButton(
+                          icon: Icon(
+                            Icons.more_vert,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _showServiceProviderDetailsDialog(serviceProvider);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    
+  }
+
   Widget _buildSalespersonDetails(Salesperson salesperson) {
     final List<Widget> details = [];
     
@@ -1660,6 +2744,73 @@ class _DashboardPageState extends State<DashboardPage> {
     
     if (salesperson.createdAt != null) {
       details.add(_buildDetailRow('Created', _formatDate(salesperson.createdAt!)));
+    }
+    
+    if (details.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Column(
+      children: details,
+    );
+  }
+
+  Widget _buildCompanyDetails(company_model.Company company) {
+    final List<Widget> details = [];
+    
+    // Add company information
+    if (company.points > 0) {
+      details.add(_buildDetailRow('Points', company.points.toString()));
+    }
+    
+    if (company.balance > 0) {
+      details.add(_buildDetailRow('Balance', '\$${company.balance.toStringAsFixed(2)}'));
+    }
+    
+    if (company.subCategory != null && company.subCategory!.isNotEmpty) {
+      details.add(_buildDetailRow('Sub Category', company.subCategory!));
+    }
+    
+    if (details.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Column(
+      children: details,
+    );
+  }
+
+  Widget _buildWholesalerDetails(Wholesaler wholesaler) {
+    final List<Widget> details = [];
+    
+    // Add wholesaler information
+    if (wholesaler.subCategory != null && wholesaler.subCategory!.isNotEmpty) {
+      details.add(_buildDetailRow('Sub Category', wholesaler.subCategory!));
+    }
+    
+    if (details.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Column(
+      children: details,
+    );
+  }
+
+  Widget _buildServiceProviderDetails(User serviceProvider) {
+    final List<Widget> details = [];
+    
+    // Add service provider information
+    if (serviceProvider.points > 0) {
+      details.add(_buildDetailRow('Points', serviceProvider.points.toString()));
+    }
+    
+    if (serviceProvider.serviceProviderInfo?.rating != null && serviceProvider.serviceProviderInfo!.rating > 0) {
+      details.add(_buildDetailRow('Rating', '${serviceProvider.serviceProviderInfo!.rating}/5'));
+    }
+    
+    if (serviceProvider.serviceProviderInfo?.description != null && serviceProvider.serviceProviderInfo!.description!.isNotEmpty) {
+      details.add(_buildDetailRow('Description', serviceProvider.serviceProviderInfo!.description!));
     }
     
     if (details.isEmpty) {
@@ -2100,6 +3251,124 @@ class _DashboardPageState extends State<DashboardPage> {
                   _buildDetailRow('Created', _formatDate(salesperson.createdAt!)),
                 if (salesperson.updatedAt != null)
                   _buildDetailRow('Updated', _formatDate(salesperson.updatedAt!)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method to show company details dialog
+  void _showCompanyDetailsDialog(company_model.Company company) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(company.businessName),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDetailRow('Email', company.email),
+                _buildDetailRow('Full Name', company.fullname),
+                _buildDetailRow('Category', company.category),
+                if (company.subCategory != null && company.subCategory!.isNotEmpty)
+                  _buildDetailRow('Sub Category', company.subCategory!),
+                _buildDetailRow('Phone', company.contactInfo.phone),
+                if (company.contactInfo.whatsApp != null && company.contactInfo.whatsApp!.isNotEmpty)
+                  _buildDetailRow('WhatsApp', company.contactInfo.whatsApp!),
+                if (company.contactInfo.website != null && company.contactInfo.website!.isNotEmpty)
+                  _buildDetailRow('Website', company.contactInfo.website!),
+                _buildDetailRow('Points', company.points.toString()),
+                _buildDetailRow('Balance', '\$${company.balance.toStringAsFixed(2)}'),
+                _buildDetailRow('Created', _formatDate(company.createdAt)),
+                _buildDetailRow('Updated', _formatDate(company.updatedAt)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method to show wholesaler details dialog
+  void _showWholesalerDetailsDialog(Wholesaler wholesaler) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(wholesaler.businessName),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDetailRow('Email', wholesaler.email),
+                _buildDetailRow('Full Name', wholesaler.fullname),
+                _buildDetailRow('Category', wholesaler.category),
+                if (wholesaler.subCategory != null && wholesaler.subCategory!.isNotEmpty)
+                  _buildDetailRow('Sub Category', wholesaler.subCategory!),
+                _buildDetailRow('Phone', wholesaler.contactInfo.phone),
+                if (wholesaler.contactInfo.whatsApp != null && wholesaler.contactInfo.whatsApp!.isNotEmpty)
+                  _buildDetailRow('WhatsApp', wholesaler.contactInfo.whatsApp!),
+                if (wholesaler.contactInfo.website != null && wholesaler.contactInfo.website!.isNotEmpty)
+                  _buildDetailRow('Website', wholesaler.contactInfo.website!),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method to show service provider details dialog
+  void _showServiceProviderDetailsDialog(User serviceProvider) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(serviceProvider.fullName),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDetailRow('Email', serviceProvider.email),
+                _buildDetailRow('User Type', _formatUserType(serviceProvider.userType)),
+                if (serviceProvider.phone != null && serviceProvider.phone!.isNotEmpty)
+                  _buildDetailRow('Phone', serviceProvider.phone!),
+                if (serviceProvider.serviceProviderInfo != null) ...[
+                  _buildDetailRow('Service Type', serviceProvider.serviceProviderInfo!.serviceType),
+                  if (serviceProvider.serviceProviderInfo!.customServiceType != null && serviceProvider.serviceProviderInfo!.customServiceType!.isNotEmpty)
+                    _buildDetailRow('Custom Service Type', serviceProvider.serviceProviderInfo!.customServiceType!),
+                  if (serviceProvider.serviceProviderInfo!.description != null && serviceProvider.serviceProviderInfo!.description!.isNotEmpty)
+                    _buildDetailRow('Description', serviceProvider.serviceProviderInfo!.description!),
+                  _buildDetailRow('Rating', '${serviceProvider.serviceProviderInfo!.rating}/5'),
+                  _buildDetailRow('Points', serviceProvider.serviceProviderInfo!.points.toString()),
+                ],
+                _buildDetailRow('Points', serviceProvider.points.toString()),
+                _buildDetailRow('Created', _formatDate(serviceProvider.createdAt)),
+                _buildDetailRow('Updated', _formatDate(serviceProvider.updatedAt)),
               ],
             ),
           ),

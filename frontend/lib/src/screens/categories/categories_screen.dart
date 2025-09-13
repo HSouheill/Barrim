@@ -130,6 +130,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         initialName: category.name,
         initialColor: category.backgroundColor,
         initialImageUrl: category.logo,
+        initialSubcategories: category.subcategories,
       ),
     ).then((result) {
       if (result != null) {

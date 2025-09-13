@@ -173,7 +173,7 @@ class SubscriptionApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.put(
-        Uri.parse('$baseUrl/api/subscriptions/admin/plans/$planId'),
+        Uri.parse('$baseUrl/api/admin/subscription-plans/$planId'),
         headers: headers,
         body: json.encode(request.toJson()),
       );
@@ -196,7 +196,7 @@ class SubscriptionApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.delete(
-        Uri.parse('$baseUrl/api/subscriptions/admin/plans/$planId'),
+        Uri.parse('$baseUrl/api/admin/subscription-plans/$planId'),
         headers: headers,
       );
 

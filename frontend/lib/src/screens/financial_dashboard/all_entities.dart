@@ -32,11 +32,41 @@ class _AllEntitiesPageState extends State<AllEntitiesPage> {
     });
     try {
       final result = await ApiService.getAllEntities();
-      setState(() {
-        entities = result;
-        filteredEntities = result;
-        isLoading = false;
-      });
+      if (result.success && result.data != null) {
+        // Flatten all entities from different collections into a single list
+        final List<Map<String, dynamic>> allEntities = [];
+        
+        // Add users
+        if (result.data['users'] is List) {
+          allEntities.addAll((result.data['users'] as List).cast<Map<String, dynamic>>());
+        }
+        
+        // Add companies
+        if (result.data['companies'] is List) {
+          allEntities.addAll((result.data['companies'] as List).cast<Map<String, dynamic>>());
+        }
+        
+        // Add wholesalers
+        if (result.data['wholesalers'] is List) {
+          allEntities.addAll((result.data['wholesalers'] as List).cast<Map<String, dynamic>>());
+        }
+        
+        // Add service providers
+        if (result.data['serviceProviders'] is List) {
+          allEntities.addAll((result.data['serviceProviders'] as List).cast<Map<String, dynamic>>());
+        }
+        
+        setState(() {
+          entities = allEntities;
+          filteredEntities = allEntities;
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          errorMessage = result.message;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         errorMessage = e.toString();
