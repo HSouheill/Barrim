@@ -2917,7 +2917,8 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// Users
-	userCursor, err := db.Collection("users").Find(ctx, bson.M{})
+	userOpts := options.Find().SetProjection(bson.M{"password": 0})
+	userCursor, err := db.Collection("users").Find(ctx, bson.M{}, userOpts)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.Response{Status: http.StatusInternalServerError, Message: "Failed to fetch users"})
 	}
@@ -2926,7 +2927,6 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, models.Response{Status: http.StatusInternalServerError, Message: "Failed to decode users"})
 	}
 	for i := range users {
-		users[i].Password = ""
 		users[i].OTPInfo = nil
 		users[i].ResetPasswordToken = ""
 	}
@@ -2942,7 +2942,8 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 	}
 
 	// Service Providers (from users collection with userType)
-	spCursor, err := db.Collection("users").Find(ctx, bson.M{"userType": "serviceProvider"})
+	spOpts := options.Find().SetProjection(bson.M{"password": 0})
+	spCursor, err := db.Collection("users").Find(ctx, bson.M{"userType": "serviceProvider"}, spOpts)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.Response{Status: http.StatusInternalServerError, Message: "Failed to fetch service providers"})
 	}
@@ -2951,7 +2952,6 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, models.Response{Status: http.StatusInternalServerError, Message: "Failed to decode service providers"})
 	}
 	for i := range serviceProviders {
-		serviceProviders[i].Password = ""
 		serviceProviders[i].OTPInfo = nil
 		serviceProviders[i].ResetPasswordToken = ""
 	}
