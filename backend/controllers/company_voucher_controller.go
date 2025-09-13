@@ -149,92 +149,94 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 
 	ctx := context.Background()
 
-	// Start a transaction
-	session, err := cvc.DB.Client().StartSession()
+	// Get the voucher
+	vouchersCollection := cvc.DB.Collection("vouchers")
+	var voucher models.Voucher
+	err = vouchersCollection.FindOne(ctx, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to start transaction",
-		})
-	}
-	defer session.EndSession(ctx)
-
-	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
-		// Get the voucher
-		vouchersCollection := cvc.DB.Collection("vouchers")
-		var voucher models.Voucher
-		err := vouchersCollection.FindOne(sc, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				return nil, echo.NewHTTPError(http.StatusNotFound, "Voucher not found or inactive")
-			}
-			return nil, err
-		}
-
-		// Get company's current points
-		companiesCollection := cvc.DB.Collection("companies")
-		var company models.Company
-		err = companiesCollection.FindOne(sc, bson.M{"userId": userID}).Decode(&company)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check if company has enough points
-		if company.Points < voucher.Points {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, "Insufficient points")
-		}
-
-		// Check if company already purchased this voucher
-		purchasesCollection := cvc.DB.Collection("company_voucher_purchases")
-		var existingPurchase models.CompanyVoucherPurchase
-		err = purchasesCollection.FindOne(sc, bson.M{
-			"companyId": company.ID, // Use the actual company ID from the database
-			"voucherId": voucherID,
-		}).Decode(&existingPurchase)
-		if err == nil {
-			return nil, echo.NewHTTPError(http.StatusConflict, "You have already purchased this voucher")
-		}
-
-		// Create purchase record and automatically use the voucher
-		// When a company purchases a voucher, it's immediately used (no separate usage step required)
-		purchase := models.CompanyVoucherPurchase{
-			ID:          primitive.NewObjectID(),
-			CompanyID:   company.ID, // Use the actual company ID from the database
-			VoucherID:   voucherID,
-			PointsUsed:  voucher.Points,
-			PurchasedAt: time.Now(),
-			IsUsed:      true,       // Automatically mark as used upon purchase
-			UsedAt:      time.Now(), // Set usage timestamp to purchase time
-		}
-
-		_, err = purchasesCollection.InsertOne(sc, purchase)
-		if err != nil {
-			return nil, err
-		}
-
-		// Deduct points from company
-		_, err = companiesCollection.UpdateByID(sc, company.ID, bson.M{
-			"$inc": bson.M{"points": -voucher.Points},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return purchase, nil
-	})
-
-	if err != nil {
-		if httpErr, ok := err.(*echo.HTTPError); ok {
-			return c.JSON(httpErr.Code, models.Response{
-				Status:  httpErr.Code,
-				Message: httpErr.Message.(string),
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Voucher not found or inactive",
 			})
 		}
-		log.Printf("Error purchasing voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to purchase voucher",
-			Data:    err.Error(),
+			Message: "Failed to retrieve voucher",
+		})
+	}
+
+	// Get company's current points
+	companiesCollection := cvc.DB.Collection("companies")
+	var company models.Company
+	err = companiesCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&company)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve company information",
+		})
+	}
+
+	// Check if company has enough points
+	if company.Points < voucher.Points {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Insufficient points",
+		})
+	}
+
+	// Check if company already purchased this voucher
+	purchasesCollection := cvc.DB.Collection("company_voucher_purchases")
+	var existingPurchase models.CompanyVoucherPurchase
+	err = purchasesCollection.FindOne(ctx, bson.M{
+		"companyId": company.ID, // Use the actual company ID from the database
+		"voucherId": voucherID,
+	}).Decode(&existingPurchase)
+	if err == nil {
+		return c.JSON(http.StatusConflict, models.Response{
+			Status:  http.StatusConflict,
+			Message: "You have already purchased this voucher",
+		})
+	}
+
+	// Create purchase record and automatically use the voucher
+	// When a company purchases a voucher, it's immediately used (no separate usage step required)
+	purchase := models.CompanyVoucherPurchase{
+		ID:          primitive.NewObjectID(),
+		CompanyID:   company.ID, // Use the actual company ID from the database
+		VoucherID:   voucherID,
+		PointsUsed:  voucher.Points,
+		PurchasedAt: time.Now(),
+		IsUsed:      true,       // Automatically mark as used upon purchase
+		UsedAt:      time.Now(), // Set usage timestamp to purchase time
+	}
+
+	_, err = purchasesCollection.InsertOne(ctx, purchase)
+	if err != nil {
+		log.Printf("Error creating purchase record: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create purchase record",
+		})
+	}
+
+	// Deduct points from company
+	_, err = companiesCollection.UpdateByID(ctx, company.ID, bson.M{
+		"$inc": bson.M{"points": -voucher.Points},
+	})
+	if err != nil {
+		log.Printf("Error deducting points: %v", err)
+		// Note: In a production environment, you might want to implement compensation logic
+		// to reverse the purchase if point deduction fails
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to deduct points",
 		})
 	}
 
