@@ -30,28 +30,28 @@ func (cvc *CompanyVoucherController) GetAvailableVouchersForCompany(c echo.Conte
 
 	// Get company info to check their points
 	claims := middleware.GetUserFromToken(c)
-	companyID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
-		log.Printf("Invalid company ID from token: %s, error: %v", claims.UserID, err)
+		log.Printf("Invalid user ID from token: %s, error: %v", claims.UserID, err)
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid company ID",
+			Message: "Invalid user ID",
 		})
 	}
 
-	log.Printf("Looking for company with ID: %s", companyID.Hex())
+	log.Printf("Looking for company with user ID: %s", userID.Hex())
 
-	// Get company's current points
+	// Get company's current points - find company by userId field
 	companiesCollection := cvc.DB.Collection("companies")
 	var company models.Company
-	err = companiesCollection.FindOne(ctx, bson.M{"_id": companyID}).Decode(&company)
+	err = companiesCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&company)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			log.Printf("Company not found with ID: %s", companyID.Hex())
+			log.Printf("Company not found with user ID: %s", userID.Hex())
 			return c.JSON(http.StatusNotFound, models.Response{
 				Status:  http.StatusNotFound,
 				Message: "Company not found",
-				Data:    "No company document found with the provided ID",
+				Data:    "No company document found with the provided user ID",
 			})
 		}
 		log.Printf("Error retrieving company: %v", err)
@@ -112,11 +112,11 @@ func (cvc *CompanyVoucherController) GetAvailableVouchersForCompany(c echo.Conte
 // PurchaseVoucherForCompany allows a company to purchase a voucher with points
 func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	companyID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid company ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -174,7 +174,7 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 		// Get company's current points
 		companiesCollection := cvc.DB.Collection("companies")
 		var company models.Company
-		err = companiesCollection.FindOne(sc, bson.M{"_id": companyID}).Decode(&company)
+		err = companiesCollection.FindOne(sc, bson.M{"userId": userID}).Decode(&company)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 		purchasesCollection := cvc.DB.Collection("company_voucher_purchases")
 		var existingPurchase models.CompanyVoucherPurchase
 		err = purchasesCollection.FindOne(sc, bson.M{
-			"companyId": companyID,
+			"companyId": company.ID, // Use the actual company ID from the database
 			"voucherId": voucherID,
 		}).Decode(&existingPurchase)
 		if err == nil {
@@ -199,7 +199,7 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 		// When a company purchases a voucher, it's immediately used (no separate usage step required)
 		purchase := models.CompanyVoucherPurchase{
 			ID:          primitive.NewObjectID(),
-			CompanyID:   companyID,
+			CompanyID:   company.ID, // Use the actual company ID from the database
 			VoucherID:   voucherID,
 			PointsUsed:  voucher.Points,
 			PurchasedAt: time.Now(),
@@ -213,7 +213,7 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 		}
 
 		// Deduct points from company
-		_, err = companiesCollection.UpdateByID(sc, companyID, bson.M{
+		_, err = companiesCollection.UpdateByID(sc, company.ID, bson.M{
 			"$inc": bson.M{"points": -voucher.Points},
 		})
 		if err != nil {
@@ -247,19 +247,36 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 // GetCompanyVouchers retrieves all vouchers purchased by the current company
 func (cvc *CompanyVoucherController) GetCompanyVouchers(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	companyID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid company ID",
+			Message: "Invalid user ID",
 		})
 	}
 
 	ctx := context.Background()
 
+	// First get the company to get the actual company ID
+	companiesCollection := cvc.DB.Collection("companies")
+	var company models.Company
+	err = companiesCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&company)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve company information",
+		})
+	}
+
 	// Get company's purchased vouchers
 	purchasesCollection := cvc.DB.Collection("company_voucher_purchases")
-	cursor, err := purchasesCollection.Find(ctx, bson.M{"companyId": companyID})
+	cursor, err := purchasesCollection.Find(ctx, bson.M{"companyId": company.ID})
 	if err != nil {
 		log.Printf("Error retrieving company vouchers: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -311,11 +328,11 @@ func (cvc *CompanyVoucherController) GetCompanyVouchers(c echo.Context) error {
 // UseVoucherForCompany marks a voucher as used by a company
 func (cvc *CompanyVoucherController) UseVoucherForCompany(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	companyID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid company ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -329,13 +346,31 @@ func (cvc *CompanyVoucherController) UseVoucherForCompany(c echo.Context) error 
 	}
 
 	ctx := context.Background()
+
+	// First get the company to get the actual company ID
+	companiesCollection := cvc.DB.Collection("companies")
+	var company models.Company
+	err = companiesCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&company)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve company information",
+		})
+	}
+
 	purchasesCollection := cvc.DB.Collection("company_voucher_purchases")
 
 	// Check if the purchase exists and belongs to the company
 	var purchase models.CompanyVoucherPurchase
 	err = purchasesCollection.FindOne(ctx, bson.M{
 		"_id":       objID,
-		"companyId": companyID,
+		"companyId": company.ID,
 	}).Decode(&purchase)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
