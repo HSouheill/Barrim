@@ -51,7 +51,7 @@ func (wsc *WholesalerSubscriptionController) GetAvailablePlans(c echo.Context) e
 
 	collection := wsc.DB.Collection("subscription_plans")
 	cursor, err := collection.Find(ctx, bson.M{
-		"type":     bson.M{"$in": []string{"company", "wholesaler"}},
+		"type":     "wholesaler",
 		"isActive": true,
 	})
 	if err != nil {

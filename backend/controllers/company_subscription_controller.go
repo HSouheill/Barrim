@@ -44,7 +44,7 @@ func (sc *SubscriptionController) GetCompanySubscriptionPlans(c echo.Context) er
 
 	collection := sc.DB.Collection("subscription_plans")
 	cursor, err := collection.Find(ctx, bson.M{
-		"type":     bson.M{"$in": []string{"company", "wholesaler"}},
+		"type":     "company",
 		"isActive": true,
 	})
 	if err != nil {
