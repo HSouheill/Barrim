@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/middleware"
@@ -129,7 +128,7 @@ func (vc *VoucherController) CreateVoucher(c echo.Context) error {
 	if err != nil {
 		// If database insert fails, delete the uploaded image
 		if imagePath != "" {
-			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
+			os.Remove(filepath.Join("uploads/vouchers", imagePath))
 		}
 		log.Printf("Error creating voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -224,7 +223,7 @@ func (vc *VoucherController) CreateVoucherJSON(c echo.Context) error {
 	if err != nil {
 		// If database insert fails, delete the downloaded image
 		if imagePath != "" {
-			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
+			os.Remove(filepath.Join("uploads/vouchers", imagePath))
 		}
 		log.Printf("Error creating voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -399,7 +398,7 @@ func (vc *VoucherController) UpdateVoucher(c echo.Context) error {
 	if err != nil {
 		// If database update fails and we uploaded a new image, delete it
 		if files := form.File["image"]; len(files) > 0 && imagePath != currentVoucher.Image {
-			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
+			os.Remove(filepath.Join("uploads/vouchers", imagePath))
 		}
 		log.Printf("Error updating voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -418,7 +417,7 @@ func (vc *VoucherController) UpdateVoucher(c echo.Context) error {
 
 	// Delete old image if we uploaded a new one
 	if oldImagePath != "" && oldImagePath != imagePath {
-		os.Remove(strings.TrimPrefix(oldImagePath, "/uploads/"))
+		os.Remove(filepath.Join("uploads/vouchers", oldImagePath))
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
@@ -487,7 +486,7 @@ func (vc *VoucherController) DeleteVoucher(c echo.Context) error {
 
 	// Delete the associated image file
 	if voucher.Image != "" {
-		imagePath := strings.TrimPrefix(voucher.Image, "/uploads/")
+		imagePath := filepath.Join("uploads/vouchers", voucher.Image)
 		if err := os.Remove(imagePath); err != nil {
 			log.Printf("Warning: Failed to delete image file %s: %v", imagePath, err)
 			// Don't return error here as the voucher was already deleted from database
@@ -1029,7 +1028,7 @@ func (vc *VoucherController) CreateUserTypeVoucher(c echo.Context) error {
 	if err != nil {
 		// If database insert fails, delete the uploaded image
 		if imagePath != "" {
-			os.Remove(strings.TrimPrefix(imagePath, "/uploads/"))
+			os.Remove(filepath.Join("uploads/vouchers", imagePath))
 		}
 		log.Printf("Error creating user-type voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -1105,8 +1104,9 @@ func (vc *VoucherController) saveVoucherImage(file *multipart.FileHeader) (strin
 		return "", fmt.Errorf("error copying file: %v", err)
 	}
 
-	// Return the relative path for storage in database
-	return fmt.Sprintf("/uploads/vouchers/%s", uniqueFilename), nil
+	// Return just the filename for storage in database
+	// The nginx configuration will serve it from /uploads/vouchers/ directory
+	return uniqueFilename, nil
 }
 
 // downloadAndSaveImage downloads an image from URL and saves it to /uploads/vouchers
@@ -1178,6 +1178,7 @@ func (vc *VoucherController) downloadAndSaveImage(imageURL string) (string, erro
 		return "", fmt.Errorf("error saving image: %v", err)
 	}
 
-	// Return the relative path for storage in database
-	return fmt.Sprintf("/uploads/vouchers/%s", uniqueFilename), nil
+	// Return just the filename for storage in database
+	// The nginx configuration will serve it from /uploads/vouchers/ directory
+	return uniqueFilename, nil
 }
