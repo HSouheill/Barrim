@@ -32,17 +32,28 @@ func (cvc *CompanyVoucherController) GetAvailableVouchersForCompany(c echo.Conte
 	claims := middleware.GetUserFromToken(c)
 	companyID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
+		log.Printf("Invalid company ID from token: %s, error: %v", claims.UserID, err)
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Invalid company ID",
 		})
 	}
 
+	log.Printf("Looking for company with ID: %s", companyID.Hex())
+
 	// Get company's current points
 	companiesCollection := cvc.DB.Collection("companies")
 	var company models.Company
 	err = companiesCollection.FindOne(ctx, bson.M{"_id": companyID}).Decode(&company)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("Company not found with ID: %s", companyID.Hex())
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+				Data:    "No company document found with the provided ID",
+			})
+		}
 		log.Printf("Error retrieving company: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
@@ -184,14 +195,16 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 			return nil, echo.NewHTTPError(http.StatusConflict, "You have already purchased this voucher")
 		}
 
-		// Create purchase record
+		// Create purchase record and automatically use the voucher
+		// When a company purchases a voucher, it's immediately used (no separate usage step required)
 		purchase := models.CompanyVoucherPurchase{
 			ID:          primitive.NewObjectID(),
 			CompanyID:   companyID,
 			VoucherID:   voucherID,
 			PointsUsed:  voucher.Points,
 			PurchasedAt: time.Now(),
-			IsUsed:      false,
+			IsUsed:      true,       // Automatically mark as used upon purchase
+			UsedAt:      time.Now(), // Set usage timestamp to purchase time
 		}
 
 		_, err = purchasesCollection.InsertOne(sc, purchase)
@@ -227,7 +240,7 @@ func (cvc *CompanyVoucherController) PurchaseVoucherForCompany(c echo.Context) e
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
-		Message: "Voucher purchased successfully",
+		Message: "Voucher purchased and used successfully",
 	})
 }
 
