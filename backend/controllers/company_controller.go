@@ -1500,6 +1500,10 @@ func (cc *CompanyController) GetAllBranches(c echo.Context) error {
 					"contactInfo": map[string]interface{}{
 						"phone": company.ContactInfo.Phone,
 					},
+					"socialMedia": map[string]interface{}{
+						"instagram": company.SocialMedia.Instagram,
+						"facebook":  company.SocialMedia.Facebook,
+					},
 				},
 			}
 			allBranches = append(allBranches, branchData)
