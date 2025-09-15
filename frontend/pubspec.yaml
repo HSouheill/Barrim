@@ -43,6 +43,7 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   jwt_decoder: ^2.0.1
   image_picker: ^1.1.2
+  flutter_svg: ^2.0.10+1
   path: ^1.9.0
   intl: ^0.20.2
   geolocator: ^14.0.2

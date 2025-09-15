@@ -12,6 +12,7 @@
         "flutter",
         "flutter_map",
         "flutter_secure_storage",
+        "flutter_svg",
         "geocoding",
         "geolocator",
         "http",
@@ -120,6 +121,17 @@
       "name": "path",
       "version": "1.9.1",
       "dependencies": []
+    },
+    {
+      "name": "flutter_svg",
+      "version": "2.2.1",
+      "dependencies": [
+        "flutter",
+        "http",
+        "vector_graphics",
+        "vector_graphics_codec",
+        "vector_graphics_compiler"
+      ]
     },
     {
       "name": "image_picker",
@@ -407,6 +419,32 @@
         "meta",
         "plugin_platform_interface",
         "vector_math"
+      ]
+    },
+    {
+      "name": "vector_graphics_compiler",
+      "version": "1.1.19",
+      "dependencies": [
+        "args",
+        "meta",
+        "path",
+        "path_parsing",
+        "vector_graphics_codec",
+        "xml"
+      ]
+    },
+    {
+      "name": "vector_graphics_codec",
+      "version": "1.1.13",
+      "dependencies": []
+    },
+    {
+      "name": "vector_graphics",
+      "version": "1.1.19",
+      "dependencies": [
+        "flutter",
+        "http",
+        "vector_graphics_codec"
       ]
     },
     {
@@ -738,6 +776,28 @@
       ]
     },
     {
+      "name": "xml",
+      "version": "6.5.0",
+      "dependencies": [
+        "collection",
+        "meta",
+        "petitparser"
+      ]
+    },
+    {
+      "name": "path_parsing",
+      "version": "1.1.0",
+      "dependencies": [
+        "meta",
+        "vector_math"
+      ]
+    },
+    {
+      "name": "args",
+      "version": "2.7.0",
+      "dependencies": []
+    },
+    {
       "name": "file_selector_windows",
       "version": "0.9.3+4",
       "dependencies": [
@@ -893,20 +953,6 @@
       ]
     },
     {
-      "name": "xml",
-      "version": "6.5.0",
-      "dependencies": [
-        "collection",
-        "meta",
-        "petitparser"
-      ]
-    },
-    {
-      "name": "args",
-      "version": "2.7.0",
-      "dependencies": []
-    },
-    {
       "name": "fixnum",
       "version": "1.1.1",
       "dependencies": []
@@ -921,6 +967,14 @@
       "version": "3.0.6",
       "dependencies": [
         "typed_data"
+      ]
+    },
+    {
+      "name": "petitparser",
+      "version": "6.1.0",
+      "dependencies": [
+        "collection",
+        "meta"
       ]
     },
     {
@@ -948,14 +1002,6 @@
       "name": "lists",
       "version": "1.0.1",
       "dependencies": [
-        "meta"
-      ]
-    },
-    {
-      "name": "petitparser",
-      "version": "6.1.0",
-      "dependencies": [
-        "collection",
         "meta"
       ]
     }

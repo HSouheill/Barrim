@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:typed_data';
 import '../models/category.dart';
 import '../services/category_service.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class AddCategoryPopup extends StatefulWidget {
   final String? categoryId; // For editing existing category
@@ -730,7 +731,7 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              // Base image - make it fill the container
+              // Base image - make it fill the container (supports SVG)
               Container(
                 width: double.infinity,
                 height: double.infinity,
@@ -766,10 +767,22 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                                       ),
                                     );
                                   }
+                                  final bytes = snapshot.data!;
+                                  // Try detect SVG by starting bytes content
+                                  final String head = String.fromCharCodes(bytes.take(64).toList()).toLowerCase();
+                                  final bool isSvg = head.contains('<svg');
+                                  if (isSvg) {
+                                    return SvgPicture.memory(
+                                      bytes,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      fit: BoxFit.contain,
+                                    );
+                                  }
                                   return ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: Image.memory(
-                                      snapshot.data!,
+                                      bytes,
                                       fit: BoxFit.cover,
                                       width: double.infinity,
                                       height: double.infinity,
@@ -779,29 +792,52 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                               )
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          _selectedImageFile!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: Colors.grey.shade200,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.error, size: 24, color: Colors.grey),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'File Image\nError',
-                                    style: TextStyle(
-                                      fontSize: 8,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    textAlign: TextAlign.center,
+                        child: Builder(
+                          builder: (context) {
+                            if (_selectedImageFile != null && _selectedImageFile!.path.toLowerCase().endsWith('.svg')) {
+                              return FutureBuilder<Uint8List>(
+                                future: _selectedImageFile!.readAsBytes(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState == ConnectionState.waiting) {
+                                    return const Center(child: CircularProgressIndicator());
+                                  }
+                                  if (!snapshot.hasData) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return SvgPicture.memory(
+                                    snapshot.data!,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.contain,
+                                  );
+                                },
+                              );
+                            }
+                            return Image.file(
+                              _selectedImageFile!,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.grey.shade200,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.error, size: 24, color: Colors.grey),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'File Image\nError',
+                                        style: TextStyle(
+                                          fontSize: 8,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -876,32 +912,46 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              // Base image - make it fill the container
+              // Base image - make it fill the container (supports SVG)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  _selectedImageUrl!,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                                              errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                      color: Colors.grey.shade200,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error, size: 24, color: Colors.grey),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Network\nError',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: Colors.grey.shade600,
-                            ),
-                            textAlign: TextAlign.center,
+                child: Builder(
+                  builder: (context) {
+                    final String url = _selectedImageUrl!;
+                    final bool isSvg = url.toLowerCase().endsWith('.svg');
+                    if (isSvg) {
+                      return SvgPicture.network(
+                        url,
+                        fit: BoxFit.contain,
+                        width: double.infinity,
+                        height: double.infinity,
+                      );
+                    }
+                    return Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey.shade200,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.error, size: 24, color: Colors.grey),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Network\nError',
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  color: Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -1045,7 +1095,7 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        // Base image
+                        // Base image (supports SVG)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: _webImageFile != null
@@ -1066,26 +1116,68 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                                         child: const Icon(Icons.error, size: 40, color: Colors.grey),
                                       );
                                     }
-                                    return Image.memory(
-                                      snapshot.data!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                    );
+                                    final bytes = snapshot.data!;
+                                    final head = String.fromCharCodes(bytes.take(64).toList()).toLowerCase();
+                                    final bool isSvg = head.contains('<svg');
+                                    if (isSvg) {
+                                      return SvgPicture.memory(
+                                        bytes,
+                                        fit: BoxFit.contain,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                      );
+                                    }
+                                    return Image.memory(bytes, fit: BoxFit.cover, width: double.infinity, height: double.infinity);
                                   },
                                 )
                               : _selectedImageFile != null
-                                  ? Image.file(
-                                      _selectedImageFile!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
+                                  ? Builder(
+                                      builder: (context) {
+                                        if (_selectedImageFile!.path.toLowerCase().endsWith('.svg')) {
+                                          return FutureBuilder<Uint8List>(
+                                            future: _selectedImageFile!.readAsBytes(),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                                return const Center(child: CircularProgressIndicator());
+                                              }
+                                              if (!snapshot.hasData) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              return SvgPicture.memory(
+                                                snapshot.data!,
+                                                fit: BoxFit.contain,
+                                                width: double.infinity,
+                                                height: double.infinity,
+                                              );
+                                            },
+                                          );
+                                        }
+                                        return Image.file(
+                                          _selectedImageFile!,
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                        );
+                                      },
                                     )
-                                  : Image.network(
-                                      _selectedImageUrl!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
+                                  : Builder(
+                                      builder: (context) {
+                                        final String url = _selectedImageUrl!;
+                                        if (url.toLowerCase().endsWith('.svg')) {
+                                          return SvgPicture.network(
+                                            url,
+                                            fit: BoxFit.contain,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          );
+                                        }
+                                        return Image.network(
+                                          url,
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                        );
+                                      },
                                     ),
                         ),
                         // Category icon overlay

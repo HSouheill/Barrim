@@ -306,6 +306,9 @@ class CategoryApiService {
         String fileName;
         int fileLength;
         Stream<List<int>> fileStream;
+        List<int>? overrideBytes; // optional override payload
+        String? overrideFileName;
+        String? overrideMimeType;
         
         if (foundation.kIsWeb && logoFile is XFile) {
           // Web environment - handle XFile
@@ -315,11 +318,13 @@ class CategoryApiService {
           }
           fileLength = await logoFile.length();
           fileStream = logoFile.openRead();
+          // No client-side conversion; rely on backend content-type validation
         } else if (logoFile is File) {
           // Mobile environment - handle File
           fileName = logoFile.path.split('/').last;
           fileLength = await logoFile.length();
           fileStream = logoFile.openRead();
+          // No client-side conversion; rely on backend content-type validation
         } else {
           throw Exception('Unsupported file type: ${logoFile.runtimeType}');
         }
@@ -330,12 +335,14 @@ class CategoryApiService {
         }
         
         // Determine content type based on file extension
-        final extension = fileName.split('.').last.toLowerCase();
-        String mimeType = 'image/jpeg';
-        if (extension == 'png') mimeType = 'image/png';
-        else if (extension == 'gif') mimeType = 'image/gif';
-        else if (extension == 'webp') mimeType = 'image/webp';
-        else if (extension == 'svg') mimeType = 'image/svg+xml';
+        final extension = (overrideFileName ?? fileName).split('.').last.toLowerCase();
+        String mimeType = overrideMimeType ?? 'image/jpeg';
+        if (overrideMimeType == null) {
+          if (extension == 'png') mimeType = 'image/png';
+          else if (extension == 'gif') mimeType = 'image/gif';
+          else if (extension == 'webp') mimeType = 'image/webp';
+          else if (extension == 'svg') mimeType = 'image/svg+xml';
+        }
         
         // Validate file extension
         if (!['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].contains(extension)) {
@@ -343,16 +350,23 @@ class CategoryApiService {
         }
         
         // Create multipart file
-        final multipartFile = http.MultipartFile(
-          'logo',
-          http.ByteStream(fileStream),
-          fileLength,
-          filename: fileName,
-          contentType: MediaType.parse(mimeType),
-        );
+        final multipartFile = overrideBytes != null
+            ? http.MultipartFile.fromBytes(
+                'logo',
+                overrideBytes,
+                filename: overrideFileName ?? 'image.png',
+                contentType: MediaType.parse(mimeType),
+              )
+            : http.MultipartFile(
+                'logo',
+                http.ByteStream(fileStream),
+                fileLength,
+                filename: fileName,
+                contentType: MediaType.parse(mimeType),
+              );
         
         request.files.add(multipartFile);
-        print('Logo file added: $fileName, size: $fileLength, type: $mimeType');
+        print('Logo file added: ${(overrideFileName ?? fileName)}, size: $fileLength, type: $mimeType');
         
       } catch (e) {
         print('Error preparing logo file: $e');

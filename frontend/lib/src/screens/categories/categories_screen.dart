@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../components/header.dart';
 import '../../components/sidebar.dart';
 import '../../components/add_category_popup.dart';
@@ -840,93 +841,111 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           return const SizedBox.shrink();
                         },
                       ),
-                      // Base image
+                      // Base image (supports SVG and raster)
                       Center(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            category.logo!,
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                    : null,
-                                color: Colors.white,
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              // Debug: Print the actual error details
-                              print('=== Image Loading Error for ${category.name} ===');
-                              print('Logo URL: ${category.logo}');
-                              print('Error: $error');
-                              print('Stack Trace: $stackTrace');
-                              print('=== End Image Error Debug ===');
-                              
-                              // Check if it's an HTML/XML error (backend returning error pages)
-                              if (error.toString().contains('DOCTYPE') || 
-                                  error.toString().contains('html') ||
-                                  error.toString().contains('xml')) {
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.warning,
-                                      color: Colors.orange,
-                                      size: 32,
-                                    ),
-                                    Text(
-                                      'Backend\nError',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.orange,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    Text(
-                                      'Image endpoint\nreturning HTML',
-                                      style: TextStyle(
-                                        fontSize: 8,
-                                        color: Colors.orange,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                          child: Builder(
+                            builder: (context) {
+                              final String url = category.logo!;
+                              final bool isSvg = url.toLowerCase().endsWith('.svg');
+                              if (isSvg) {
+                                return SvgPicture.network(
+                                  url,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.contain,
+                                  placeholderBuilder: (context) => const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  ),
                                 );
                               }
-                              
-                              // Default error display with fallback icon
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.category,
+                              return Image.network(
+                                url,
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return CircularProgressIndicator(
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                        : null,
                                     color: Colors.white,
-                                    size: 48,
-                                  ),
-                                  Text(
-                                    'Logo\nUnavailable',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.white,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  Text(
-                                    'Network issue',
-                                    style: TextStyle(
-                                      fontSize: 8,
-                                      color: Colors.white70,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  // Debug: Print the actual error details
+                                  print('=== Image Loading Error for ${category.name} ===');
+                                  print('Logo URL: ${category.logo}');
+                                  print('Error: $error');
+                                  print('Stack Trace: $stackTrace');
+                                  print('=== End Image Error Debug ===');
+                                  
+                                  // Check if it's an HTML/XML error (backend returning error pages)
+                                  if (error.toString().contains('DOCTYPE') || 
+                                      error.toString().contains('html') ||
+                                      error.toString().contains('xml')) {
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.warning,
+                                          color: Colors.orange,
+                                          size: 32,
+                                        ),
+                                        Text(
+                                          'Backend\nError',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.orange,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        Text(
+                                          'Image endpoint\nreturning HTML',
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            color: Colors.orange,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    );
+                                  }
+                                  
+                                  // Default error display with fallback icon
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.category,
+                                        color: Colors.white,
+                                        size: 48,
+                                      ),
+                                      Text(
+                                        'Logo\nUnavailable',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.white,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      Text(
+                                        'Network issue',
+                                        style: TextStyle(
+                                          fontSize: 8,
+                                          color: Colors.white70,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                           ),
