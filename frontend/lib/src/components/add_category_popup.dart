@@ -594,11 +594,12 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
             if (_selectedImageFile == null && _selectedImageUrl != null) 'logo': _selectedImageUrl,
           };
 
-          // Pass the logo file if available
+          // Pass the logo file if available (File or XFile on web)
+          final dynamic fileToSend = kIsWeb ? (_webImageFile ?? _selectedImageFile) : _selectedImageFile;
           final response = await _categoryService.updateCategory(
             widget.categoryId!,
             updateData,
-            logoFile: _selectedImageFile,
+            logoFile: fileToSend,
           );
           
           if (response.status == 200) {
@@ -917,7 +918,12 @@ class _AddCategoryPopupState extends State<AddCategoryPopup> {
                 borderRadius: BorderRadius.circular(8),
                 child: Builder(
                   builder: (context) {
-                    final String url = _selectedImageUrl!;
+                    final String baseUrl = _selectedImageUrl!;
+                    final String url = (widget.categoryId != null)
+                        ? (baseUrl.contains('?')
+                            ? '$baseUrl&v=${DateTime.now().millisecondsSinceEpoch}'
+                            : '$baseUrl?v=${DateTime.now().millisecondsSinceEpoch}')
+                        : baseUrl;
                     final bool isSvg = url.toLowerCase().endsWith('.svg');
                     if (isSvg) {
                       return SvgPicture.network(

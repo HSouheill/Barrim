@@ -847,7 +847,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: Builder(
                             builder: (context) {
-                              final String url = category.logo!;
+                              final String baseUrl = category.logo!;
+                              final String url = category.updatedAt != null
+                                  ? (baseUrl.contains('?')
+                                      ? '$baseUrl&v=${category.updatedAt!.millisecondsSinceEpoch}'
+                                      : '$baseUrl?v=${category.updatedAt!.millisecondsSinceEpoch}')
+                                  : baseUrl;
                               final bool isSvg = url.toLowerCase().endsWith('.svg');
                               if (isSvg) {
                                 return SvgPicture.network(

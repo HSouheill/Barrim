@@ -202,51 +202,103 @@ class CategoryApiService {
   }
 
   // Update existing category (admin only)
-  Future<CategoryResponse> updateCategory(String id, Map<String, dynamic> updateData, {File? logoFile}) async {
+  Future<CategoryResponse> updateCategory(String id, Map<String, dynamic> updateData, {dynamic logoFile}) async {
     try {
-      // If we have a logo file to upload, we need to handle it separately
-      if (logoFile != null) {
-        // Upload logo first using the dedicated endpoint
-        final logoResponse = await uploadCategoryLogo(id, logoFile);
-        if (logoResponse.status != 200) {
-          print('Logo upload failed: ${logoResponse.message}');
-          // Continue with the update even if logo upload fails
-        }
-      }
-
-      // Convert backgroundColor to color field for backend if present
-      final backendUpdateData = Map<String, dynamic>.from(updateData);
-      if (backendUpdateData.containsKey('backgroundColor')) {
-        backendUpdateData['color'] = backendUpdateData.remove('backgroundColor');
-      }
-
-      final headers = await _getHeaders(); // Use JSON headers for PUT
       final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.updateCategory}/$id');
 
-      print('Update Category Request Headers: ${headers}');
-      print('Update Category Request URI: $uri');
-      print('Update Category Request Data: $backendUpdateData');
+      // If a logo file is provided, use multipart/form-data in a single request
+      if (logoFile != null) {
+        final authHeaders = await _getMultipartHeaders();
+        final request = http.MultipartRequest('PUT', uri);
+        request.headers.addAll(authHeaders);
 
-      final response = await http.put(
-        uri,
-        headers: headers,
-        body: json.encode(backendUpdateData),
-      );
+        // Map frontend fields to backend form fields
+        final backendUpdateData = Map<String, dynamic>.from(updateData);
+        if (backendUpdateData.containsKey('backgroundColor')) {
+          backendUpdateData['color'] = backendUpdateData.remove('backgroundColor');
+        }
+        // Encode subcategories list as comma-separated
+        if (backendUpdateData['subcategories'] is List) {
+          backendUpdateData['subcategories'] = (backendUpdateData['subcategories'] as List)
+              .where((e) => e != null)
+              .map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .join(',');
+        }
+        backendUpdateData.remove('logo');
 
-      print('Update Category Response Status: ${response.statusCode}');
-      print('Update Category Response Body: ${response.body}');
+        backendUpdateData.forEach((key, value) {
+          if (value != null) request.fields[key] = value.toString();
+        });
 
-      final responseData = json.decode(response.body);
+        // Prepare multipart file (supports File and XFile)
+        String fileName;
+        int fileLength;
+        Stream<List<int>> fileStream;
 
-      if (response.statusCode == 200) {
-        return CategoryResponse.fromJson(responseData);
-      } else {
+        if (foundation.kIsWeb && logoFile is XFile) {
+          fileName = logoFile.name.isEmpty ? 'image.jpg' : logoFile.name;
+          fileLength = await logoFile.length();
+          fileStream = logoFile.openRead();
+        } else if (logoFile is File) {
+          fileName = logoFile.path.split('/').last;
+          fileLength = await logoFile.length();
+          fileStream = logoFile.openRead();
+        } else {
+          throw Exception('Unsupported file type for update: ${logoFile.runtimeType}');
+        }
+
+        // Infer mime from extension
+        final extension = fileName.split('.').last.toLowerCase();
+        String mimeType = 'image/jpeg';
+        if (extension == 'png') mimeType = 'image/png';
+        else if (extension == 'gif') mimeType = 'image/gif';
+        else if (extension == 'webp') mimeType = 'image/webp';
+        else if (extension == 'svg') mimeType = 'image/svg+xml';
+
+        final multipartFile = http.MultipartFile(
+          'logo',
+          http.ByteStream(fileStream),
+          fileLength,
+          filename: fileName,
+          contentType: MediaType.parse(mimeType),
+        );
+        request.files.add(multipartFile);
+
+        final streamed = await request.send();
+        final response = await http.Response.fromStream(streamed);
+        final responseData = json.decode(response.body);
+        print('Update Category (multipart) Status: ${response.statusCode}');
+        print('Update Category (multipart) Body: ${response.body}');
+
+        if (response.statusCode == 200) {
+          return CategoryResponse.fromJson(responseData);
+        }
         return CategoryResponse(
           category: null,
           message: responseData['message'] ?? 'Failed to update category',
           status: response.statusCode,
         );
       }
+
+      // Otherwise, fallback to JSON update
+      final backendUpdateData = Map<String, dynamic>.from(updateData);
+      if (backendUpdateData.containsKey('backgroundColor')) {
+        backendUpdateData['color'] = backendUpdateData.remove('backgroundColor');
+      }
+      final headers = await _getHeaders();
+      print('Update Category Request URI: $uri');
+      final response = await http.put(uri, headers: headers, body: json.encode(backendUpdateData));
+      print('Update Category Response Status: ${response.statusCode}');
+      final responseData = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return CategoryResponse.fromJson(responseData);
+      }
+      return CategoryResponse(
+        category: null,
+        message: responseData['message'] ?? 'Failed to update category',
+        status: response.statusCode,
+      );
     } catch (e) {
       return CategoryResponse(
         category: null,
