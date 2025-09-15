@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 
+	"mime"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
@@ -35,6 +37,9 @@ func main() {
 	if err != nil {
 		log.Println("Warning: .env file not found")
 	}
+
+	// Ensure correct MIME type for SVG files
+	_ = mime.AddExtensionType(".svg", "image/svg+xml")
 
 	// Initialize Firebase
 	config.InitFirebase()
