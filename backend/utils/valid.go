@@ -14,7 +14,7 @@ import (
 // IsValidImageFile checks if the uploaded file is a valid image
 func IsValidImageFile(file *multipart.FileHeader) bool {
 	// List of allowed image extensions
-	allowedExtensions := []string{".jpg", ".jpeg", ".png", ".gif"}
+	allowedExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".svg"}
 
 	// Get the file extension
 	filename := strings.ToLower(file.Filename)
@@ -97,6 +97,8 @@ func ValidateFile(filename string, size int64) error {
 		".jpg":  true,
 		".jpeg": true,
 		".png":  true,
+		".gif":  true,
+		".svg":  true,
 	}
 
 	if !allowedExts[ext] {

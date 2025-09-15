@@ -31,6 +31,7 @@ var (
 		".jpeg": true,
 		".png":  true,
 		".gif":  true,
+		".svg":  true,
 	}
 	// Allowed video extensions
 	allowedVideoExts = map[string]bool{
@@ -57,7 +58,7 @@ func ValidateFileType(filename, mediaType string) error {
 	switch mediaType {
 	case "image":
 		if !allowedImageExts[ext] {
-			return fmt.Errorf("unsupported image format. Allowed formats: jpg, jpeg, png, gif")
+			return fmt.Errorf("unsupported image format. Allowed formats: jpg, jpeg, png, gif, svg")
 		}
 	case "video":
 		if !allowedVideoExts[ext] {
