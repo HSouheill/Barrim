@@ -407,6 +407,12 @@ func (cc *CompanyController) CreateBranch(c echo.Context) error {
 		costPerCustomer = cost
 	}
 
+	// Create social media object for the branch
+	socialMedia := models.SocialMedia{
+		Facebook:  getString(branchData, "facebook", ""),
+		Instagram: getString(branchData, "instagram", ""),
+	}
+
 	// Create branch object with safer type assertions
 	branch := models.Branch{
 		ID:              primitive.NewObjectID(),
@@ -420,6 +426,7 @@ func (cc *CompanyController) CreateBranch(c echo.Context) error {
 		Videos:          videoPaths,
 		CostPerCustomer: costPerCustomer,
 		Status:          "pending", // Set initial status as pending
+		SocialMedia:     socialMedia,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
@@ -1000,6 +1007,12 @@ func (cc *CompanyController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
+	// Create social media object for the branch
+	socialMedia := models.SocialMedia{
+		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
+		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
+	}
+
 	// Create updated branch object
 	updatedBranch := models.Branch{
 		ID:          branchObjectID, // Keep the original ID
@@ -1026,8 +1039,9 @@ func (cc *CompanyController) UpdateBranch(c echo.Context) error {
 			}
 			return existingBranch.CostPerCustomer
 		}(),
-		CreatedAt: existingBranch.CreatedAt, // Keep original creation time
-		UpdatedAt: time.Now(),               // Update the update timestamp
+		SocialMedia: socialMedia,
+		CreatedAt:   existingBranch.CreatedAt, // Keep original creation time
+		UpdatedAt:   time.Now(),               // Update the update timestamp
 	}
 
 	log.Printf("Prepared updated branch object: %+v", updatedBranch)
@@ -1082,6 +1096,7 @@ func (cc *CompanyController) UpdateBranch(c echo.Context) error {
 			"category":    updatedBranch.Category,
 			"subCategory": updatedBranch.SubCategory,
 			"description": updatedBranch.Description,
+			"socialMedia": updatedBranch.SocialMedia,
 		},
 	})
 }
@@ -1491,6 +1506,7 @@ func (cc *CompanyController) GetAllBranches(c echo.Context) error {
 				"images":      branch.Images,
 				"videos":      branch.Videos,
 				"status":      branch.Status, // Include branch status
+				"socialMedia": branch.SocialMedia,
 				"createdAt":   branch.CreatedAt,
 				"updatedAt":   branch.UpdatedAt,
 				"company": map[string]interface{}{

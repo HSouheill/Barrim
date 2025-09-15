@@ -64,8 +64,9 @@ type Branch struct {
 	Images          []string           `json:"images" bson:"images"`
 	Videos          []string           `json:"videos,omitempty" bson:"videos"`
 	CostPerCustomer float64            `json:"costPerCustomer,omitempty" bson:"costPerCustomer,omitempty"`
-	Status          string             `json:"status" bson:"status"`           // "pending", "approved", "rejected"
-	Sponsorship     bool               `json:"sponsorship" bson:"sponsorship"` // Whether the branch has active sponsorship
+	Status          string             `json:"status" bson:"status"`                               // "pending", "approved", "rejected"
+	Sponsorship     bool               `json:"sponsorship" bson:"sponsorship"`                     // Whether the branch has active sponsorship
+	SocialMedia     SocialMedia        `json:"socialMedia,omitempty" bson:"socialMedia,omitempty"` // Branch-specific social media links
 	CreatedAt       time.Time          `json:"createdAt" bson:"createdAt"`
 	UpdatedAt       time.Time          `json:"updatedAt" bson:"updatedAt"`
 }

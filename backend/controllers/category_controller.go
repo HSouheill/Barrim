@@ -278,6 +278,132 @@ func (cc *CategoryController) UpdateCategory(c echo.Context) error {
 		})
 	}
 
+	// If multipart/form-data, handle fields and optional logo upload
+	contentType := c.Request().Header.Get("Content-Type")
+	if strings.HasPrefix(strings.ToLower(contentType), "multipart/form-data") {
+		updateData := bson.M{}
+
+		// Optional name with duplicate check
+		if name := strings.TrimSpace(c.FormValue("name")); name != "" {
+			var existingCategory models.Category
+			err := cc.DB.Collection("categories").FindOne(
+				context.Background(),
+				bson.M{"name": name, "_id": bson.M{"$ne": objectID}},
+			).Decode(&existingCategory)
+			if err == nil {
+				return c.JSON(http.StatusConflict, models.Response{
+					Status:  http.StatusConflict,
+					Message: "Category with this name already exists",
+				})
+			}
+			updateData["name"] = name
+		}
+
+		// Optional color with validation
+		if color := strings.TrimSpace(c.FormValue("color")); color != "" {
+			if !isValidColor(color) {
+				return c.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: "Invalid color format. Please provide a valid hex color (e.g., #FF0000) or CSS color name",
+				})
+			}
+			updateData["color"] = color
+		}
+
+		// Optional subcategories (comma-separated)
+		if subcategories := c.FormValue("subcategories"); strings.TrimSpace(subcategories) != "" {
+			parts := strings.Split(subcategories, ",")
+			var normalized []string
+			for _, p := range parts {
+				v := strings.TrimSpace(p)
+				if v != "" {
+					normalized = append(normalized, v)
+				}
+			}
+			updateData["subcategories"] = normalized
+		}
+
+		// Optional logo file
+		if file, err := c.FormFile("logo"); err == nil && file != nil {
+			if err := utils.ValidateFileType(file.Filename, "image"); err != nil {
+				return c.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: "Invalid logo file type",
+				})
+			}
+
+			src, err := file.Open()
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to read logo file",
+				})
+			}
+			defer src.Close()
+
+			fileData, err := io.ReadAll(src)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to read logo data",
+				})
+			}
+
+			filename := "category_" + id + "_" + time.Now().Format("20060102150405") + filepath.Ext(file.Filename)
+			fileURL, err := utils.UploadFileToPath(fileData, filename, "image", "category")
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to upload logo",
+				})
+			}
+			updateData["logo"] = fileURL
+		}
+
+		if len(updateData) == 0 {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "No fields to update",
+			})
+		}
+
+		updateData["updatedAt"] = time.Now()
+
+		result, err := cc.DB.Collection("categories").UpdateOne(
+			context.Background(),
+			bson.M{"_id": objectID},
+			bson.M{"$set": updateData},
+		)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to update category",
+			})
+		}
+		if result.MatchedCount == 0 {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Category not found",
+			})
+		}
+
+		var updatedCategory models.Category
+		err = cc.DB.Collection("categories").FindOne(context.Background(), bson.M{"_id": objectID}).Decode(&updatedCategory)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Category updated but failed to retrieve updated data",
+			})
+		}
+
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Category updated successfully",
+			Data:    updatedCategory,
+		})
+	}
+
+	// Fallback to existing JSON update
 	updateData := make(map[string]interface{})
 	if err := c.Bind(&updateData); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
@@ -286,15 +412,11 @@ func (cc *CategoryController) UpdateCategory(c echo.Context) error {
 		})
 	}
 
-	// Remove ID and timestamps from update data
 	delete(updateData, "_id")
 	delete(updateData, "id")
 	delete(updateData, "createdAt")
-
-	// Add updated timestamp
 	updateData["updatedAt"] = time.Now()
 
-	// Check if category name already exists (if name is being updated)
 	if name, exists := updateData["name"]; exists {
 		var existingCategory models.Category
 		err := cc.DB.Collection("categories").FindOne(
@@ -309,7 +431,6 @@ func (cc *CategoryController) UpdateCategory(c echo.Context) error {
 		}
 	}
 
-	// Update the category
 	result, err := cc.DB.Collection("categories").UpdateOne(
 		context.Background(),
 		bson.M{"_id": objectID},
@@ -329,7 +450,6 @@ func (cc *CategoryController) UpdateCategory(c echo.Context) error {
 		})
 	}
 
-	// Retrieve the updated category
 	var updatedCategory models.Category
 	err = cc.DB.Collection("categories").FindOne(context.Background(), bson.M{"_id": objectID}).Decode(&updatedCategory)
 	if err != nil {
