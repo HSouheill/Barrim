@@ -880,6 +880,9 @@ func (wc *WholesalerController) GetBranch(c echo.Context) error {
 		})
 	}
 
+	log.Printf("Retrieved branch social media: %+v", branch.SocialMedia)
+	log.Printf("Full retrieved branch: %+v", branch)
+
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Branch retrieved successfully",
@@ -1310,6 +1313,9 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 			"branches": updatedBranch,
 		},
 	}
+
+	log.Printf("About to update database with branch: %+v", updatedBranch)
+	log.Printf("Social media in updated branch: %+v", updatedBranch.SocialMedia)
 
 	result, err := wholesalerCollection.UpdateByID(ctx, wholesaler.ID, push)
 	if err != nil {
