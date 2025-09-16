@@ -7,7 +7,7 @@ ARG VERSION
 ARG BUILD_TIMESTAMP
 ARG CACHE_BUST
 
-# Install Flutter
+# Install Flutter dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -20,7 +20,6 @@ ENV PATH="/flutter/bin:${PATH}"
 
 # Pre-download Flutter artifacts
 RUN flutter precache
-
 RUN flutter config --enable-web
 
 # Set working directory
@@ -37,29 +36,35 @@ COPY . .
 
 # Create web platform if it doesn't exist
 RUN if [ ! -d "web" ]; then \
-        flutter create . --platforms web; \
+    flutter create . --platforms web; \
     fi
 
 # Clean previous build to ensure fresh build
 RUN flutter clean
 
-# Build Flutter web app for production with cache busting
-RUN echo "Build Date: ${BUILD_DATE}" && \
-    echo "Version: ${VERSION}" && \
-    echo "Cache Bust: ${CACHE_BUST}" && \
-    flutter build web --release --no-tree-shake-icons
+# Build Flutter web app for production
+RUN flutter build web --release --no-tree-shake-icons
 
 # Second stage: Serve with nginx
 FROM nginx:alpine
 
-# Remove default nginx website
+# Remove default nginx website and config
 RUN rm -rf /usr/share/nginx/html/*
+RUN rm /etc/nginx/conf.d/default.conf
 
 # Copy built web files from the Flutter build stage
-COPY --from=flutter-builder /app/build/web/ /usr/share/nginx/html
+COPY --from=flutter-builder /app/build/web/ /usr/share/nginx/html/
 
 # Copy custom nginx config
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 80 (nginx default)
+# Verify the index.html file exists and has content
+RUN ls -la /usr/share/nginx/html/ && \
+    [ -f /usr/share/nginx/html/index.html ] && \
+    [ -s /usr/share/nginx/html/index.html ] || (echo "index.html is missing or empty!" && exit 1)
+
+# Test nginx configuration
+RUN nginx -t
+
+# Expose port 80
 EXPOSE 80
