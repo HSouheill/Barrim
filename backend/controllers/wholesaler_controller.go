@@ -426,6 +426,12 @@ func (wc *WholesalerController) CreateBranch(c echo.Context) error {
 		}
 	}
 
+	// Create social media object for the branch
+	socialMedia := models.SocialMedia{
+		Facebook:  getString(branchData, "facebook", ""),
+		Instagram: getString(branchData, "instagram", ""),
+	}
+
 	// Create branch object with safer type assertions
 	branch := models.Branch{
 		ID:          primitive.NewObjectID(),
@@ -437,6 +443,7 @@ func (wc *WholesalerController) CreateBranch(c echo.Context) error {
 		Description: getString(branchData, "description", ""),
 		Images:      imagePaths,
 		Videos:      videoPaths,
+		SocialMedia: socialMedia,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -476,6 +483,7 @@ func (wc *WholesalerController) CreateBranch(c echo.Context) error {
 			"category":    branch.Category,
 			"subCategory": branch.SubCategory,
 			"description": branch.Description,
+			"socialMedia": branch.SocialMedia,
 		},
 	})
 }
@@ -655,6 +663,12 @@ func (wc *WholesalerController) AddBranch(c echo.Context) error {
 		}
 	}
 
+	// Create social media object for the branch
+	socialMedia := models.SocialMedia{
+		Facebook:  getString(branchData, "facebook", ""),
+		Instagram: getString(branchData, "instagram", ""),
+	}
+
 	// Create branch object with safer type assertions
 	branch := models.Branch{
 		ID:          primitive.NewObjectID(),
@@ -666,6 +680,7 @@ func (wc *WholesalerController) AddBranch(c echo.Context) error {
 		Description: getString(branchData, "description", ""),
 		Images:      imagePaths,
 		Videos:      videoPaths,
+		SocialMedia: socialMedia,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -705,6 +720,7 @@ func (wc *WholesalerController) AddBranch(c echo.Context) error {
 			"category":    branch.Category,
 			"subCategory": branch.SubCategory,
 			"description": branch.Description,
+			"socialMedia": branch.SocialMedia,
 		},
 	})
 }
@@ -1233,6 +1249,12 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
+	// Create social media object for the branch
+	socialMedia := models.SocialMedia{
+		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
+		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
+	}
+
 	// Create updated branch object
 	updatedBranch := models.Branch{
 		ID:          branchObjectID,
@@ -1244,6 +1266,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		Description: getString(branchData, "description", existingBranch.Description),
 		Images:      finalImagePaths,
 		Videos:      finalVideoPaths,
+		SocialMedia: socialMedia,
 		CreatedAt:   existingBranch.CreatedAt,
 		UpdatedAt:   time.Now(),
 	}
@@ -1300,6 +1323,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 			"category":    updatedBranch.Category,
 			"subCategory": updatedBranch.SubCategory,
 			"description": updatedBranch.Description,
+			"socialMedia": updatedBranch.SocialMedia,
 		},
 	})
 }
