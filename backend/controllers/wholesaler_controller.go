@@ -1252,12 +1252,22 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	}
 
 	// Create social media object for the branch
+	facebookValue := getString(branchData, "facebook", existingBranch.SocialMedia.Facebook)
+	instagramValue := getString(branchData, "instagram", existingBranch.SocialMedia.Instagram)
+
+	log.Printf("Raw facebook value from branchData: %v", branchData["facebook"])
+	log.Printf("Raw instagram value from branchData: %v", branchData["instagram"])
+	log.Printf("Existing facebook: %s", existingBranch.SocialMedia.Facebook)
+	log.Printf("Existing instagram: %s", existingBranch.SocialMedia.Instagram)
+	log.Printf("Final facebook: %s", facebookValue)
+	log.Printf("Final instagram: %s", instagramValue)
+
 	socialMedia := models.SocialMedia{
-		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
-		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
+		Facebook:  facebookValue,
+		Instagram: instagramValue,
 	}
 
-	log.Printf("Social media data: Facebook=%s, Instagram=%s", socialMedia.Facebook, socialMedia.Instagram)
+	log.Printf("Social media object: %+v", socialMedia)
 
 	// Create updated branch object
 	updatedBranch := models.Branch{
@@ -1311,24 +1321,29 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	}
 
 	log.Printf("Database update result: %+v", result)
+	log.Printf("Updated branch social media: %+v", updatedBranch.SocialMedia)
+
+	responseData := map[string]interface{}{
+		"_id":         updatedBranch.ID.Hex(),
+		"name":        updatedBranch.Name,
+		"location":    updatedBranch.Location,
+		"lat":         updatedBranch.Location.Lat,
+		"lng":         updatedBranch.Location.Lng,
+		"images":      updatedBranch.Images,
+		"videos":      updatedBranch.Videos,
+		"phone":       updatedBranch.Phone,
+		"category":    updatedBranch.Category,
+		"subCategory": updatedBranch.SubCategory,
+		"description": updatedBranch.Description,
+		"socialMedia": updatedBranch.SocialMedia,
+	}
+
+	log.Printf("Response data social media: %+v", responseData["socialMedia"])
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Branch updated successfully",
-		Data: map[string]interface{}{
-			"_id":         updatedBranch.ID.Hex(),
-			"name":        updatedBranch.Name,
-			"location":    updatedBranch.Location,
-			"lat":         updatedBranch.Location.Lat,
-			"lng":         updatedBranch.Location.Lng,
-			"images":      updatedBranch.Images,
-			"videos":      updatedBranch.Videos,
-			"phone":       updatedBranch.Phone,
-			"category":    updatedBranch.Category,
-			"subCategory": updatedBranch.SubCategory,
-			"description": updatedBranch.Description,
-			"socialMedia": updatedBranch.SocialMedia,
-		},
+		Data:    responseData,
 	})
 }
 
