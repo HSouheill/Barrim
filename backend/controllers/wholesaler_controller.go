@@ -1090,6 +1090,8 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		})
 	}
 
+	log.Printf("Parsed branch data: %+v", branchData)
+
 	// Find the existing branch to get its current data
 	var existingBranch models.Branch
 	var existingImagePaths []string
@@ -1254,6 +1256,8 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
 		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
 	}
+
+	log.Printf("Social media data: Facebook=%s, Instagram=%s", socialMedia.Facebook, socialMedia.Instagram)
 
 	// Create updated branch object
 	updatedBranch := models.Branch{
