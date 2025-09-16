@@ -589,24 +589,34 @@ func (rc *ServiceProviderReferralController) GetServiceProviderReferralData(c ec
 		})
 	}
 
-	// Ensure the user has service provider info
-	if user.ServiceProviderInfo == nil {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Service provider information not found",
-		})
+	// Resolve ServiceProviderInfo from user document or fallback to serviceProviders collection
+	info := user.ServiceProviderInfo
+	ctx := context.Background()
+
+	if info == nil || (info.ReferralCode == "" && info.Points == 0 && (info.ReferredServiceProviders == nil || len(info.ReferredServiceProviders) == 0)) {
+		// Try to fetch from serviceProviders collection using ServiceProviderID
+		if user.ServiceProviderID != nil {
+			serviceProvidersCollection := rc.DB.Database("barrim").Collection("serviceProviders")
+			var sp models.ServiceProvider
+			err := serviceProvidersCollection.FindOne(ctx, bson.M{"_id": user.ServiceProviderID}).Decode(&sp)
+			if err == nil && sp.ServiceProviderInfo != nil {
+				info = sp.ServiceProviderInfo
+			}
+		}
 	}
 
-	// Get the list of referred service providers
-	ctx := context.Background()
+	// If still nil, return empty defaults but 200 OK
+	if info == nil {
+		info = &models.ServiceProviderInfo{}
+	}
+
+	// Prepare referred users list from info
 	usersCollection := rc.DB.Database("barrim").Collection("users")
-
 	var referredUsers []models.User
-	if user.ServiceProviderInfo.ReferredServiceProviders != nil && len(user.ServiceProviderInfo.ReferredServiceProviders) > 0 {
+	if info.ReferredServiceProviders != nil && len(info.ReferredServiceProviders) > 0 {
 		cursor, err := usersCollection.Find(ctx, bson.M{
-			"_id": bson.M{"$in": user.ServiceProviderInfo.ReferredServiceProviders},
+			"_id": bson.M{"$in": info.ReferredServiceProviders},
 		})
-
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, models.Response{
 				Status:  http.StatusInternalServerError,
@@ -614,15 +624,12 @@ func (rc *ServiceProviderReferralController) GetServiceProviderReferralData(c ec
 			})
 		}
 		defer cursor.Close(ctx)
-
 		if err = cursor.All(ctx, &referredUsers); err != nil {
 			return c.JSON(http.StatusInternalServerError, models.Response{
 				Status:  http.StatusInternalServerError,
 				Message: "Failed to parse referred users: " + err.Error(),
 			})
 		}
-
-		// Remove sensitive data from referred users
 		for i := range referredUsers {
 			referredUsers[i].Password = ""
 			referredUsers[i].OTPInfo = nil
@@ -630,20 +637,23 @@ func (rc *ServiceProviderReferralController) GetServiceProviderReferralData(c ec
 		}
 	}
 
-	// Create QR code for referral code if it exists
+	// Create QR code URL if referral code exists. Fallback to user.ReferralCode if needed
+	referralCode := info.ReferralCode
+	if referralCode == "" {
+		referralCode = user.ReferralCode
+	}
 	var qrCodeURL string
-	if user.ServiceProviderInfo.ReferralCode != "" {
-		qrCodeURL = "/api/qrcode/referral/" + user.ServiceProviderInfo.ReferralCode
+	if referralCode != "" {
+		qrCodeURL = "/api/qrcode/referral/" + referralCode
 	}
 
-	// Return success response
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Referral data retrieved successfully",
 		Data: map[string]interface{}{
-			"referralCode":  user.ServiceProviderInfo.ReferralCode,
-			"points":        user.ServiceProviderInfo.Points,
-			"referredCount": len(user.ServiceProviderInfo.ReferredServiceProviders),
+			"referralCode":  referralCode,
+			"points":        info.Points,
+			"referredCount": len(info.ReferredServiceProviders),
 			"referredUsers": referredUsers,
 			"qrCodeURL":     qrCodeURL,
 		},
