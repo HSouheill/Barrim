@@ -112,11 +112,11 @@ func (wvc *WholesalerVoucherController) GetAvailableVouchersForWholesaler(c echo
 // PurchaseVoucherForWholesaler allows a wholesaler to purchase a voucher with points
 func (wvc *WholesalerVoucherController) PurchaseVoucherForWholesaler(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	wholesalerID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid wholesaler ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -149,89 +149,103 @@ func (wvc *WholesalerVoucherController) PurchaseVoucherForWholesaler(c echo.Cont
 
 	ctx := context.Background()
 
-	// Start a transaction
-	session, err := wvc.DB.Client().StartSession()
+	// Get the voucher
+	vouchersCollection := wvc.DB.Collection("vouchers")
+	var voucher models.Voucher
+	err = vouchersCollection.FindOne(ctx, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to start transaction",
-		})
-	}
-	defer session.EndSession(ctx)
-
-	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
-		// Get the voucher
-		vouchersCollection := wvc.DB.Collection("vouchers")
-		var voucher models.Voucher
-		err := vouchersCollection.FindOne(sc, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				return nil, echo.NewHTTPError(http.StatusNotFound, "Voucher not found or inactive")
-			}
-			return nil, err
-		}
-
-		// Get wholesaler's current points
-		wholesalersCollection := wvc.DB.Collection("wholesalers")
-		var wholesaler models.Wholesaler
-		err = wholesalersCollection.FindOne(sc, bson.M{"_id": wholesalerID}).Decode(&wholesaler)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check if wholesaler has enough points
-		if wholesaler.Points < voucher.Points {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, "Insufficient points")
-		}
-
-		// Check if wholesaler already purchased this voucher
-		purchasesCollection := wvc.DB.Collection("wholesaler_voucher_purchases")
-		var existingPurchase models.WholesalerVoucherPurchase
-		err = purchasesCollection.FindOne(sc, bson.M{
-			"wholesalerId": wholesalerID,
-			"voucherId":    voucherID,
-		}).Decode(&existingPurchase)
-		if err == nil {
-			return nil, echo.NewHTTPError(http.StatusConflict, "You have already purchased this voucher")
-		}
-
-		// Create purchase record
-		purchase := models.WholesalerVoucherPurchase{
-			ID:           primitive.NewObjectID(),
-			WholesalerID: wholesalerID,
-			VoucherID:    voucherID,
-			PointsUsed:   voucher.Points,
-			PurchasedAt:  time.Now(),
-			IsUsed:       false,
-		}
-
-		_, err = purchasesCollection.InsertOne(sc, purchase)
-		if err != nil {
-			return nil, err
-		}
-
-		// Deduct points from wholesaler
-		_, err = wholesalersCollection.UpdateByID(sc, wholesalerID, bson.M{
-			"$inc": bson.M{"points": -voucher.Points},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return purchase, nil
-	})
-
-	if err != nil {
-		if httpErr, ok := err.(*echo.HTTPError); ok {
-			return c.JSON(httpErr.Code, models.Response{
-				Status:  httpErr.Code,
-				Message: httpErr.Message.(string),
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Voucher not found or inactive",
 			})
 		}
-		log.Printf("Error purchasing voucher: %v", err)
+		log.Printf("Error retrieving voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to purchase voucher",
+			Message: "Failed to retrieve voucher",
+			Data:    err.Error(),
+		})
+	}
+
+	// Get wholesaler's current points (by userId or createdBy)
+	wholesalersCollection := wvc.DB.Collection("wholesalers")
+	var wholesaler models.Wholesaler
+	err = wholesalersCollection.FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&wholesaler)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Wholesaler not found",
+			})
+		}
+		log.Printf("Error retrieving wholesaler: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve wholesaler information",
+			Data:    err.Error(),
+		})
+	}
+
+	// Check if wholesaler has enough points
+	if wholesaler.Points < voucher.Points {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Insufficient points",
+		})
+	}
+
+	// Check if wholesaler already purchased this voucher
+	purchasesCollection := wvc.DB.Collection("wholesaler_voucher_purchases")
+	var existingPurchase models.WholesalerVoucherPurchase
+	err = purchasesCollection.FindOne(ctx, bson.M{
+		"wholesalerId": wholesaler.ID,
+		"voucherId":    voucherID,
+	}).Decode(&existingPurchase)
+	if err == nil {
+		return c.JSON(http.StatusConflict, models.Response{
+			Status:  http.StatusConflict,
+			Message: "You have already purchased this voucher",
+		})
+	}
+
+	// Create purchase record
+	purchase := models.WholesalerVoucherPurchase{
+		ID:           primitive.NewObjectID(),
+		WholesalerID: wholesaler.ID,
+		VoucherID:    voucherID,
+		PointsUsed:   voucher.Points,
+		PurchasedAt:  time.Now(),
+		IsUsed:       false,
+	}
+
+	// Insert purchase record
+	_, err = purchasesCollection.InsertOne(ctx, purchase)
+	if err != nil {
+		log.Printf("Error creating purchase record: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create purchase record",
+			Data:    err.Error(),
+		})
+	}
+
+	// Deduct points from wholesaler using atomic operation
+	_, err = wholesalersCollection.UpdateByID(ctx, wholesaler.ID, bson.M{
+		"$inc": bson.M{"points": -voucher.Points},
+	})
+	if err != nil {
+		log.Printf("Error deducting points: %v", err)
+		// Try to rollback the purchase record
+		purchasesCollection.DeleteOne(ctx, bson.M{"_id": purchase.ID})
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to deduct points",
 			Data:    err.Error(),
 		})
 	}
@@ -239,21 +253,52 @@ func (wvc *WholesalerVoucherController) PurchaseVoucherForWholesaler(c echo.Cont
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Voucher purchased successfully",
+		Data: map[string]interface{}{
+			"purchaseId":      purchase.ID.Hex(),
+			"pointsUsed":      voucher.Points,
+			"remainingPoints": wholesaler.Points - voucher.Points,
+		},
 	})
 }
 
 // GetWholesalerVouchers retrieves all vouchers purchased by the current wholesaler
 func (wvc *WholesalerVoucherController) GetWholesalerVouchers(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	wholesalerID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid wholesaler ID",
+			Message: "Invalid user ID",
 		})
 	}
 
 	ctx := context.Background()
+
+	// Get wholesaler ID (by userId or createdBy)
+	wholesalersCollection := wvc.DB.Collection("wholesalers")
+	var wholesaler models.Wholesaler
+	err = wholesalersCollection.FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&wholesaler)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Wholesaler not found",
+			})
+		}
+		log.Printf("Error retrieving wholesaler: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve wholesaler information",
+			Data:    err.Error(),
+		})
+	}
+
+	wholesalerID := wholesaler.ID
 
 	// Get wholesaler's purchased vouchers
 	purchasesCollection := wvc.DB.Collection("wholesaler_voucher_purchases")
@@ -309,11 +354,11 @@ func (wvc *WholesalerVoucherController) GetWholesalerVouchers(c echo.Context) er
 // UseVoucherForWholesaler marks a voucher as used by a wholesaler
 func (wvc *WholesalerVoucherController) UseVoucherForWholesaler(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	wholesalerID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid wholesaler ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -327,13 +372,38 @@ func (wvc *WholesalerVoucherController) UseVoucherForWholesaler(c echo.Context) 
 	}
 
 	ctx := context.Background()
+
+	// Get wholesaler ID (by userId or createdBy)
+	wholesalersCollection := wvc.DB.Collection("wholesalers")
+	var wholesaler models.Wholesaler
+	err = wholesalersCollection.FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&wholesaler)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Wholesaler not found",
+			})
+		}
+		log.Printf("Error retrieving wholesaler: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve wholesaler information",
+			Data:    err.Error(),
+		})
+	}
+
 	purchasesCollection := wvc.DB.Collection("wholesaler_voucher_purchases")
 
 	// Check if the purchase exists and belongs to the wholesaler
 	var purchase models.WholesalerVoucherPurchase
 	err = purchasesCollection.FindOne(ctx, bson.M{
 		"_id":          objID,
-		"wholesalerId": wholesalerID,
+		"wholesalerId": wholesaler.ID,
 	}).Decode(&purchase)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
