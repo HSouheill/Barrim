@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -121,11 +122,11 @@ func (spvc *ServiceProviderVoucherController) GetAvailableVouchersForServiceProv
 // PurchaseVoucherForServiceProvider allows a service provider to purchase a voucher with points
 func (spvc *ServiceProviderVoucherController) PurchaseVoucherForServiceProvider(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	serviceProviderID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid service provider ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -158,89 +159,109 @@ func (spvc *ServiceProviderVoucherController) PurchaseVoucherForServiceProvider(
 
 	ctx := context.Background()
 
-	// Start a transaction
-	session, err := spvc.DB.Client().StartSession()
+	// Get the voucher (must be active)
+	vouchersCollection := spvc.DB.Collection("vouchers")
+	var voucher models.Voucher
+	err = vouchersCollection.FindOne(ctx, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to start transaction",
-		})
-	}
-	defer session.EndSession(ctx)
-
-	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
-		// Get the voucher
-		vouchersCollection := spvc.DB.Collection("vouchers")
-		var voucher models.Voucher
-		err := vouchersCollection.FindOne(sc, bson.M{"_id": voucherID, "isActive": true}).Decode(&voucher)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				return nil, echo.NewHTTPError(http.StatusNotFound, "Voucher not found or inactive")
-			}
-			return nil, err
-		}
-
-		// Get service provider's current points
-		serviceProvidersCollection := spvc.DB.Collection("serviceproviders")
-		var serviceProvider models.ServiceProvider
-		err = serviceProvidersCollection.FindOne(sc, bson.M{"_id": serviceProviderID}).Decode(&serviceProvider)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check if service provider has enough points
-		if serviceProvider.Points < voucher.Points {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, "Insufficient points")
-		}
-
-		// Check if service provider already purchased this voucher
-		purchasesCollection := spvc.DB.Collection("service_provider_voucher_purchases")
-		var existingPurchase models.ServiceProviderVoucherPurchase
-		err = purchasesCollection.FindOne(sc, bson.M{
-			"serviceProviderId": serviceProviderID,
-			"voucherId":         voucherID,
-		}).Decode(&existingPurchase)
-		if err == nil {
-			return nil, echo.NewHTTPError(http.StatusConflict, "You have already purchased this voucher")
-		}
-
-		// Create purchase record
-		purchase := models.ServiceProviderVoucherPurchase{
-			ID:                primitive.NewObjectID(),
-			ServiceProviderID: serviceProviderID,
-			VoucherID:         voucherID,
-			PointsUsed:        voucher.Points,
-			PurchasedAt:       time.Now(),
-			IsUsed:            false,
-		}
-
-		_, err = purchasesCollection.InsertOne(sc, purchase)
-		if err != nil {
-			return nil, err
-		}
-
-		// Deduct points from service provider
-		_, err = serviceProvidersCollection.UpdateByID(sc, serviceProviderID, bson.M{
-			"$inc": bson.M{"points": -voucher.Points},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return purchase, nil
-	})
-
-	if err != nil {
-		if httpErr, ok := err.(*echo.HTTPError); ok {
-			return c.JSON(httpErr.Code, models.Response{
-				Status:  httpErr.Code,
-				Message: httpErr.Message.(string),
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Voucher not found or inactive",
 			})
 		}
-		log.Printf("Error purchasing voucher: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to purchase voucher",
+			Message: "Failed to retrieve voucher",
+			Data:    err.Error(),
+		})
+	}
+
+	// Resolve the service provider document and current points
+	usersCollection := spvc.DB.Collection("users")
+	var user models.User
+	_ = usersCollection.FindOne(ctx, bson.M{"_id": userID, "userType": "serviceProvider"}).Decode(&user)
+
+	serviceProvidersCollection := spvc.DB.Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	if user.ServiceProviderID != nil {
+		_ = serviceProvidersCollection.FindOne(ctx, bson.M{"_id": user.ServiceProviderID}).Decode(&serviceProvider)
+	}
+	if serviceProvider.ID.IsZero() {
+		_ = serviceProvidersCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&serviceProvider)
+	}
+	if serviceProvider.ID.IsZero() {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Service provider not found for user",
+		})
+	}
+
+	currentPoints := serviceProvider.Points
+	if serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.Points > 0 {
+		currentPoints = serviceProvider.ServiceProviderInfo.Points
+	}
+
+	// Check if enough points
+	if currentPoints < voucher.Points {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Insufficient points",
+		})
+	}
+
+	// Check if already purchased
+	purchasesCollection := spvc.DB.Collection("service_provider_voucher_purchases")
+	var existingPurchase models.ServiceProviderVoucherPurchase
+	err = purchasesCollection.FindOne(ctx, bson.M{
+		"serviceProviderId": serviceProvider.ID,
+		"voucherId":         voucherID,
+	}).Decode(&existingPurchase)
+	if err == nil {
+		return c.JSON(http.StatusConflict, models.Response{
+			Status:  http.StatusConflict,
+			Message: "You have already purchased this voucher",
+		})
+	}
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		log.Printf("Error checking existing purchase: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to check existing purchases",
+			Data:    err.Error(),
+		})
+	}
+
+	// Create purchase record
+	purchase := models.ServiceProviderVoucherPurchase{
+		ID:                primitive.NewObjectID(),
+		ServiceProviderID: serviceProvider.ID,
+		VoucherID:         voucherID,
+		PointsUsed:        voucher.Points,
+		PurchasedAt:       time.Now(),
+		IsUsed:            false,
+	}
+	_, err = purchasesCollection.InsertOne(ctx, purchase)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create voucher purchase",
+			Data:    err.Error(),
+		})
+	}
+
+	// Deduct points from service provider (prefer nested points if using nested model)
+	updateFilter := bson.M{"_id": serviceProvider.ID}
+	update := bson.M{"$inc": bson.M{"points": -voucher.Points}}
+	if serviceProvider.ServiceProviderInfo != nil {
+		update = bson.M{"$inc": bson.M{"serviceProviderInfo.points": -voucher.Points}}
+	}
+	_, err = serviceProvidersCollection.UpdateOne(ctx, updateFilter, update)
+	if err != nil {
+		log.Printf("Error updating service provider points: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to deduct points",
 			Data:    err.Error(),
 		})
 	}
