@@ -275,19 +275,43 @@ func (spvc *ServiceProviderVoucherController) PurchaseVoucherForServiceProvider(
 // GetServiceProviderVouchers retrieves all vouchers purchased by the current service provider
 func (spvc *ServiceProviderVoucherController) GetServiceProviderVouchers(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	serviceProviderID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid service provider ID",
+			Message: "Invalid user ID",
 		})
 	}
 
 	ctx := context.Background()
 
+	// Resolve service provider ID from user
+	usersCollection := spvc.DB.Collection("users")
+	var user models.User
+	_ = usersCollection.FindOne(ctx, bson.M{"_id": userID, "userType": "serviceProvider"}).Decode(&user)
+
+	serviceProvidersCollection := spvc.DB.Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	if user.ServiceProviderID != nil {
+		_ = serviceProvidersCollection.FindOne(ctx, bson.M{"_id": user.ServiceProviderID}).Decode(&serviceProvider)
+	}
+	if serviceProvider.ID.IsZero() {
+		_ = serviceProvidersCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&serviceProvider)
+	}
+	if serviceProvider.ID.IsZero() {
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Service provider vouchers retrieved successfully",
+			Data: map[string]interface{}{
+				"count":    0,
+				"vouchers": []models.ServiceProviderVoucher{},
+			},
+		})
+	}
+
 	// Get service provider's purchased vouchers
 	purchasesCollection := spvc.DB.Collection("service_provider_voucher_purchases")
-	cursor, err := purchasesCollection.Find(ctx, bson.M{"serviceProviderId": serviceProviderID})
+	cursor, err := purchasesCollection.Find(ctx, bson.M{"serviceProviderId": serviceProvider.ID})
 	if err != nil {
 		log.Printf("Error retrieving service provider vouchers: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -339,11 +363,11 @@ func (spvc *ServiceProviderVoucherController) GetServiceProviderVouchers(c echo.
 // UseVoucherForServiceProvider marks a voucher as used by a service provider
 func (spvc *ServiceProviderVoucherController) UseVoucherForServiceProvider(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	serviceProviderID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid service provider ID",
+			Message: "Invalid user ID",
 		})
 	}
 
@@ -359,11 +383,31 @@ func (spvc *ServiceProviderVoucherController) UseVoucherForServiceProvider(c ech
 	ctx := context.Background()
 	purchasesCollection := spvc.DB.Collection("service_provider_voucher_purchases")
 
+	// Resolve service provider ID from user
+	usersCollection := spvc.DB.Collection("users")
+	var user models.User
+	_ = usersCollection.FindOne(ctx, bson.M{"_id": userID, "userType": "serviceProvider"}).Decode(&user)
+
+	serviceProvidersCollection := spvc.DB.Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	if user.ServiceProviderID != nil {
+		_ = serviceProvidersCollection.FindOne(ctx, bson.M{"_id": user.ServiceProviderID}).Decode(&serviceProvider)
+	}
+	if serviceProvider.ID.IsZero() {
+		_ = serviceProvidersCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&serviceProvider)
+	}
+	if serviceProvider.ID.IsZero() {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Service provider not found",
+		})
+	}
+
 	// Check if the purchase exists and belongs to the service provider
 	var purchase models.ServiceProviderVoucherPurchase
 	err = purchasesCollection.FindOne(ctx, bson.M{
 		"_id":               objID,
-		"serviceProviderId": serviceProviderID,
+		"serviceProviderId": serviceProvider.ID,
 	}).Decode(&purchase)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
