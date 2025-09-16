@@ -28,27 +28,47 @@ func (spvc *ServiceProviderVoucherController) GetAvailableVouchersForServiceProv
 	collection := spvc.DB.Collection("vouchers")
 	ctx := context.Background()
 
-	// Get service provider info to check their points
+	// Get current user id from token
 	claims := middleware.GetUserFromToken(c)
-	serviceProviderID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid service provider ID",
+			Message: "Invalid user ID",
 		})
 	}
 
-	// Get service provider's current points
-	serviceProvidersCollection := spvc.DB.Collection("serviceproviders")
-	var serviceProvider models.ServiceProvider
-	err = serviceProvidersCollection.FindOne(ctx, bson.M{"_id": serviceProviderID}).Decode(&serviceProvider)
-	if err != nil {
-		log.Printf("Error retrieving service provider: %v", err)
+	// Determine points from users collection, with fallback to serviceProviders
+	points := 0
+	usersCollection := spvc.DB.Collection("users")
+	var user models.User
+	err = usersCollection.FindOne(ctx, bson.M{"_id": userID, "userType": "serviceProvider"}).Decode(&user)
+	if err != nil && err != mongo.ErrNoDocuments {
+		log.Printf("Error retrieving user: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to retrieve service provider information",
+			Message: "Failed to retrieve user information",
 			Data:    err.Error(),
 		})
+	}
+	if user.ServiceProviderInfo != nil {
+		points = user.ServiceProviderInfo.Points
+	} else {
+		serviceProvidersCollection := spvc.DB.Collection("serviceProviders")
+		var serviceProvider models.ServiceProvider
+		if user.ServiceProviderID != nil {
+			_ = serviceProvidersCollection.FindOne(ctx, bson.M{"_id": user.ServiceProviderID}).Decode(&serviceProvider)
+		}
+		if serviceProvider.ID.IsZero() {
+			_ = serviceProvidersCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&serviceProvider)
+		}
+		if !serviceProvider.ID.IsZero() {
+			if serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.Points > 0 {
+				points = serviceProvider.ServiceProviderInfo.Points
+			} else {
+				points = serviceProvider.Points
+			}
+		}
 	}
 
 	// Get vouchers available for service providers
@@ -79,11 +99,11 @@ func (spvc *ServiceProviderVoucherController) GetAvailableVouchersForServiceProv
 	// Create service provider vouchers with purchase capability info
 	var serviceProviderVouchers []models.ServiceProviderVoucher
 	for _, voucher := range vouchers {
-		canPurchase := serviceProvider.Points >= voucher.Points
+		canPurchase := points >= voucher.Points
 		serviceProviderVouchers = append(serviceProviderVouchers, models.ServiceProviderVoucher{
 			Voucher:               voucher,
 			CanPurchase:           canPurchase,
-			ServiceProviderPoints: serviceProvider.Points,
+			ServiceProviderPoints: points,
 		})
 	}
 
@@ -93,7 +113,7 @@ func (spvc *ServiceProviderVoucherController) GetAvailableVouchersForServiceProv
 		Data: map[string]interface{}{
 			"count":                 len(serviceProviderVouchers),
 			"vouchers":              serviceProviderVouchers,
-			"serviceProviderPoints": serviceProvider.Points,
+			"serviceProviderPoints": points,
 		},
 	})
 }
