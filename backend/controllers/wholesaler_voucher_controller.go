@@ -30,19 +30,30 @@ func (wvc *WholesalerVoucherController) GetAvailableVouchersForWholesaler(c echo
 
 	// Get wholesaler info to check their points
 	claims := middleware.GetUserFromToken(c)
-	wholesalerID, err := primitive.ObjectIDFromHex(claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid wholesaler ID",
+			Message: "Invalid user ID",
 		})
 	}
 
-	// Get wholesaler's current points
+	// Get wholesaler's current points (by userId or createdBy)
 	wholesalersCollection := wvc.DB.Collection("wholesalers")
 	var wholesaler models.Wholesaler
-	err = wholesalersCollection.FindOne(ctx, bson.M{"_id": wholesalerID}).Decode(&wholesaler)
+	err = wholesalersCollection.FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&wholesaler)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Wholesaler not found",
+			})
+		}
 		log.Printf("Error retrieving wholesaler: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
