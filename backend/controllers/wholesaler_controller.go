@@ -1391,7 +1391,9 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		"socialMedia": updatedBranch.SocialMedia,
 	}
 
-	log.Printf("Response data social media: %+v", responseData["socialMedia"])
+	// Debug: Check if social media is properly set in response data
+	log.Printf("Response data before sending: %+v", responseData)
+	log.Printf("Social media in response data: %+v", responseData["socialMedia"])
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
