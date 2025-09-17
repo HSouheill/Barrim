@@ -1254,27 +1254,33 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
-	// Create social media object for the branch - direct extraction
+	// Create social media object for the branch - robust extraction
 	var facebookValue, instagramValue string
 
-	// Extract Facebook value
+	// Extract Facebook value - try multiple approaches
 	if fb, exists := branchData["facebook"]; exists && fb != nil {
 		if fbStr, ok := fb.(string); ok && fbStr != "" {
 			facebookValue = fbStr
 		} else {
 			facebookValue = existingBranch.SocialMedia.Facebook
 		}
+	} else if fbForm := form.Value["facebook"]; len(fbForm) > 0 && fbForm[0] != "" {
+		// Check if facebook was sent as a separate form field
+		facebookValue = fbForm[0]
 	} else {
 		facebookValue = existingBranch.SocialMedia.Facebook
 	}
 
-	// Extract Instagram value
+	// Extract Instagram value - try multiple approaches
 	if ig, exists := branchData["instagram"]; exists && ig != nil {
 		if igStr, ok := ig.(string); ok && igStr != "" {
 			instagramValue = igStr
 		} else {
 			instagramValue = existingBranch.SocialMedia.Instagram
 		}
+	} else if igForm := form.Value["instagram"]; len(igForm) > 0 && igForm[0] != "" {
+		// Check if instagram was sent as a separate form field
+		instagramValue = igForm[0]
 	} else {
 		instagramValue = existingBranch.SocialMedia.Instagram
 	}
