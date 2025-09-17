@@ -1005,10 +1005,10 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 		})
 	}
 	var req struct {
-		FullName string `json:"fullName"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		// PhoneNumber       string   `json:"phoneNumber"`
+		FullName          string  `json:"fullName"`
+		Email             string  `json:"email"`
+		Password          string  `json:"password"`
+		PhoneNumber       string  `json:"phoneNumber"`
 		CommissionPercent float64 `json:"commissionPercent"`
 		Status            string  `json:"status"`
 		CreatedBy         string  `json:"createdBy"`
@@ -1020,12 +1020,12 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 			Message: "Invalid request body: " + err.Error(),
 		})
 	}
-	// if req.FullName == "" || req.Email == "" || req.Password == "" || req.PhoneNumber == "" {
-	// 	return c.JSON(http.StatusBadRequest, models.Response{
-	// 		Status:  http.StatusBadRequest,
-	// 		Message: "Full name, email, password, phone number are required",
-	// 	})
-	// }
+	if req.FullName == "" || req.Email == "" || req.Password == "" || req.PhoneNumber == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Full name, email, password, phone number are required",
+		})
+	}
 	if req.CommissionPercent <= 0 || req.CommissionPercent > 100 {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
@@ -1069,11 +1069,11 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 		})
 	}
 	salesManager := models.SalesManager{
-		ID:       primitive.NewObjectID(),
-		FullName: req.FullName,
-		Email:    req.Email,
-		Password: string(hashedPassword),
-		// PhoneNumber:       req.PhoneNumber,
+		ID:                primitive.NewObjectID(),
+		FullName:          req.FullName,
+		Email:             req.Email,
+		Password:          string(hashedPassword),
+		PhoneNumber:       req.PhoneNumber,
 		CommissionPercent: req.CommissionPercent,
 		CreatedBy:         primitive.ObjectID{}, // You might want to parse this from a valid ObjectID
 		Salespersons:      []primitive.ObjectID{},
