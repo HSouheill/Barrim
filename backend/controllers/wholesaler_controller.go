@@ -1254,63 +1254,17 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
-	// Create social media object for the branch with better handling
-	// First try the improved handling, then fallback to getString
-	var facebookValue, instagramValue string
-
-	// Handle Facebook - check both JSON data and form fields
-	if fb, exists := branchData["facebook"]; exists {
-		if fbStr, ok := fb.(string); ok {
-			facebookValue = fbStr
-		} else {
-			facebookValue = existingBranch.SocialMedia.Facebook
-		}
-	} else if fbForm := form.Value["facebook"]; len(fbForm) > 0 {
-		// Check if facebook was sent as a separate form field
-		facebookValue = fbForm[0]
-	} else {
-		// Fallback to getString if key doesn't exist
-		facebookValue = getString(branchData, "facebook", existingBranch.SocialMedia.Facebook)
-	}
-
-	// Handle Instagram - check both JSON data and form fields
-	if ig, exists := branchData["instagram"]; exists {
-		if igStr, ok := ig.(string); ok {
-			instagramValue = igStr
-		} else {
-			instagramValue = existingBranch.SocialMedia.Instagram
-		}
-	} else if igForm := form.Value["instagram"]; len(igForm) > 0 {
-		// Check if instagram was sent as a separate form field
-		instagramValue = igForm[0]
-	} else {
-		// Fallback to getString if key doesn't exist
-		instagramValue = getString(branchData, "instagram", existingBranch.SocialMedia.Instagram)
-	}
-
-	// Debug: Log all keys in branchData to see what's available
-	log.Printf("All keys in branchData: %v", func() []string {
-		keys := make([]string, 0, len(branchData))
-		for k := range branchData {
-			keys = append(keys, k)
-		}
-		return keys
-	}())
-
-	log.Printf("Raw facebook value from branchData: %v (type: %T)", branchData["facebook"], branchData["facebook"])
-	log.Printf("Raw instagram value from branchData: %v (type: %T)", branchData["instagram"], branchData["instagram"])
-	log.Printf("Existing facebook: %s", existingBranch.SocialMedia.Facebook)
-	log.Printf("Existing instagram: %s", existingBranch.SocialMedia.Instagram)
-	log.Printf("Final facebook: %s", facebookValue)
-	log.Printf("Final instagram: %s", instagramValue)
-
+	// Create social media object for the branch - use same logic as AddBranch
 	socialMedia := models.SocialMedia{
-		Facebook:  facebookValue,
-		Instagram: instagramValue,
+		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
+		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
 	}
 
+	// Debug: Log social media processing
 	log.Printf("Social media object: %+v", socialMedia)
-	log.Printf("Facebook value: '%s', Instagram value: '%s'", facebookValue, instagramValue)
+	log.Printf("Facebook from request: %s, Instagram from request: %s",
+		getString(branchData, "facebook", ""),
+		getString(branchData, "instagram", ""))
 
 	// Create updated branch object
 	updatedBranch := models.Branch{
@@ -1328,8 +1282,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		UpdatedAt:   time.Now(),
 	}
 
-	log.Printf("Prepared updated branch object: %+v", updatedBranch)
-	log.Printf("Updated branch social media before DB update: %+v", updatedBranch.SocialMedia)
+	log.Printf("Prepared updated branch object with social media: %+v", updatedBranch.SocialMedia)
 
 	// Update the branch in the database
 	// First, remove the old branch
@@ -1355,10 +1308,6 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		},
 	}
 
-	log.Printf("About to update database with branch: %+v", updatedBranch)
-	log.Printf("Social media in updated branch before push: %+v", updatedBranch.SocialMedia)
-	log.Printf("Push operation: %+v", push)
-
 	result, err := wholesalerCollection.UpdateByID(ctx, wholesaler.ID, push)
 	if err != nil {
 		log.Printf("Error updating branch: %v", err)
@@ -1369,19 +1318,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	}
 
 	log.Printf("Database update result: %+v", result)
-	log.Printf("Updated branch social media after DB update: %+v", updatedBranch.SocialMedia)
-
-	// Verify the update by fetching the branch again
-	var verifyWholesaler models.Wholesaler
-	err = wholesalerCollection.FindOne(ctx, bson.M{"_id": wholesaler.ID}).Decode(&verifyWholesaler)
-	if err == nil {
-		for _, b := range verifyWholesaler.Branches {
-			if b.ID == branchObjectID {
-				log.Printf("Verified branch social media in DB: %+v", b.SocialMedia)
-				break
-			}
-		}
-	}
+	log.Printf("Updated branch social media: %+v", updatedBranch.SocialMedia)
 
 	responseData := map[string]interface{}{
 		"_id":         updatedBranch.ID.Hex(),
@@ -1398,9 +1335,8 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		"socialMedia": updatedBranch.SocialMedia,
 	}
 
-	// Debug: Check if social media is properly set in response data
-	log.Printf("Response data before sending: %+v", responseData)
-	log.Printf("Social media in response data: %+v", responseData["socialMedia"])
+	// Debug: Log response data
+	log.Printf("Response social media: %+v", responseData["socialMedia"])
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,

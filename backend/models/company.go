@@ -40,8 +40,8 @@ type ContactInfo struct {
 }
 
 type SocialMedia struct {
-	Facebook  string `json:"facebook,omitempty" bson:"facebook"`
-	Instagram string `json:"instagram,omitempty" bson:"instagram"`
+	Facebook  string `json:"facebook" bson:"facebook"`
+	Instagram string `json:"instagram" bson:"instagram"`
 }
 
 type Address struct {
