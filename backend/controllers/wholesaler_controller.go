@@ -1254,26 +1254,35 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
-	// Debug: Log social media processing BEFORE creating the object
-	log.Printf("=== SOCIAL MEDIA DEBUG ===")
-	log.Printf("BranchData keys: %v", func() []string {
-		keys := make([]string, 0, len(branchData))
-		for k := range branchData {
-			keys = append(keys, k)
-		}
-		return keys
-	}())
-	log.Printf("Facebook value from branchData: %v (type: %T)", branchData["facebook"], branchData["facebook"])
-	log.Printf("Instagram value from branchData: %v (type: %T)", branchData["instagram"], branchData["instagram"])
+	// Create social media object for the branch - direct extraction
+	var facebookValue, instagramValue string
 
-	// Create social media object for the branch - use same logic as AddBranch
-	socialMedia := models.SocialMedia{
-		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
-		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
+	// Extract Facebook value
+	if fb, exists := branchData["facebook"]; exists && fb != nil {
+		if fbStr, ok := fb.(string); ok && fbStr != "" {
+			facebookValue = fbStr
+		} else {
+			facebookValue = existingBranch.SocialMedia.Facebook
+		}
+	} else {
+		facebookValue = existingBranch.SocialMedia.Facebook
 	}
 
-	log.Printf("Social media object: %+v", socialMedia)
-	log.Printf("=== END SOCIAL MEDIA DEBUG ===")
+	// Extract Instagram value
+	if ig, exists := branchData["instagram"]; exists && ig != nil {
+		if igStr, ok := ig.(string); ok && igStr != "" {
+			instagramValue = igStr
+		} else {
+			instagramValue = existingBranch.SocialMedia.Instagram
+		}
+	} else {
+		instagramValue = existingBranch.SocialMedia.Instagram
+	}
+
+	socialMedia := models.SocialMedia{
+		Facebook:  facebookValue,
+		Instagram: instagramValue,
+	}
 
 	// Create updated branch object
 	updatedBranch := models.Branch{
