@@ -1304,6 +1304,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	}
 
 	log.Printf("Social media object: %+v", socialMedia)
+	log.Printf("Facebook value: '%s', Instagram value: '%s'", facebookValue, instagramValue)
 
 	// Create updated branch object
 	updatedBranch := models.Branch{
