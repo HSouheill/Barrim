@@ -1254,13 +1254,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
-	// Create social media object for the branch - use same logic as AddBranch
-	socialMedia := models.SocialMedia{
-		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
-		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
-	}
-
-	// Debug: Log social media processing
+	// Debug: Log social media processing BEFORE creating the object
 	log.Printf("=== SOCIAL MEDIA DEBUG ===")
 	log.Printf("BranchData keys: %v", func() []string {
 		keys := make([]string, 0, len(branchData))
@@ -1269,8 +1263,15 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 		return keys
 	}())
-	log.Printf("Facebook value from branchData: %v", branchData["facebook"])
-	log.Printf("Instagram value from branchData: %v", branchData["instagram"])
+	log.Printf("Facebook value from branchData: %v (type: %T)", branchData["facebook"], branchData["facebook"])
+	log.Printf("Instagram value from branchData: %v (type: %T)", branchData["instagram"], branchData["instagram"])
+
+	// Create social media object for the branch - use same logic as AddBranch
+	socialMedia := models.SocialMedia{
+		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
+		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
+	}
+
 	log.Printf("Social media object: %+v", socialMedia)
 	log.Printf("=== END SOCIAL MEDIA DEBUG ===")
 
