@@ -1126,13 +1126,14 @@ func (ac *AdminController) GetAllSalesManagers(c echo.Context) error {
 	var result []map[string]interface{}
 	for _, sm := range salesManagers {
 		result = append(result, map[string]interface{}{
-			"id":          sm.ID,
-			"fullName":    sm.FullName,
-			"email":       sm.Email,
-			"phoneNumber": sm.PhoneNumber,
-			"createdBy":   sm.CreatedBy,
-			"createdAt":   sm.CreatedAt,
-			"updatedAt":   sm.UpdatedAt,
+			"id":                sm.ID,
+			"fullName":          sm.FullName,
+			"email":             sm.Email,
+			"phoneNumber":       sm.PhoneNumber,
+			"commissionPercent": sm.CommissionPercent,
+			"createdBy":         sm.CreatedBy,
+			"createdAt":         sm.CreatedAt,
+			"updatedAt":         sm.UpdatedAt,
 			// "rolesAccess": sm.RolesAccess,
 		})
 	}
