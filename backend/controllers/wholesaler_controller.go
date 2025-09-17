@@ -1258,25 +1258,31 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	// First try the improved handling, then fallback to getString
 	var facebookValue, instagramValue string
 
-	// Handle Facebook - always use the value from the request, even if empty
+	// Handle Facebook - check both JSON data and form fields
 	if fb, exists := branchData["facebook"]; exists {
 		if fbStr, ok := fb.(string); ok {
 			facebookValue = fbStr
 		} else {
 			facebookValue = existingBranch.SocialMedia.Facebook
 		}
+	} else if fbForm := form.Value["facebook"]; len(fbForm) > 0 {
+		// Check if facebook was sent as a separate form field
+		facebookValue = fbForm[0]
 	} else {
 		// Fallback to getString if key doesn't exist
 		facebookValue = getString(branchData, "facebook", existingBranch.SocialMedia.Facebook)
 	}
 
-	// Handle Instagram - always use the value from the request, even if empty
+	// Handle Instagram - check both JSON data and form fields
 	if ig, exists := branchData["instagram"]; exists {
 		if igStr, ok := ig.(string); ok {
 			instagramValue = igStr
 		} else {
 			instagramValue = existingBranch.SocialMedia.Instagram
 		}
+	} else if igForm := form.Value["instagram"]; len(igForm) > 0 {
+		// Check if instagram was sent as a separate form field
+		instagramValue = igForm[0]
 	} else {
 		// Fallback to getString if key doesn't exist
 		instagramValue = getString(branchData, "instagram", existingBranch.SocialMedia.Instagram)
