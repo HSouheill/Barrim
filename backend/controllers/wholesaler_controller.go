@@ -1258,7 +1258,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	// First try the improved handling, then fallback to getString
 	var facebookValue, instagramValue string
 
-	// Handle Facebook - check if value exists and is not empty
+	// Handle Facebook - always use the value from the request, even if empty
 	if fb, exists := branchData["facebook"]; exists {
 		if fbStr, ok := fb.(string); ok {
 			facebookValue = fbStr
@@ -1270,7 +1270,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		facebookValue = getString(branchData, "facebook", existingBranch.SocialMedia.Facebook)
 	}
 
-	// Handle Instagram - check if value exists and is not empty
+	// Handle Instagram - always use the value from the request, even if empty
 	if ig, exists := branchData["instagram"]; exists {
 		if igStr, ok := ig.(string); ok {
 			instagramValue = igStr
