@@ -1254,36 +1254,14 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 		}
 	}
 
-	// Create social media object for the branch - extract from form data
-	var facebookValue, instagramValue string
-
-	// Check if social media fields are in the JSON data
-	if fb, exists := branchData["facebook"]; exists {
-		if fbStr, ok := fb.(string); ok {
-			facebookValue = fbStr
-		} else {
-			facebookValue = existingBranch.SocialMedia.Facebook
-		}
-	} else {
-		facebookValue = existingBranch.SocialMedia.Facebook
-	}
-
-	if ig, exists := branchData["instagram"]; exists {
-		if igStr, ok := ig.(string); ok {
-			instagramValue = igStr
-		} else {
-			instagramValue = existingBranch.SocialMedia.Instagram
-		}
-	} else {
-		instagramValue = existingBranch.SocialMedia.Instagram
-	}
-
+	// Create social media object for the branch - use same logic as AddBranch
 	socialMedia := models.SocialMedia{
-		Facebook:  facebookValue,
-		Instagram: instagramValue,
+		Facebook:  getString(branchData, "facebook", existingBranch.SocialMedia.Facebook),
+		Instagram: getString(branchData, "instagram", existingBranch.SocialMedia.Instagram),
 	}
 
 	// Debug: Log social media processing
+	log.Printf("=== SOCIAL MEDIA DEBUG ===")
 	log.Printf("BranchData keys: %v", func() []string {
 		keys := make([]string, 0, len(branchData))
 		for k := range branchData {
@@ -1294,6 +1272,7 @@ func (wc *WholesalerController) UpdateBranch(c echo.Context) error {
 	log.Printf("Facebook value from branchData: %v", branchData["facebook"])
 	log.Printf("Instagram value from branchData: %v", branchData["instagram"])
 	log.Printf("Social media object: %+v", socialMedia)
+	log.Printf("=== END SOCIAL MEDIA DEBUG ===")
 
 	// Create updated branch object
 	updatedBranch := models.Branch{
