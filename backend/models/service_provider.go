@@ -48,16 +48,19 @@ type ServiceProvider struct {
 	BusinessName string             `json:"businessName,omitempty" bson:"businessName,omitempty"`
 	Category     string             `json:"category,omitempty" bson:"category,omitempty"`
 	// Flat fields for salesperson-created service providers
-	Email         string `json:"email,omitempty" bson:"email,omitempty"`
-	Phone         string `json:"phone,omitempty" bson:"phone,omitempty"`
-	Password      string `json:"password,omitempty" bson:"password,omitempty"`
-	ContactPerson string `json:"contactPerson,omitempty" bson:"contactPerson,omitempty"`
-	ContactPhone  string `json:"contactPhone,omitempty" bson:"contactPhone,omitempty"`
-	Country       string `json:"country,omitempty" bson:"country,omitempty"`
-	Governorate   string `json:"governorate,omitempty" bson:"governorate,omitempty"`
-	District      string `json:"district,omitempty" bson:"district,omitempty"`
-	City          string `json:"city,omitempty" bson:"city,omitempty"`
-	LogoURL       string `json:"logo,omitempty" bson:"logo,omitempty"`
+	Email            string   `json:"email,omitempty" bson:"email,omitempty"`
+	Phone            string   `json:"phone,omitempty" bson:"phone,omitempty"`
+	Password         string   `json:"password,omitempty" bson:"password,omitempty"`
+	ContactPerson    string   `json:"contactPerson,omitempty" bson:"contactPerson,omitempty"`
+	ContactPhone     string   `json:"contactPhone,omitempty" bson:"contactPhone,omitempty"`
+	Country          string   `json:"country,omitempty" bson:"country,omitempty"`
+	Governorate      string   `json:"governorate,omitempty" bson:"governorate,omitempty"`
+	District         string   `json:"district,omitempty" bson:"district,omitempty"`
+	City             string   `json:"city,omitempty" bson:"city,omitempty"`
+	LogoURL          string   `json:"logo,omitempty" bson:"logo,omitempty"`
+	ProfilePicURL    string   `json:"profilePicUrl,omitempty" bson:"profilePicUrl,omitempty"`
+	AdditionalPhones []string `json:"additionalPhones,omitempty" bson:"additionalPhones,omitempty"`
+	AdditionalEmails []string `json:"additionalEmails,omitempty" bson:"additionalEmails,omitempty"`
 	// Nested fields for backward compatibility
 	ContactInfo       ContactInfo        `json:"contactInfo,omitempty" bson:"contactInfo,omitempty"`
 	ReferralCode      string             `json:"referralCode,omitempty" bson:"referralCode,omitempty"`

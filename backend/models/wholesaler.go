@@ -23,6 +23,7 @@ type Wholesaler struct {
 	ContactPerson    string               `json:"contactPerson,omitempty" bson:"contactPerson,omitempty"`
 	SocialMedia      SocialMedia          `json:"socialMedia,omitempty" bson:"socialMedia,omitempty"`
 	LogoURL          string               `json:"logoUrl,omitempty" bson:"logoUrl,omitempty"`
+	ProfilePicURL    string               `json:"profilePicUrl,omitempty" bson:"profilePicUrl,omitempty"`
 	Balance          float64              `json:"balance" bson:"balance"`
 	Branches         []Branch             `json:"branches,omitempty" bson:"branches,omitempty"` // Embedded branches (similar to Company model)
 	Sponsorship      bool                 `json:"sponsorship" bson:"sponsorship"`               // Whether the wholesaler has active sponsorship

@@ -23,6 +23,7 @@ type Company struct {
 	AdditionalEmails []string             `json:"additionalEmails,omitempty" bson:"additionalEmails,omitempty"`
 	SocialMedia      SocialMedia          `json:"socialMedia,omitempty" bson:"socialMedia,omitempty"`
 	LogoURL          string               `json:"logoUrl,omitempty" bson:"logoUrl,omitempty"`
+	ProfilePicURL    string               `json:"profilePicUrl,omitempty" bson:"profilePicUrl,omitempty"`
 	Balance          float64              `json:"balance" bson:"balance"`
 	Branches         []Branch             `json:"branches,omitempty" bson:"branches,omitempty"`
 	Sponsorship      bool                 `json:"sponsorship" bson:"sponsorship"` // Whether the company has active sponsorship

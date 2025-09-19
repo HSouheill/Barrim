@@ -4703,31 +4703,86 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 	// Create user account if email and password exist
 	if email, exists := pendingRequest["email"]; exists && email != "" {
 		if password, exists := pendingRequest["password"]; exists && password != "" {
-			user := models.User{
-				ID:        primitive.NewObjectID(),
-				Email:     email.(string),
-				Password:  password.(string),
-				UserType:  requestType,
-				Status:    "active",
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
+			// Extract additional fields from entity data
+			fullName := ""
+			phone := ""
+			contactPerson := ""
+			contactPhone := ""
+
+			// Get business name as full name
+			if v, ok := entityData["businessName"].(string); ok {
+				fullName = v
+			}
+
+			// Get phone and contact info based on entity type
+			switch requestType {
+			case "company", "wholesaler":
+				if contactInfo, ok := entityData["contactInfo"].(bson.M); ok {
+					if v, ok := contactInfo["phone"].(string); ok {
+						phone = v
+					}
+					if v, ok := contactInfo["whatsapp"].(string); ok {
+						contactPhone = v
+					}
+				}
+				// For wholesalers, also check direct phone field
+				if phone == "" && requestType == "wholesaler" {
+					if v, ok := entityData["phone"].(string); ok {
+						phone = v
+					}
+				}
+				if v, ok := entityData["contactPerson"].(string); ok {
+					contactPerson = v
+				}
+			case "serviceprovider":
+				if v, ok := entityData["phone"].(string); ok {
+					phone = v
+				}
+				if v, ok := entityData["contactPerson"].(string); ok {
+					contactPerson = v
+				}
+				if v, ok := entityData["contactPhone"].(string); ok {
+					contactPhone = v
+				}
+			}
+
+			// Create user document with all required fields
+			entityID := entityData["_id"].(primitive.ObjectID)
+			userDoc := bson.M{
+				"email":         email.(string),
+				"password":      password.(string),
+				"fullName":      fullName,
+				"userType":      requestType,
+				"phone":         phone,
+				"contactPerson": contactPerson,
+				"contactPhone":  contactPhone,
+				"isActive":      true,
+				"createdAt":     time.Now(),
+				"updatedAt":     time.Now(),
 			}
 
 			// Set the appropriate ID field based on entity type
-			entityID := entityData["_id"].(primitive.ObjectID)
 			switch requestType {
 			case "company":
-				user.CompanyID = &entityID
+				userDoc["companyId"] = entityID
 			case "wholesaler":
-				user.WholesalerID = &entityID
+				userDoc["wholesalerId"] = entityID
 			case "serviceprovider":
-				user.ServiceProviderID = &entityID
+				userDoc["serviceProviderId"] = entityID
 			}
 
-			_, err = ac.DB.Collection("users").InsertOne(ctx, user)
+			insertRes, err := ac.DB.Collection("users").InsertOne(ctx, userDoc)
 			if err != nil {
 				log.Printf("Error creating user account: %v", err)
 				// Don't fail the approval if user creation fails
+			} else {
+				// Update the entity with the user ID for easy lookup
+				if userOID, ok := insertRes.InsertedID.(primitive.ObjectID); ok {
+					_, updErr := ac.DB.Collection(entityCollection).UpdateOne(ctx, bson.M{"_id": entityID}, bson.M{"$set": bson.M{"userId": userOID}})
+					if updErr != nil {
+						log.Printf("Warning: failed to set userId on %s document: %v", requestType, updErr)
+					}
+				}
 			}
 		}
 	}
@@ -4986,8 +5041,7 @@ func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
 	})
 }
 
-
-// Post https://barrim.online/api/wholesaler/branches 
+// Post https://barrim.online/api/wholesaler/branches
 // output:
 // {
 //     "status": 200,
@@ -5017,7 +5071,7 @@ func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
 //         "videos": null
 //     }
 // }
-// Put https://barrim.online/api/wholesaler/branches/68c9928669d5f086c3a49df7 
+// Put https://barrim.online/api/wholesaler/branches/68c9928669d5f086c3a49df7
 // body: form-data: key: data, value: {
 //   "name": "Updated Branch Name",
 //   "phone": "1234567890",
@@ -5058,7 +5112,7 @@ func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
 //         "videos": null
 //           }
 // }
-// GET @ https://barrim.online/api/wholesaler/branches/68c9928669d5f086c3a49df7 
+// GET @ https://barrim.online/api/wholesaler/branches/68c9928669d5f086c3a49df7
 // {
 //     "status": 200,
 //     "message": "Branch retrieved successfully",
@@ -5090,4 +5144,3 @@ func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
 //     }
 
 // as you see creating a wholesaler branch is creating social links but when i update branch the social links removed, and get branch is not retrieving the social links
-    

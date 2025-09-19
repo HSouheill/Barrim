@@ -430,6 +430,79 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 		logoURL = filepath
 	}
 
+	// Handle profile picture upload
+	var profilePicURL string
+	if files, ok := form.File["profilePic"]; ok && len(files) > 0 {
+		file := files[0]
+		log.Printf("Processing profile picture file: %s", file.Filename)
+
+		src, err := file.Open()
+		if err != nil {
+			log.Printf("Error opening uploaded profile picture file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to open uploaded profile picture file: " + err.Error(),
+			})
+		}
+		defer src.Close()
+
+		// Create uploads directory if it doesn't exist
+		uploadDir := "uploads/profiles"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			log.Printf("Error creating profile upload directory: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create profile upload directory: " + err.Error(),
+			})
+		}
+
+		// Generate unique filename
+		filename := fmt.Sprintf("profile_%d_%s", time.Now().UnixNano(), file.Filename)
+		filepath := filepath.Join(uploadDir, filename)
+		log.Printf("Saving profile picture to: %s", filepath)
+
+		// Create destination file
+		dst, err := os.Create(filepath)
+		if err != nil {
+			log.Printf("Error creating destination profile picture file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create destination profile picture file: " + err.Error(),
+			})
+		}
+		defer dst.Close()
+
+		// Copy file contents
+		if _, err = io.Copy(dst, src); err != nil {
+			log.Printf("Error copying profile picture file contents: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save profile picture file: " + err.Error(),
+			})
+		}
+
+		profilePicURL = filepath
+	}
+
+	// Handle additional emails and phones
+	additionalEmails := []string{}
+	if emails, ok := form.Value["additionalEmails"]; ok {
+		for _, email := range emails {
+			if strings.TrimSpace(email) != "" {
+				additionalEmails = append(additionalEmails, strings.TrimSpace(email))
+			}
+		}
+	}
+
+	additionalPhones := []string{}
+	if phones, ok := form.Value["additionalPhones"]; ok {
+		for _, phone := range phones {
+			if strings.TrimSpace(phone) != "" {
+				additionalPhones = append(additionalPhones, strings.TrimSpace(phone))
+			}
+		}
+	}
+
 	// Hash password for storage
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -482,13 +555,17 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 	userID := primitive.NewObjectID()
 
 	company := models.Company{
-		ID:            companyID,
-		UserID:        userID,
-		BusinessName:  businessName,
-		Category:      category,
-		LogoURL:       logoURL,
-		ReferralCode:  referralCode,
-		ContactPerson: contactPerson,
+		ID:               companyID,
+		UserID:           userID,
+		BusinessName:     businessName,
+		Category:         category,
+		SubCategory:      subcategory,
+		LogoURL:          logoURL,
+		ProfilePicURL:    profilePicURL,
+		ReferralCode:     referralCode,
+		ContactPerson:    contactPerson,
+		AdditionalPhones: additionalPhones,
+		AdditionalEmails: additionalEmails,
 		ContactInfo: models.ContactInfo{
 			Phone:    phone,
 			WhatsApp: contactPhone,
@@ -509,14 +586,15 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 	}
 
 	pendingRequest := models.PendingCompanyRequest{
-		ID:             primitive.NewObjectID(),
-		Company:        company,
-		Email:          email,
-		Password:       string(hashedPassword),
-		SalesPersonID:  salesPersonID,
-		SalesManagerID: primitive.NilObjectID, // Set later if needed
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		ID:               primitive.NewObjectID(),
+		Company:          company,
+		Email:            email,
+		AdditionalEmails: additionalEmails,
+		Password:         string(hashedPassword),
+		SalesPersonID:    salesPersonID,
+		SalesManagerID:   primitive.NilObjectID, // Set later if needed
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 
 	// Set correct SalesManagerID
@@ -809,10 +887,32 @@ func (spc *SalesPersonController) UpdateCompany(c echo.Context) error {
 		})
 	}
 
+	// Handle additional emails and phones
+	additionalEmails := []string{}
+	if emails, ok := form.Value["additionalEmails"]; ok {
+		for _, email := range emails {
+			if strings.TrimSpace(email) != "" {
+				additionalEmails = append(additionalEmails, strings.TrimSpace(email))
+			}
+		}
+	}
+
+	additionalPhones := []string{}
+	if phones, ok := form.Value["additionalPhones"]; ok {
+		for _, phone := range phones {
+			if strings.TrimSpace(phone) != "" {
+				additionalPhones = append(additionalPhones, strings.TrimSpace(phone))
+			}
+		}
+	}
+
 	// Get form values
 	updates := bson.M{
-		"businessName": form.Value["businessName"][0],
-		"category":     form.Value["category"][0],
+		"businessName":     form.Value["businessName"][0],
+		"category":         form.Value["category"][0],
+		"subCategory":      form.Value["subcategory"][0],
+		"additionalEmails": additionalEmails,
+		"additionalPhones": additionalPhones,
 		"contactInfo": bson.M{
 			"phone":    form.Value["phone"][0],
 			"whatsapp": form.Value["contactPhone"][0],
@@ -870,6 +970,52 @@ func (spc *SalesPersonController) UpdateCompany(c echo.Context) error {
 		}
 
 		updates["logoUrl"] = filepath
+	}
+
+	// Handle profile picture upload if provided
+	if files, ok := form.File["profilePic"]; ok && len(files) > 0 {
+		file := files[0]
+		src, err := file.Open()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to open uploaded profile picture file",
+			})
+		}
+		defer src.Close()
+
+		// Create uploads directory if it doesn't exist
+		uploadDir := "uploads/profiles"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create profile upload directory",
+			})
+		}
+
+		// Generate unique filename
+		filename := fmt.Sprintf("profile_%d_%s", time.Now().UnixNano(), file.Filename)
+		filepath := filepath.Join(uploadDir, filename)
+
+		// Create destination file
+		dst, err := os.Create(filepath)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create destination profile picture file",
+			})
+		}
+		defer dst.Close()
+
+		// Copy file contents
+		if _, err = io.Copy(dst, src); err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save profile picture file",
+			})
+		}
+
+		updates["profilePicUrl"] = filepath
 	}
 
 	// Update company in database
@@ -1107,6 +1253,79 @@ func (spc *SalesPersonController) CreateWholesaler(c echo.Context) error {
 		logoURL = filepath
 	}
 
+	// Handle profile picture upload
+	var profilePicURL string
+	if files, ok := form.File["profilePic"]; ok && len(files) > 0 {
+		file := files[0]
+		log.Printf("Processing profile picture file: %s", file.Filename)
+
+		src, err := file.Open()
+		if err != nil {
+			log.Printf("Error opening uploaded profile picture file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to open uploaded profile picture file: " + err.Error(),
+			})
+		}
+		defer src.Close()
+
+		// Create uploads directory if it doesn't exist
+		uploadDir := "uploads/profiles"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			log.Printf("Error creating profile upload directory: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create profile upload directory: " + err.Error(),
+			})
+		}
+
+		// Generate unique filename
+		filename := fmt.Sprintf("profile_%d_%s", time.Now().UnixNano(), file.Filename)
+		filepath := filepath.Join(uploadDir, filename)
+		log.Printf("Saving profile picture to: %s", filepath)
+
+		// Create destination file
+		dst, err := os.Create(filepath)
+		if err != nil {
+			log.Printf("Error creating destination profile picture file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create destination profile picture file: " + err.Error(),
+			})
+		}
+		defer dst.Close()
+
+		// Copy file contents
+		if _, err = io.Copy(dst, src); err != nil {
+			log.Printf("Error copying profile picture file contents: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save profile picture file: " + err.Error(),
+			})
+		}
+
+		profilePicURL = filepath
+	}
+
+	// Handle additional emails and phones
+	additionalEmails := []string{}
+	if emails, ok := form.Value["additionalEmails"]; ok {
+		for _, email := range emails {
+			if strings.TrimSpace(email) != "" {
+				additionalEmails = append(additionalEmails, strings.TrimSpace(email))
+			}
+		}
+	}
+
+	additionalPhones := []string{}
+	if phones, ok := form.Value["additionalPhones"]; ok {
+		for _, phone := range phones {
+			if strings.TrimSpace(phone) != "" {
+				additionalPhones = append(additionalPhones, strings.TrimSpace(phone))
+			}
+		}
+	}
+
 	// Hash password for storage
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -1153,15 +1372,18 @@ func (spc *SalesPersonController) CreateWholesaler(c echo.Context) error {
 	}
 
 	wholesaler := models.Wholesaler{
-		ID:            primitive.NewObjectID(),
-		UserID:        primitive.NewObjectID(),
-		BusinessName:  businessName,
-		Category:      category,
-		SubCategory:   subcategory, // Set subcategory at wholesaler root level
-		Phone:         phone,
-		LogoURL:       logoURL,
-		ReferralCode:  referralCode,
-		ContactPerson: contactPerson,
+		ID:               primitive.NewObjectID(),
+		UserID:           primitive.NewObjectID(),
+		BusinessName:     businessName,
+		Category:         category,
+		SubCategory:      subcategory, // Set subcategory at wholesaler root level
+		Phone:            phone,
+		LogoURL:          logoURL,
+		ProfilePicURL:    profilePicURL,
+		ReferralCode:     referralCode,
+		ContactPerson:    contactPerson,
+		AdditionalPhones: additionalPhones,
+		AdditionalEmails: additionalEmails,
 		ContactInfo: models.ContactInfo{
 			Phone:    phone,
 			WhatsApp: contactPhone,
@@ -1182,14 +1404,15 @@ func (spc *SalesPersonController) CreateWholesaler(c echo.Context) error {
 	}
 
 	pendingRequest := models.PendingWholesalerRequest{
-		ID:             primitive.NewObjectID(),
-		Wholesaler:     wholesaler,
-		Email:          email,
-		Password:       string(hashedPassword),
-		SalesPersonID:  salesPersonID,
-		SalesManagerID: primitive.NilObjectID, // Set later if needed
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		ID:               primitive.NewObjectID(),
+		Wholesaler:       wholesaler,
+		Email:            email,
+		AdditionalEmails: additionalEmails,
+		Password:         string(hashedPassword),
+		SalesPersonID:    salesPersonID,
+		SalesManagerID:   primitive.NilObjectID, // Set later if needed
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 	// Set correct SalesManagerID
 	var salesperson models.Salesperson
@@ -1810,6 +2033,79 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		logoURL = filepath
 	}
 
+	// Handle profile picture upload
+	var profilePicURL string
+	if files, ok := form.File["profilePic"]; ok && len(files) > 0 {
+		file := files[0]
+		log.Printf("Processing profile picture file: %s", file.Filename)
+
+		src, err := file.Open()
+		if err != nil {
+			log.Printf("Error opening uploaded profile picture file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to open uploaded profile picture file: " + err.Error(),
+			})
+		}
+		defer src.Close()
+
+		// Create uploads directory if it doesn't exist
+		uploadDir := "uploads/profiles"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			log.Printf("Error creating profile upload directory: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create profile upload directory: " + err.Error(),
+			})
+		}
+
+		// Generate unique filename
+		filename := fmt.Sprintf("profile_%d_%s", time.Now().UnixNano(), file.Filename)
+		filepath := filepath.Join(uploadDir, filename)
+		log.Printf("Saving profile picture to: %s", filepath)
+
+		// Create destination file
+		dst, err := os.Create(filepath)
+		if err != nil {
+			log.Printf("Error creating destination profile picture file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create destination profile picture file: " + err.Error(),
+			})
+		}
+		defer dst.Close()
+
+		// Copy file contents
+		if _, err = io.Copy(dst, src); err != nil {
+			log.Printf("Error copying profile picture file contents: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save profile picture file: " + err.Error(),
+			})
+		}
+
+		profilePicURL = filepath
+	}
+
+	// Handle additional emails and phones
+	additionalEmails := []string{}
+	if emails, ok := form.Value["additionalEmails"]; ok {
+		for _, email := range emails {
+			if strings.TrimSpace(email) != "" {
+				additionalEmails = append(additionalEmails, strings.TrimSpace(email))
+			}
+		}
+	}
+
+	additionalPhones := []string{}
+	if phones, ok := form.Value["additionalPhones"]; ok {
+		for _, phone := range phones {
+			if strings.TrimSpace(phone) != "" {
+				additionalPhones = append(additionalPhones, strings.TrimSpace(phone))
+			}
+		}
+	}
+
 	// Hash password (store in pending request for later use)
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -1832,19 +2128,23 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 
 	// Create service provider object in flat format
 	serviceProvider := models.ServiceProvider{
-		ID:            primitive.NewObjectID(),
-		UserID:        primitive.NewObjectID(),
-		BusinessName:  businessName,
-		Category:      category,
-		Email:         email,
-		Phone:         phone,
-		Password:      string(hashedPassword),
-		ContactPerson: contactPerson,
-		ContactPhone:  contactPhone,
-		Country:       country,
-		District:      district,
-		City:          city,
-		Governorate:   governorate,
+		ID:               primitive.NewObjectID(),
+		UserID:           primitive.NewObjectID(),
+		BusinessName:     businessName,
+		Category:         category,
+		Email:            email,
+		Phone:            phone,
+		Password:         string(hashedPassword),
+		ContactPerson:    contactPerson,
+		ContactPhone:     contactPhone,
+		Country:          country,
+		District:         district,
+		City:             city,
+		Governorate:      governorate,
+		LogoURL:          logoURL,
+		ProfilePicURL:    profilePicURL,
+		AdditionalPhones: additionalPhones,
+		AdditionalEmails: additionalEmails,
 		ContactInfo: models.ContactInfo{
 			Phone:    phone,
 			WhatsApp: contactPhone,
@@ -1857,7 +2157,6 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 				Lng:         lng,
 			},
 		},
-		LogoURL:         logoURL,
 		ReferralCode:    referralCode,
 		CreatedBy:       salesPersonID,
 		CreatedAt:       time.Now(),
@@ -1870,6 +2169,7 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		ID:                    primitive.NewObjectID(),
 		ServiceProvider:       serviceProvider,
 		Email:                 email,
+		AdditionalEmails:      additionalEmails,
 		Password:              string(hashedPassword),
 		CreationRequestStatus: "pending",
 		SalesPersonID:         salesPersonID,
