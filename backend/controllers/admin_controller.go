@@ -4913,6 +4913,214 @@ func (ac *AdminController) ProcessPendingRequest(c echo.Context) error {
 	}
 }
 
+// ApprovePendingRequest approves a pending request (public wrapper)
+func (ac *AdminController) ApprovePendingRequest(c echo.Context) error {
+	// Get admin ID from token
+	claims := middleware.GetUserFromToken(c)
+	adminID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid admin ID",
+		})
+	}
+
+	// Parse request body
+	var requestBody struct {
+		RequestType string `json:"requestType"` // "company", "wholesaler", "serviceprovider"
+		RequestID   string `json:"requestId"`
+		Reason      string `json:"reason,omitempty"`
+	}
+
+	if err := c.Bind(&requestBody); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+		})
+	}
+
+	if requestBody.RequestType == "" || requestBody.RequestID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Missing required fields: requestType, requestId",
+		})
+	}
+
+	requestObjID, err := primitive.ObjectIDFromHex(requestBody.RequestID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request ID format",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Verify that the request is from a salesperson created by this admin
+	var salespersonID primitive.ObjectID
+	var collectionName string
+	var entityCollection string
+
+	switch requestBody.RequestType {
+	case "company":
+		collectionName = "pending_company_requests"
+		entityCollection = "companies"
+	case "wholesaler":
+		collectionName = "pending_wholesaler_requests"
+		entityCollection = "wholesalers"
+	case "serviceprovider":
+		collectionName = "pending_serviceProviders_requests"
+		entityCollection = "serviceProviders"
+	default:
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request type. Must be 'company', 'wholesaler', or 'serviceprovider'",
+		})
+	}
+
+	// Get the pending request to verify salesperson
+	var pendingRequest bson.M
+	err = ac.DB.Collection(collectionName).FindOne(ctx, bson.M{"_id": requestObjID}).Decode(&pendingRequest)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Pending request not found",
+		})
+	}
+
+	// Extract salesperson ID from the pending request
+	if salesPersonIDInterface, exists := pendingRequest["salesPersonId"]; exists {
+		if salesPersonIDStr, ok := salesPersonIDInterface.(primitive.ObjectID); ok {
+			salespersonID = salesPersonIDStr
+		} else {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Invalid salesperson ID in pending request",
+			})
+		}
+	} else {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Salesperson ID not found in pending request",
+		})
+	}
+
+	// Verify that this salesperson was created by the current admin
+	var salesperson models.Salesperson
+	err = ac.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": salespersonID, "createdBy": adminID}).Decode(&salesperson)
+	if err != nil {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "You can only process requests from salespersons you created",
+		})
+	}
+
+	// Handle approval
+	return ac.approvePendingRequest(c, requestBody.RequestType, requestObjID, collectionName, entityCollection, requestBody.Reason)
+}
+
+// RejectPendingRequest rejects a pending request (public wrapper)
+func (ac *AdminController) RejectPendingRequest(c echo.Context) error {
+	// Get admin ID from token
+	claims := middleware.GetUserFromToken(c)
+	adminID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid admin ID",
+		})
+	}
+
+	// Parse request body
+	var requestBody struct {
+		RequestType string `json:"requestType"` // "company", "wholesaler", "serviceprovider"
+		RequestID   string `json:"requestId"`
+		Reason      string `json:"reason,omitempty"`
+	}
+
+	if err := c.Bind(&requestBody); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+		})
+	}
+
+	if requestBody.RequestType == "" || requestBody.RequestID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Missing required fields: requestType, requestId",
+		})
+	}
+
+	requestObjID, err := primitive.ObjectIDFromHex(requestBody.RequestID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request ID format",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Verify that the request is from a salesperson created by this admin
+	var salespersonID primitive.ObjectID
+	var collectionName string
+
+	switch requestBody.RequestType {
+	case "company":
+		collectionName = "pending_company_requests"
+	case "wholesaler":
+		collectionName = "pending_wholesaler_requests"
+	case "serviceprovider":
+		collectionName = "pending_serviceProviders_requests"
+	default:
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request type. Must be 'company', 'wholesaler', or 'serviceprovider'",
+		})
+	}
+
+	// Get the pending request to verify salesperson
+	var pendingRequest bson.M
+	err = ac.DB.Collection(collectionName).FindOne(ctx, bson.M{"_id": requestObjID}).Decode(&pendingRequest)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Pending request not found",
+		})
+	}
+
+	// Extract salesperson ID from the pending request
+	if salesPersonIDInterface, exists := pendingRequest["salesPersonId"]; exists {
+		if salesPersonIDStr, ok := salesPersonIDInterface.(primitive.ObjectID); ok {
+			salespersonID = salesPersonIDStr
+		} else {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Invalid salesperson ID in pending request",
+			})
+		}
+	} else {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Salesperson ID not found in pending request",
+		})
+	}
+
+	// Verify that this salesperson was created by the current admin
+	var salesperson models.Salesperson
+	err = ac.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": salespersonID, "createdBy": adminID}).Decode(&salesperson)
+	if err != nil {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "You can only process requests from salespersons you created",
+		})
+	}
+
+	// Handle rejection
+	return ac.rejectPendingRequest(c, requestBody.RequestType, requestObjID, collectionName, requestBody.Reason)
+}
+
 // approvePendingRequest handles the approval of a pending request
 func (ac *AdminController) approvePendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName, entityCollection, reason string) error {
 	ctx := context.Background()

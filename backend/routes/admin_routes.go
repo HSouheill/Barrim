@@ -202,6 +202,8 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	// Pending requests from admin-created salespersons
 	protected.GET("/pending-requests", adminController.GetPendingRequestsFromAdminSalespersons)
 	protected.POST("/pending-requests/process", adminController.ProcessPendingRequest)
+	protected.POST("/pending-requests/approve", adminController.ApprovePendingRequest)
+	protected.POST("/pending-requests/reject", adminController.RejectPendingRequest)
 
 	// Also allow managers and sales managers with business_management role (controller checks role)
 	manager.PUT("/toggle-status/:entityType/:id", adminController.ToggleEntityStatus)
