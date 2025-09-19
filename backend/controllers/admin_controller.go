@@ -4811,7 +4811,6 @@ func (ac *AdminController) ProcessPendingRequest(c echo.Context) error {
 		RequestType string `json:"requestType"` // "company", "wholesaler", "serviceprovider"
 		RequestID   string `json:"requestId"`
 		Action      string `json:"action"` // "approve" or "reject"
-		Reason      string `json:"reason,omitempty"`
 	}
 
 	if err := c.Bind(&requestBody); err != nil {
@@ -4906,10 +4905,10 @@ func (ac *AdminController) ProcessPendingRequest(c echo.Context) error {
 
 	if requestBody.Action == "approve" {
 		// Handle approval
-		return ac.approvePendingRequest(c, requestBody.RequestType, requestObjID, collectionName, entityCollection, requestBody.Reason)
+		return ac.approvePendingRequest(c, requestBody.RequestType, requestObjID, collectionName, entityCollection)
 	} else {
 		// Handle rejection
-		return ac.rejectPendingRequest(c, requestBody.RequestType, requestObjID, collectionName, requestBody.Reason)
+		return ac.rejectPendingRequest(c, requestBody.RequestType, requestObjID, collectionName)
 	}
 }
 
@@ -4929,7 +4928,6 @@ func (ac *AdminController) ApprovePendingRequest(c echo.Context) error {
 	var requestBody struct {
 		RequestType string `json:"requestType"` // "company", "wholesaler", "serviceprovider"
 		RequestID   string `json:"requestId"`
-		Reason      string `json:"reason,omitempty"`
 	}
 
 	if err := c.Bind(&requestBody); err != nil {
@@ -5016,7 +5014,7 @@ func (ac *AdminController) ApprovePendingRequest(c echo.Context) error {
 	}
 
 	// Handle approval
-	return ac.approvePendingRequest(c, requestBody.RequestType, requestObjID, collectionName, entityCollection, requestBody.Reason)
+	return ac.approvePendingRequest(c, requestBody.RequestType, requestObjID, collectionName, entityCollection)
 }
 
 // RejectPendingRequest rejects a pending request (public wrapper)
@@ -5035,7 +5033,6 @@ func (ac *AdminController) RejectPendingRequest(c echo.Context) error {
 	var requestBody struct {
 		RequestType string `json:"requestType"` // "company", "wholesaler", "serviceprovider"
 		RequestID   string `json:"requestId"`
-		Reason      string `json:"reason,omitempty"`
 	}
 
 	if err := c.Bind(&requestBody); err != nil {
@@ -5118,11 +5115,11 @@ func (ac *AdminController) RejectPendingRequest(c echo.Context) error {
 	}
 
 	// Handle rejection
-	return ac.rejectPendingRequest(c, requestBody.RequestType, requestObjID, collectionName, requestBody.Reason)
+	return ac.rejectPendingRequest(c, requestBody.RequestType, requestObjID, collectionName)
 }
 
 // approvePendingRequest handles the approval of a pending request
-func (ac *AdminController) approvePendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName, entityCollection, reason string) error {
+func (ac *AdminController) approvePendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName, entityCollection string) error {
 	ctx := context.Background()
 
 	// Get the pending request
@@ -5288,14 +5285,13 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 }
 
 // rejectPendingRequest handles the rejection of a pending request
-func (ac *AdminController) rejectPendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName, reason string) error {
+func (ac *AdminController) rejectPendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName string) error {
 	ctx := context.Background()
 
 	// Update the pending request status to rejected
 	update := bson.M{
 		"$set": bson.M{
 			"status":    "rejected",
-			"reason":    reason,
 			"updatedAt": time.Now(),
 		},
 	}
@@ -5319,7 +5315,6 @@ func (ac *AdminController) rejectPendingRequest(c echo.Context, requestType stri
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: fmt.Sprintf("%s request rejected successfully", requestType),
-		Data:    map[string]interface{}{"reason": reason},
 	})
 }
 
