@@ -2117,15 +2117,100 @@ func (ac *AdminController) ApproveCompanyByManager(c echo.Context) error {
 		})
 	}
 
-	// Update user status to active when company is approved
+	// Handle user account creation or update
 	usersCollection := ac.DB.Collection("users")
-	_, err = usersCollection.UpdateOne(
+
+	// First, try to update existing user status
+	result, err = usersCollection.UpdateOne(
 		ctx,
 		bson.M{"companyId": objID},
-		bson.M{"$set": bson.M{"status": "active", "updatedAt": time.Now()}},
+		bson.M{"$set": bson.M{"isActive": true, "updatedAt": time.Now()}},
 	)
 	if err != nil {
 		log.Printf("Failed to update user status: %v", err)
+	}
+
+	// If no user was found, create one
+	if result.MatchedCount == 0 {
+		// Get the company details to create user account
+		var company bson.M
+		err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&company)
+		if err == nil {
+			// Create user account if email exists
+			if email, exists := company["email"]; exists && email != "" {
+				emailStr := email.(string)
+
+				// Check if user already exists by email
+				var existingUser bson.M
+				err = usersCollection.FindOne(ctx, bson.M{"email": emailStr}).Decode(&existingUser)
+				if err == mongo.ErrNoDocuments {
+					// User doesn't exist, create one
+					fullName := ""
+					phone := ""
+					contactPerson := ""
+					contactPhone := ""
+
+					// Get business name as full name
+					if v, ok := company["businessName"].(string); ok {
+						fullName = v
+					}
+
+					// Get phone and contact info from contactInfo
+					if contactInfo, ok := company["contactInfo"].(bson.M); ok {
+						if v, ok := contactInfo["phone"].(string); ok {
+							phone = v
+						}
+						if v, ok := contactInfo["whatsapp"].(string); ok {
+							contactPhone = v
+						}
+					}
+
+					if v, ok := company["contactPerson"].(string); ok {
+						contactPerson = v
+					}
+
+					// Get password (it should exist in the company record)
+					password := ""
+					if v, ok := company["password"].(string); ok {
+						password = v
+					}
+
+					// Create user document
+					userDoc := bson.M{
+						"email":         emailStr,
+						"password":      password,
+						"fullName":      fullName,
+						"userType":      "company",
+						"phone":         phone,
+						"contactPerson": contactPerson,
+						"contactPhone":  contactPhone,
+						"companyId":     objID,
+						"isActive":      true,
+						"createdAt":     time.Now(),
+						"updatedAt":     time.Now(),
+					}
+
+					insertRes, err := usersCollection.InsertOne(ctx, userDoc)
+					if err != nil {
+						log.Printf("Error creating user account for company: %v", err)
+						// Don't fail the approval if user creation fails
+					} else {
+						// Update the company with the user ID for easy lookup
+						if userOID, ok := insertRes.InsertedID.(primitive.ObjectID); ok {
+							_, updErr := collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{"userId": userOID}})
+							if updErr != nil {
+								log.Printf("Warning: failed to set userId on company document: %v", updErr)
+							}
+						}
+						log.Printf("User account created successfully for company: %s", emailStr)
+					}
+				} else if err != nil {
+					log.Printf("Error checking existing user: %v", err)
+				} else {
+					log.Printf("User account already exists for company: %s", emailStr)
+				}
+			}
+		}
 	}
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
@@ -2184,6 +2269,18 @@ func (ac *AdminController) ApproveServiceProviderByManager(c echo.Context) error
 	}
 	collection := ac.DB.Collection("serviceProviders")
 	ctx := context.Background()
+
+	// Get the service provider details first
+	var serviceProvider bson.M
+	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&serviceProvider)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Service provider not found",
+		})
+	}
+
+	// Update service provider status
 	update := bson.M{"$set": bson.M{"status": "approved", "updatedAt": time.Now()}}
 	result, err := collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
 	if err != nil || result.MatchedCount == 0 {
@@ -2192,6 +2289,80 @@ func (ac *AdminController) ApproveServiceProviderByManager(c echo.Context) error
 			Message: "Failed to approve service provider",
 		})
 	}
+
+	// Create user account if email exists and user doesn't already exist
+	if email, exists := serviceProvider["email"]; exists && email != "" {
+		emailStr := email.(string)
+
+		// Check if user already exists
+		usersCollection := ac.DB.Collection("users")
+		var existingUser bson.M
+		err = usersCollection.FindOne(ctx, bson.M{"email": emailStr}).Decode(&existingUser)
+		if err == mongo.ErrNoDocuments {
+			// User doesn't exist, create one
+			fullName := ""
+			phone := ""
+			contactPerson := ""
+			contactPhone := ""
+
+			// Get business name as full name
+			if v, ok := serviceProvider["businessName"].(string); ok {
+				fullName = v
+			}
+
+			// Get phone and contact info
+			if v, ok := serviceProvider["phone"].(string); ok {
+				phone = v
+			}
+			if v, ok := serviceProvider["contactPerson"].(string); ok {
+				contactPerson = v
+			}
+			if v, ok := serviceProvider["contactPhone"].(string); ok {
+				contactPhone = v
+			}
+
+			// Get password (it should exist in the service provider record)
+			password := ""
+			if v, ok := serviceProvider["password"].(string); ok {
+				password = v
+			}
+
+			// Create user document
+			userDoc := bson.M{
+				"email":             emailStr,
+				"password":          password,
+				"fullName":          fullName,
+				"userType":          "serviceProvider",
+				"phone":             phone,
+				"contactPerson":     contactPerson,
+				"contactPhone":      contactPhone,
+				"serviceProviderId": objID,
+				"isActive":          true,
+				"createdAt":         time.Now(),
+				"updatedAt":         time.Now(),
+			}
+
+			insertRes, err := usersCollection.InsertOne(ctx, userDoc)
+			if err != nil {
+				log.Printf("Error creating user account for service provider: %v", err)
+				// Don't fail the approval if user creation fails
+			} else {
+				// Update the service provider with the user ID for easy lookup
+				if userOID, ok := insertRes.InsertedID.(primitive.ObjectID); ok {
+					_, updErr := collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{"userId": userOID}})
+					if updErr != nil {
+						log.Printf("Warning: failed to set userId on service provider document: %v", updErr)
+					}
+				}
+				log.Printf("User account created successfully for service provider: %s", emailStr)
+			}
+		} else if err != nil {
+			log.Printf("Error checking existing user: %v", err)
+		} else {
+			log.Printf("User account already exists for service provider: %s", emailStr)
+		}
+	}
+
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Service provider approved successfully",
@@ -2249,6 +2420,18 @@ func (ac *AdminController) ApproveWholesalerByManager(c echo.Context) error {
 	}
 	collection := ac.DB.Collection("wholesalers")
 	ctx := context.Background()
+
+	// Get the wholesaler details first
+	var wholesaler bson.M
+	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&wholesaler)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Wholesaler not found",
+		})
+	}
+
+	// Update wholesaler status
 	update := bson.M{"$set": bson.M{"status": "approved", "updatedAt": time.Now()}}
 	result, err := collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
 	if err != nil || result.MatchedCount == 0 {
@@ -2257,6 +2440,89 @@ func (ac *AdminController) ApproveWholesalerByManager(c echo.Context) error {
 			Message: "Failed to approve wholesaler",
 		})
 	}
+
+	// Create user account if email exists and user doesn't already exist
+	if email, exists := wholesaler["email"]; exists && email != "" {
+		emailStr := email.(string)
+
+		// Check if user already exists
+		usersCollection := ac.DB.Collection("users")
+		var existingUser bson.M
+		err = usersCollection.FindOne(ctx, bson.M{"email": emailStr}).Decode(&existingUser)
+		if err == mongo.ErrNoDocuments {
+			// User doesn't exist, create one
+			fullName := ""
+			phone := ""
+			contactPerson := ""
+			contactPhone := ""
+
+			// Get business name as full name
+			if v, ok := wholesaler["businessName"].(string); ok {
+				fullName = v
+			}
+
+			// Get phone and contact info from contactInfo or direct fields
+			if contactInfo, ok := wholesaler["contactInfo"].(bson.M); ok {
+				if v, ok := contactInfo["phone"].(string); ok {
+					phone = v
+				}
+				if v, ok := contactInfo["whatsapp"].(string); ok {
+					contactPhone = v
+				}
+			}
+			// Also check direct phone field for wholesalers
+			if phone == "" {
+				if v, ok := wholesaler["phone"].(string); ok {
+					phone = v
+				}
+			}
+
+			if v, ok := wholesaler["contactPerson"].(string); ok {
+				contactPerson = v
+			}
+
+			// Get password (it should exist in the wholesaler record)
+			password := ""
+			if v, ok := wholesaler["password"].(string); ok {
+				password = v
+			}
+
+			// Create user document
+			userDoc := bson.M{
+				"email":         emailStr,
+				"password":      password,
+				"fullName":      fullName,
+				"userType":      "wholesaler",
+				"phone":         phone,
+				"contactPerson": contactPerson,
+				"contactPhone":  contactPhone,
+				"wholesalerId":  objID,
+				"isActive":      true,
+				"createdAt":     time.Now(),
+				"updatedAt":     time.Now(),
+			}
+
+			insertRes, err := usersCollection.InsertOne(ctx, userDoc)
+			if err != nil {
+				log.Printf("Error creating user account for wholesaler: %v", err)
+				// Don't fail the approval if user creation fails
+			} else {
+				// Update the wholesaler with the user ID for easy lookup
+				if userOID, ok := insertRes.InsertedID.(primitive.ObjectID); ok {
+					_, updErr := collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{"userId": userOID}})
+					if updErr != nil {
+						log.Printf("Warning: failed to set userId on wholesaler document: %v", updErr)
+					}
+				}
+				log.Printf("User account created successfully for wholesaler: %s", emailStr)
+			}
+		} else if err != nil {
+			log.Printf("Error checking existing user: %v", err)
+		} else {
+			log.Printf("User account already exists for wholesaler: %s", emailStr)
+		}
+	}
+
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Wholesaler approved successfully",
