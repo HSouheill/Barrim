@@ -168,7 +168,7 @@ func (wcc *WholesalerCategoryController) UpdateWholesalerCategory(c echo.Context
 		})
 	}
 
-	var updateData map[string]interface{}
+	updateData := make(map[string]interface{})
 	if err := c.Bind(&updateData); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
