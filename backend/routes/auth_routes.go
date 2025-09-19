@@ -22,6 +22,7 @@ func RegisterAuthRoutes(e *echo.Echo, db *mongo.Client, authController *controll
 	e.POST("/api/auth/force-logout", authController.ForceLogout)
 	e.GET("/api/auth/logout-history", authController.GetLogoutHistory)
 	e.POST("api/auth/google", authController.GoogleLogin)
+	e.POST("api/auth/google-cloud-signin", authController.GoogleCloudSignIn)
 	e.POST("api/auth/signup-service-provider-with-logo", authController.SignupServiceProviderWithLogo)
 	e.POST("api/auth/signup-wholesaler-with-logo", authController.SignupWholesalerWithLogo)
 	e.POST("api/auth/sms-verify-otp", authController.VerifyOTP)

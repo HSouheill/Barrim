@@ -4985,3 +4985,109 @@ func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
 		},
 	})
 }
+
+
+// Post https://barrim.online/api/wholesaler/branches 
+// output:
+// {
+//     "status": 200,
+//     "message": "Branch created successfully",
+//     "data": {
+//         "_id": "68c9928669d5f086c3a49df7",
+//         "category": "Wholesale",
+//          "description": "Updated branch description",
+//         "images": null,
+//         "lat": 30.0444,
+//         "lng": 31.2357,
+//         "location": {
+//             "country": "Egypt",
+//             "governorate": "Cairo",
+//             "district": "Nasr City",
+//             "city": "Cairo",
+//             "lat": 30.0444,
+//             "lng": 31.2357
+//              },
+//         "name": "Updated Branch Name",
+//         "phone": "1234567890",
+//         "socialMedia": {
+//             "facebook": "https://facebook.com/updated-branch",
+//             "instagram": "https://instagram.com/updated-branch"
+//         },
+//         "subCategory": "Electronics",
+//         "videos": null
+//     }
+// }
+// Put https://barrim.online/api/wholesaler/branches/68c9928669d5f086c3a49df7 
+// body: form-data: key: data, value: {
+//   "name": "Updated Branch Name",
+//   "phone": "1234567890",
+//   "category": "Wholesale",
+//   "subCategory": "Electronics",
+//   "description": "Updated branch description",
+//   "country": "Egypt",
+//   "governorate": "Cairo",
+//   "district": "Nasr City",
+//   "city": "Cairo",
+//   "lat": 30.0444,
+//   "lng": 31.2357,
+//   "facebook": "https://facebook.com/updated-branch",
+//   "instagram": "https://instagram.com/updated-branch"
+// }
+// output:
+// {
+//     "status": 200,
+//     "message": "Branch updated successfully",
+//     "data": {
+//         "_id": "68c9928669d5f086c3a49df7",
+//         "category": "Wholesale",
+//         "description": "Updated branch description",
+//         "images": null,
+//         "lat": 30.0444,
+//         "lng": 31.2357,
+//          "location": {
+//             "country": "Egypt",
+//             "governorate": "Cairo",
+//             "district": "Nasr City",
+//             "city": "Cairo",
+//             "lat": 30.0444,
+//             "lng": 31.2357
+//         },
+//         "name": "Updated Branch Name",
+//         "phone": "1234567890",
+//         "subCategory": "Electronics",
+//         "videos": null
+//           }
+// }
+// GET @ https://barrim.online/api/wholesaler/branches/68c9928669d5f086c3a49df7 
+// {
+//     "status": 200,
+//     "message": "Branch retrieved successfully",
+//     "data": {
+//         "id": "68c9928669d5f086c3a49df7",
+//         "name": "Updated Branch Name",
+//         "location": {
+//              "country": "Egypt",
+//             "governorate": "Cairo",
+//             "district": "Nasr City",
+//             "city": "Cairo",
+//             "lat": 30.0444,
+//             "lng": 31.2357
+//         },
+//         "phone": "1234567890",
+//         "category": "Wholesale",
+//         "subCategory": "Electronics",
+//         "description": "Updated branch description",
+//          "images": null,
+//         "status": "",
+//         "sponsorship": false,
+//         "socialMedia": {
+//             "facebook": "",
+//             "instagram": ""
+//         },
+//         "createdAt": "2025-09-16T16:38:30.856Z",
+//         "updatedAt": "2025-09-16T16:39:10.696Z"
+//     }
+//     }
+
+// as you see creating a wholesaler branch is creating social links but when i update branch the social links removed, and get branch is not retrieving the social links
+    

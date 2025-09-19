@@ -2475,6 +2475,54 @@ func (ac *AuthController) AppleSignin(c echo.Context) error {
 	})
 }
 
+// GoogleCloudSignIn handles Google Cloud Platform authentication
+func (ac *AuthController) GoogleCloudSignIn(c echo.Context) error {
+	// Create Google Cloud auth service
+	googleCloudAuthService := services.NewGoogleCloudAuthService(ac.DB)
+
+	// Parse request body
+	var googleUser services.GoogleCloudUser
+	if err := c.Bind(&googleUser); err != nil {
+		ac.logger.Printf("Google Cloud auth error: Failed to bind request: %v", err)
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if googleUser.IDToken == "" {
+		ac.logger.Printf("Google Cloud auth error: Missing ID token")
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "ID token is required",
+		})
+	}
+
+	// Log the request details for debugging
+	ac.logger.Printf("Google Cloud sign-in request received")
+
+	// Authenticate with Google Cloud Platform
+	userData, err := googleCloudAuthService.AuthenticateWithGoogleCloud(&googleUser)
+	if err != nil {
+		ac.logger.Printf("Google Cloud authentication error: %v", err)
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Authentication failed: " + err.Error(),
+		})
+	}
+
+	// Log successful authentication
+	ac.logger.Printf("Google Cloud authentication successful for user: %v", userData["user"])
+
+	// Return success response
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Google Cloud sign-in successful",
+		Data:    userData,
+	})
+}
+
 // GoogleAuthWithoutFirebase handles Google authentication without using Firebase
 func (ac *AuthController) GoogleAuthWithoutFirebase(c echo.Context) error {
 	var req struct {
