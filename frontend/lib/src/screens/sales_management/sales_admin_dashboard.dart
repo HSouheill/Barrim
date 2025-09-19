@@ -260,24 +260,60 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
 
     try {
       final response = await _adminService.getAllSalesManagers();
+      print('Sales Managers API Response: $response');
+      
       if (response['success']) {
         final data = response['data'];
+        print('Sales Managers Data: $data');
+        
         setState(() {
           if (data == null) {
             _salesManagers = [];
           } else {
             final salesManagers = <SalesManager>[];
-            final dataList = data as List? ?? [];
+            
+            // Handle different response structures
+            List<dynamic> dataList = [];
+            if (data is List) {
+              dataList = data;
+            } else if (data is Map<String, dynamic>) {
+              // Check if it's a single sales manager wrapped in an object
+              if (data.containsKey('salesManager')) {
+                dataList = [data['salesManager']];
+              } else if (data.containsKey('salesManagers')) {
+                dataList = data['salesManagers'] as List? ?? [];
+              } else {
+                // If it's a single sales manager object, wrap it in a list
+                dataList = [data];
+              }
+            }
+            
+            // Special handling for the current API response structure
+            // The API seems to be returning a single sales manager instead of a list
+            if (dataList.isEmpty && data is Map<String, dynamic>) {
+              // Check if this looks like a single sales manager response
+              if (data.containsKey('id') && data.containsKey('fullName') && data.containsKey('email')) {
+                dataList = [data];
+              }
+            }
+            
+            print('Processed data list: $dataList');
+            
             for (var json in dataList) {
               if (json != null && json is Map<String, dynamic>) {
                 try {
-                  salesManagers.add(SalesManager.fromJson(json));
+                  print('Parsing sales manager: $json');
+                  final salesManager = SalesManager.fromJson(json);
+                  print('Parsed commission: ${salesManager.commissionPercent}');
+                  salesManagers.add(salesManager);
                 } catch (error) {
                   print('Error parsing sales manager: $error');
+                  print('JSON that failed: $json');
                 }
               }
             }
             _salesManagers = salesManagers;
+            print('Final sales managers list: ${_salesManagers.map((sm) => '${sm.fullName}: ${sm.commissionPercent}').toList()}');
           }
           _isLoading = false;
         });
@@ -1352,10 +1388,14 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
   }
 
   void _showEditSalesManagerDialog(SalesManager salesManager) {
+    print('Edit dialog - Sales Manager: ${salesManager.fullName}');
+    print('Edit dialog - Commission Percent: ${salesManager.commissionPercent}');
+    print('Edit dialog - Commission Percent type: ${salesManager.commissionPercent.runtimeType}');
+    
     final nameController = TextEditingController(text: salesManager.fullName);
     final emailController = TextEditingController(text: salesManager.email);
     final phoneController = TextEditingController(text: salesManager.phoneNumber);
-    final commissionController = TextEditingController(text: salesManager.commissionPercent != null ? salesManager.commissionPercent.toString() : '');
+    final commissionController = TextEditingController(text: salesManager.commissionPercent.toString());
     // final Set<String> selectedRoles = {...salesManager.rolesAccess};
     showDialog(
       context: context,

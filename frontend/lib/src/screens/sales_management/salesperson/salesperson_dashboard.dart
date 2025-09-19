@@ -1201,7 +1201,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
   String? _selectedCountry;
   String? _selectedDistrict;
   String? _selectedCity;
-  String? _selectedStreet;
+  String? _selectedGovernorate;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _hasAdditionalPhone = false;
@@ -1542,7 +1542,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
       _selectedCountry = null;
       _selectedDistrict = null;
       _selectedCity = null;
-      _selectedStreet = null;
+      _selectedGovernorate = null;
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1580,7 +1580,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
               _selectedCountry = locationInfo['country'];
               _selectedDistrict = locationInfo['district'];
               _selectedCity = locationInfo['city'];
-              _selectedStreet = null; // Reset street selection
+              _selectedGovernorate = null; // Reset street selection
             });
             
             // Show success message
@@ -1693,7 +1693,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
         _selectedCountry == null ||
         _selectedDistrict == null ||
         _selectedCity == null ||
-        _selectedStreet == null ) {
+        _selectedGovernorate == null ) {
       setState(() {
         _errorMessage = 'All fields are required including industry category (email is optional)';
         _emailErrorMessage = null;
@@ -1812,7 +1812,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
             country: _selectedCountry!,
             district: _selectedDistrict!,
             city: _selectedCity!,
-            street: _selectedStreet!,
+            governorate: _selectedGovernorate!,
             lat: lat,
             lng: lng,
             logoFile: _logoFile,
@@ -1831,7 +1831,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
             country: _selectedCountry!,
             district: _selectedDistrict!,
             city: _selectedCity!,
-            street: _selectedStreet!,
+            governorate: _selectedGovernorate!,
             lat: lat,
             lng: lng,
             logoFile: _logoFile,
@@ -1849,7 +1849,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
             country: _selectedCountry!,
             district: _selectedDistrict!,
             city: _selectedCity!,
-            street: _selectedStreet!,
+            governorate: _selectedGovernorate!,
             lat: lat,
             lng: lng,
             logoFile: _logoFile,
@@ -2739,7 +2739,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                             _selectedCountry = value;
                             _selectedDistrict = null;
                             _selectedCity = null;
-                            _selectedStreet = null;
+                            _selectedGovernorate = null;
                           });
                         },
                       ),
@@ -2770,7 +2770,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                       child: DropdownButtonFormField<String>(
                         value: _selectedDistrict,
                         decoration: InputDecoration(
-                          hintText: 'Select Government',
+                          hintText: 'Select Governorate',
                           hintStyle: TextStyle(color: Colors.grey[400]),
                           border: UnderlineInputBorder(
                             borderSide: BorderSide(color: Colors.grey[300]!),
@@ -2794,7 +2794,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                           setState(() {
                             _selectedDistrict = value;
                             _selectedCity = null;
-                            _selectedStreet = null;
+                            _selectedGovernorate = null;
                           });
                         } : null,
                       ),
@@ -2848,7 +2848,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                         onChanged: (_selectedCountry != null && _selectedDistrict != null) ? (value) {
                           setState(() {
                             _selectedCity = value;
-                            _selectedStreet = null;
+                            _selectedGovernorate = null;
                           });
                         } : null,
                       ),
@@ -2868,11 +2868,11 @@ class _AddNewDialogState extends State<AddNewDialog> {
 
                 const SizedBox(height: 20),
 
-                // Street Dropdown
+                // Governorate Dropdown
                 DropdownButtonFormField<String>(
-                  value: _selectedStreet,
+                  value: _selectedGovernorate,
                   decoration: InputDecoration(
-                    hintText:  'Select City',
+                    hintText: 'Select Governorate',
                     hintStyle: TextStyle(color: Colors.grey[400]),
                     border: UnderlineInputBorder(
                       borderSide: BorderSide(color: Colors.grey[300]!),
@@ -2885,16 +2885,16 @@ class _AddNewDialogState extends State<AddNewDialog> {
                     ),
                   ),
                   items: (_selectedCountry != null && _selectedDistrict != null && _selectedCity != null)
-                      ? LocationService.getStreets(_selectedCountry!, _selectedDistrict!, _selectedCity!).map((street) {
+                      ? LocationService.getGovernorates(_selectedCountry!, _selectedDistrict!, _selectedCity!).map((governorate) {
                           return DropdownMenuItem(
-                            value: street,
-                            child: Text(street),
+                            value: governorate,
+                            child: Text(governorate),
                           );
                         }).toList()
                       : [],
                   onChanged: (_selectedCountry != null && _selectedDistrict != null && _selectedCity != null) ? (value) {
                     setState(() {
-                      _selectedStreet = value;
+                      _selectedGovernorate = value;
                     });
                   } : null,
                 ),

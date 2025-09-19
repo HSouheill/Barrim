@@ -19,8 +19,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   bool _isLoading = true;
-  bool _isProcessing = false;
   bool _isSidebarExpanded = false;
+  Set<String> _processingRequests = {}; // Track which requests are being processed
   
   List<PendingCompanyRequest> _pendingCompanyRequests = [];
   List<PendingWholesalerRequest> _pendingWholesalerRequests = [];
@@ -31,6 +31,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _processingRequests = <String>{}; // Ensure it's properly initialized
     _loadPendingRequests();
   }
 
@@ -100,8 +101,10 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
     required String action,
     String? reason,
   }) async {
+    final requestKey = '${requestType}_$requestId';
+    
     setState(() {
-      _isProcessing = true;
+      _processingRequests.add(requestKey);
     });
 
     try {
@@ -120,8 +123,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
           ),
         );
         
-        // Reload the requests
-        await _loadPendingRequests();
+        // Remove the specific request from the local list instead of reloading all
+        _removeRequestFromList(requestType, requestId);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -139,9 +142,25 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
       );
     } finally {
       setState(() {
-        _isProcessing = false;
+        _processingRequests.remove(requestKey);
       });
     }
+  }
+
+  void _removeRequestFromList(String requestType, String requestId) {
+    setState(() {
+      switch (requestType.toLowerCase()) {
+        case 'company':
+          _pendingCompanyRequests.removeWhere((request) => request.id == requestId);
+          break;
+        case 'wholesaler':
+          _pendingWholesalerRequests.removeWhere((request) => request.id == requestId);
+          break;
+        case 'serviceprovider':
+          _pendingServiceProviderRequests.removeWhere((request) => request.id == requestId);
+          break;
+      }
+    });
   }
 
   void _showProcessDialog({
@@ -403,6 +422,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
           phone: request.company.contactInfo.phone,
           address: request.company.contactInfo.address,
           createdAt: request.createdAt,
+          requestId: request.id,
+          requestType: 'company',
           onApprove: () => _showProcessDialog(
             requestType: 'company',
             requestId: request.id,
@@ -449,6 +470,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
           phone: request.wholesaler.contactInfo.phone,
           address: request.wholesaler.contactInfo.address,
           createdAt: request.createdAt,
+          requestId: request.id,
+          requestType: 'wholesaler',
           onApprove: () => _showProcessDialog(
             requestType: 'wholesaler',
             requestId: request.id,
@@ -495,6 +518,8 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
           phone: request.serviceProvider.contactInfo.phone,
           address: request.serviceProvider.contactInfo.address,
           createdAt: request.createdAt,
+          requestId: request.id,
+          requestType: 'serviceprovider',
           onApprove: () => _showProcessDialog(
             requestType: 'serviceprovider',
             requestId: request.id,
@@ -521,7 +546,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
     required DateTime createdAt,
     required VoidCallback onApprove,
     required VoidCallback onReject,
+    String? requestId,
+    String? requestType,
   }) {
+    final requestKey = requestId != null && requestType != null ? '${requestType}_$requestId' : null;
+    final isThisRequestProcessing = requestKey != null && _processingRequests.contains(requestKey);
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
@@ -613,27 +642,45 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _isProcessing ? null : onApprove,
+                    onPressed: isThisRequestProcessing ? null : onApprove,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Approve'),
+                    icon: isThisRequestProcessing 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.check),
+                    label: Text(isThisRequestProcessing ? 'Processing...' : 'Approve'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _isProcessing ? null : onReject,
+                    onPressed: isThisRequestProcessing ? null : onReject,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    icon: const Icon(Icons.close),
-                    label: const Text('Reject'),
+                    icon: isThisRequestProcessing 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.close),
+                    label: Text(isThisRequestProcessing ? 'Processing...' : 'Reject'),
                   ),
                 ),
               ],

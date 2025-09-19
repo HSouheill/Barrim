@@ -178,7 +178,7 @@ class SalespersonService {
     required String country,
     required String district,
     required String city,
-    required String street,
+    required String governorate,
     double? lat,
     double? lng,
     File? logoFile,
@@ -195,7 +195,7 @@ class SalespersonService {
         'country': country.trim(),
         'district': district.trim(),
         'city': city.trim(),
-        'street': street.trim(),
+        'governorate': governorate.trim(),
       };
 
       // Add subcategory if provided
@@ -369,7 +369,7 @@ class SalespersonService {
     required String country,
     required String district,
     required String city,
-    required String street,
+    required String governorate,
     File? logoFile,
   }) async {
     try {
@@ -390,7 +390,7 @@ class SalespersonService {
       request.fields['country'] = country;
       request.fields['district'] = district;
       request.fields['city'] = city;
-      request.fields['street'] = street;
+      request.fields['governorate'] = governorate;
 
       // Add logo file if provided
       if (logoFile != null) {
@@ -447,7 +447,7 @@ class SalespersonService {
     required String country,
     required String district,
     required String city,
-    required String street,
+    required String governorate,
     double? lat,
     double? lng,
     File? logoFile,
@@ -476,7 +476,7 @@ class SalespersonService {
       request.fields['country'] = country;
       request.fields['district'] = district;
       request.fields['city'] = city;
-      request.fields['street'] = street;
+      request.fields['governorate'] = governorate;
 
       // Add lat and lng if provided
       if (lat != null) {
@@ -608,7 +608,7 @@ class SalespersonService {
     required String country,
     required String district,
     required String city,
-    required String street,
+    required String governorate,
     File? logoFile,
   }) async {
     try {
@@ -629,7 +629,7 @@ class SalespersonService {
       request.fields['country'] = country;
       request.fields['district'] = district;
       request.fields['city'] = city;
-      request.fields['street'] = street;
+      request.fields['governorate'] = governorate;
 
       // Add logo file if provided
       if (logoFile != null) {
@@ -685,7 +685,7 @@ class SalespersonService {
     required String country,
     required String district,
     required String city,
-    required String street,
+    required String governorate,
     double? lat,
     double? lng,
     File? logoFile,
@@ -714,7 +714,7 @@ class SalespersonService {
         'country': country.trim(),
         'district': district.trim(),
         'city': city.trim(),
-        'street': street.trim(),
+        'governorate': governorate.trim(),
       };
 
       // Add lat and lng if provided

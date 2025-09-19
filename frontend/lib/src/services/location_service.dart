@@ -1862,6 +1862,11 @@ class LocationService {
     return cityData..sort();
   }
 
+  // Get governorates for a specific country, district, and city (same as streets for now)
+  static List<String> getGovernorates(String country, String district, String city) {
+    return getStreets(country, district, city);
+  }
+
   // Validate if a location combination exists
   static bool isValidLocation(String country, String district, String city, String street) {
     final streets = getStreets(country, district, city);
