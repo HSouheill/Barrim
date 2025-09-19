@@ -196,6 +196,7 @@ class SalespersonService {
         'district': district.trim(),
         'city': city.trim(),
         'governorate': governorate.trim(),
+        'userType': 'company',
       };
 
       // Add subcategory if provided
@@ -477,6 +478,7 @@ class SalespersonService {
       request.fields['district'] = district;
       request.fields['city'] = city;
       request.fields['governorate'] = governorate;
+      request.fields['userType'] = 'wholesaler';
 
       // Add lat and lng if provided
       if (lat != null) {
@@ -715,6 +717,7 @@ class SalespersonService {
         'district': district.trim(),
         'city': city.trim(),
         'governorate': governorate.trim(),
+        'userType': 'serviceProvider',
       };
 
       // Add lat and lng if provided
