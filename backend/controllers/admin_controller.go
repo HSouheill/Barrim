@@ -5161,17 +5161,35 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 	entityData["creationRequest"] = "approved"
 	entityData["updatedAt"] = time.Now()
 
-	// Insert the approved entity
-	_, err = ac.DB.Collection(entityCollection).InsertOne(ctx, entityData)
-	if err != nil {
-		log.Printf("Error inserting approved entity: %v", err)
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to approve request",
-		})
+	// Get the entity ID
+	entityID := entityData["_id"].(primitive.ObjectID)
+
+	// For service providers, update existing entity instead of inserting new one
+	if requestType == "serviceprovider" {
+		// Update the existing service provider
+		_, err = ac.DB.Collection(entityCollection).UpdateOne(ctx,
+			bson.M{"_id": entityID},
+			bson.M{"$set": entityData})
+		if err != nil {
+			log.Printf("Error updating approved service provider: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to approve service provider request",
+			})
+		}
+	} else {
+		// For companies and wholesalers, insert new entity (original behavior)
+		_, err = ac.DB.Collection(entityCollection).InsertOne(ctx, entityData)
+		if err != nil {
+			log.Printf("Error inserting approved entity: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to approve request",
+			})
+		}
 	}
 
-	// Create user account if email and password exist
+	// Handle user account creation/update based on entity type
 	if email, exists := pendingRequest["email"]; exists && email != "" {
 		if password, exists := pendingRequest["password"]; exists && password != "" {
 			// Extract additional fields from entity data
@@ -5217,41 +5235,64 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 				}
 			}
 
-			// Create user document with all required fields
 			entityID := entityData["_id"].(primitive.ObjectID)
-			userDoc := bson.M{
-				"email":         email.(string),
-				"password":      password.(string),
-				"fullName":      fullName,
-				"userType":      requestType,
-				"phone":         phone,
-				"contactPerson": contactPerson,
-				"contactPhone":  contactPhone,
-				"isActive":      true,
-				"createdAt":     time.Now(),
-				"updatedAt":     time.Now(),
-			}
 
-			// Set the appropriate ID field based on entity type
-			switch requestType {
-			case "company":
-				userDoc["companyId"] = entityID
-			case "wholesaler":
-				userDoc["wholesalerId"] = entityID
-			case "serviceprovider":
-				userDoc["serviceProviderId"] = entityID
-			}
+			if requestType == "serviceprovider" {
+				// For service providers, update existing user instead of creating new one
+				userUpdateDoc := bson.M{
+					"email":         email.(string),
+					"password":      password.(string),
+					"fullName":      fullName,
+					"userType":      requestType,
+					"phone":         phone,
+					"contactPerson": contactPerson,
+					"contactPhone":  contactPhone,
+					"isActive":      true,
+					"updatedAt":     time.Now(),
+				}
 
-			insertRes, err := ac.DB.Collection("users").InsertOne(ctx, userDoc)
-			if err != nil {
-				log.Printf("Error creating user account: %v", err)
-				// Don't fail the approval if user creation fails
+				// Update existing user
+				_, err := ac.DB.Collection("users").UpdateOne(ctx,
+					bson.M{"serviceProviderId": entityID},
+					bson.M{"$set": userUpdateDoc})
+				if err != nil {
+					log.Printf("Error updating user account: %v", err)
+					// Don't fail the approval if user update fails
+				}
 			} else {
-				// Update the entity with the user ID for easy lookup
-				if userOID, ok := insertRes.InsertedID.(primitive.ObjectID); ok {
-					_, updErr := ac.DB.Collection(entityCollection).UpdateOne(ctx, bson.M{"_id": entityID}, bson.M{"$set": bson.M{"userId": userOID}})
-					if updErr != nil {
-						log.Printf("Warning: failed to set userId on %s document: %v", requestType, updErr)
+				// For companies and wholesalers, create new user (original behavior)
+				userDoc := bson.M{
+					"email":         email.(string),
+					"password":      password.(string),
+					"fullName":      fullName,
+					"userType":      requestType,
+					"phone":         phone,
+					"contactPerson": contactPerson,
+					"contactPhone":  contactPhone,
+					"isActive":      true,
+					"createdAt":     time.Now(),
+					"updatedAt":     time.Now(),
+				}
+
+				// Set the appropriate ID field based on entity type
+				switch requestType {
+				case "company":
+					userDoc["companyId"] = entityID
+				case "wholesaler":
+					userDoc["wholesalerId"] = entityID
+				}
+
+				insertRes, err := ac.DB.Collection("users").InsertOne(ctx, userDoc)
+				if err != nil {
+					log.Printf("Error creating user account: %v", err)
+					// Don't fail the approval if user creation fails
+				} else {
+					// Update the entity with the user ID for easy lookup
+					if userOID, ok := insertRes.InsertedID.(primitive.ObjectID); ok {
+						_, updErr := ac.DB.Collection(entityCollection).UpdateOne(ctx, bson.M{"_id": entityID}, bson.M{"$set": bson.M{"userId": userOID}})
+						if updErr != nil {
+							log.Printf("Warning: failed to set userId on %s document: %v", requestType, updErr)
+						}
 					}
 				}
 			}
@@ -5288,6 +5329,23 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 func (ac *AdminController) rejectPendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName string) error {
 	ctx := context.Background()
 
+	// For service providers, we need to get the entity ID before deleting the pending request
+	// so we can clean up the created service provider and user
+	var entityID primitive.ObjectID
+	if requestType == "serviceprovider" {
+		var pendingRequest bson.M
+		err := ac.DB.Collection(collectionName).FindOne(ctx, bson.M{"_id": requestID}).Decode(&pendingRequest)
+		if err == nil {
+			if serviceProviderData, exists := pendingRequest["serviceProvider"]; exists {
+				if serviceProviderMap, ok := serviceProviderData.(bson.M); ok {
+					if id, ok := serviceProviderMap["_id"].(primitive.ObjectID); ok {
+						entityID = id
+					}
+				}
+			}
+		}
+	}
+
 	// Delete the pending request from the database
 	result, err := ac.DB.Collection(collectionName).DeleteOne(ctx, bson.M{"_id": requestID})
 	if err != nil {
@@ -5303,6 +5361,21 @@ func (ac *AdminController) rejectPendingRequest(c echo.Context, requestType stri
 			Status:  http.StatusNotFound,
 			Message: "Pending request not found",
 		})
+	}
+
+	// For service providers, clean up the created service provider and user
+	if requestType == "serviceprovider" && !entityID.IsZero() {
+		// Delete the service provider
+		_, err = ac.DB.Collection("serviceProviders").DeleteOne(ctx, bson.M{"_id": entityID})
+		if err != nil {
+			log.Printf("Error deleting service provider during rejection: %v", err)
+		}
+
+		// Delete the associated user
+		_, err = ac.DB.Collection("users").DeleteOne(ctx, bson.M{"serviceProviderId": entityID})
+		if err != nil {
+			log.Printf("Error deleting user during service provider rejection: %v", err)
+		}
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
