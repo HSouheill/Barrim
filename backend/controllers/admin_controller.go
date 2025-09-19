@@ -5238,7 +5238,7 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 			entityID := entityData["_id"].(primitive.ObjectID)
 
 			if requestType == "serviceprovider" {
-				// For service providers, update existing user instead of creating new one
+				// For service providers, check if user exists and update/create accordingly
 				userUpdateDoc := bson.M{
 					"email":         email.(string),
 					"password":      password.(string),
@@ -5251,13 +5251,37 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 					"updatedAt":     time.Now(),
 				}
 
-				// Update existing user
-				_, err := ac.DB.Collection("users").UpdateOne(ctx,
+				// Try to update existing user first
+				updateResult, err := ac.DB.Collection("users").UpdateOne(ctx,
 					bson.M{"serviceProviderId": entityID},
 					bson.M{"$set": userUpdateDoc})
+
 				if err != nil {
 					log.Printf("Error updating user account: %v", err)
-					// Don't fail the approval if user update fails
+				} else if updateResult.MatchedCount == 0 {
+					// No existing user found, create a new one
+					userDoc := bson.M{
+						"email":             email.(string),
+						"password":          password.(string),
+						"fullName":          fullName,
+						"userType":          requestType,
+						"phone":             phone,
+						"contactPerson":     contactPerson,
+						"contactPhone":      contactPhone,
+						"serviceProviderId": entityID,
+						"isActive":          true,
+						"createdAt":         time.Now(),
+						"updatedAt":         time.Now(),
+					}
+
+					_, err := ac.DB.Collection("users").InsertOne(ctx, userDoc)
+					if err != nil {
+						log.Printf("Error creating user account during approval: %v", err)
+					} else {
+						log.Printf("Created user account for service provider during approval")
+					}
+				} else {
+					log.Printf("Updated existing user account for service provider during approval")
 				}
 			} else {
 				// For companies and wholesalers, create new user (original behavior)

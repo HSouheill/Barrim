@@ -2168,22 +2168,6 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		CreationRequest: "pending",
 	}
 
-	// Create user account for the service provider
-	user := models.User{
-		ID:                userID,
-		Email:             email,
-		Password:          string(hashedPassword),
-		FullName:          businessName,
-		UserType:          "serviceprovider",
-		Phone:             phone,
-		ContactPerson:     contactPerson,
-		ContactPhone:      contactPhone,
-		ServiceProviderID: &serviceProviderID,
-		IsActive:          true,
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
-	}
-
 	// Insert service provider into serviceProviders collection
 	_, err = spc.DB.Database("barrim").Collection("serviceProviders").InsertOne(context.Background(), serviceProvider)
 	if err != nil {
@@ -2194,16 +2178,37 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		})
 	}
 
-	// Insert user into users collection
-	_, err = spc.DB.Database("barrim").Collection("users").InsertOne(context.Background(), user)
-	if err != nil {
-		log.Printf("Error inserting user: %v", err)
-		// If user creation fails, clean up the service provider
-		spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to create user account: " + err.Error(),
-		})
+	// Create user account for the service provider (only if email is provided)
+	if email != "" {
+		user := models.User{
+			ID:                userID,
+			Email:             email,
+			Password:          string(hashedPassword),
+			FullName:          businessName,
+			UserType:          "serviceprovider",
+			Phone:             phone,
+			ContactPerson:     contactPerson,
+			ContactPhone:      contactPhone,
+			ServiceProviderID: &serviceProviderID,
+			IsActive:          true,
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
+		}
+
+		// Insert user into users collection
+		_, err = spc.DB.Database("barrim").Collection("users").InsertOne(context.Background(), user)
+		if err != nil {
+			log.Printf("Error inserting user: %v", err)
+			// If user creation fails, clean up the service provider
+			spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create user account: " + err.Error(),
+			})
+		}
+		log.Printf("Successfully created user for service provider with email: %s", email)
+	} else {
+		log.Printf("No email provided for service provider, skipping user creation")
 	}
 
 	pendingRequest := models.PendingServiceProviderRequest{
@@ -2227,9 +2232,12 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 	_, err = spc.DB.Database("barrim").Collection("pending_serviceProviders_requests").InsertOne(context.Background(), pendingRequest)
 	if err != nil {
 		log.Printf("Error inserting pending service provider request: %v", err)
-		// If pending request creation fails, clean up the service provider and user
+		// If pending request creation fails, clean up the service provider
 		spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
-		spc.DB.Database("barrim").Collection("users").DeleteOne(context.Background(), bson.M{"_id": userID})
+		// Only clean up user if it was created (email was provided)
+		if email != "" {
+			spc.DB.Database("barrim").Collection("users").DeleteOne(context.Background(), bson.M{"_id": userID})
+		}
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to submit service provider for approval: " + err.Error(),
