@@ -425,39 +425,37 @@ func (cc *CompanyController) CreateBranch(c echo.Context) error {
 		Images:          imagePaths,
 		Videos:          videoPaths,
 		CostPerCustomer: costPerCustomer,
-		Status:          "pending", // Set initial status as pending
+		Status:          "inactive", // Set status as inactive until branch subscribes to a plan
 		SocialMedia:     socialMedia,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
 
-	// Create branch request
-	branchRequest := models.BranchRequest{
-		ID:          primitive.NewObjectID(),
-		CompanyID:   company.ID,
-		BranchData:  branch,
-		Status:      "pending",
-		SubmittedAt: time.Now(),
-	}
-
-	// Insert branch request into database
-	branchRequestsCollection := config.GetCollection(cc.DB, "branch_requests")
-	_, err = branchRequestsCollection.InsertOne(ctx, branchRequest)
+	// Add branch directly to company
+	_, err = companyCollection.UpdateOne(
+		ctx,
+		bson.M{"_id": company.ID},
+		bson.M{
+			"$push": bson.M{
+				"branches": branch,
+			},
+		},
+	)
 	if err != nil {
-		log.Printf("Error creating branch request: %v", err)
+		log.Printf("Error adding branch to company: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
-			Message: "Failed to submit branch request: " + err.Error(),
+			Message: "Failed to add branch to company: " + err.Error(),
 		})
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
-		Message: "Branch request submitted successfully. Waiting for admin approval.",
+		Message: "Branch created successfully.",
 		Data: map[string]interface{}{
-			"requestId": branchRequest.ID.Hex(),
-			"status":    "pending",
-			"branch":    branch,
+			"branchId": branch.ID.Hex(),
+			"status":   "inactive",
+			"branch":   branch,
 		},
 	})
 }
