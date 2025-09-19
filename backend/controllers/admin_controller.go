@@ -5288,27 +5288,20 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 func (ac *AdminController) rejectPendingRequest(c echo.Context, requestType string, requestID primitive.ObjectID, collectionName string) error {
 	ctx := context.Background()
 
-	// Update the pending request status to rejected
-	update := bson.M{
-		"$set": bson.M{
-			"status":    "rejected",
-			"updatedAt": time.Now(),
-		},
-	}
-
-	// Handle different status field names for different request types
-	if requestType == "serviceprovider" {
-		update["$set"].(bson.M)["creationRequestStatus"] = "rejected"
-	} else {
-		update["$set"].(bson.M)["status"] = "rejected"
-	}
-
-	_, err := ac.DB.Collection(collectionName).UpdateOne(ctx, bson.M{"_id": requestID}, update)
+	// Delete the pending request from the database
+	result, err := ac.DB.Collection(collectionName).DeleteOne(ctx, bson.M{"_id": requestID})
 	if err != nil {
-		log.Printf("Error rejecting request: %v", err)
+		log.Printf("Error deleting rejected request: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to reject request",
+		})
+	}
+
+	if result.DeletedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Pending request not found",
 		})
 	}
 
