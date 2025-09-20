@@ -1909,6 +1909,7 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 	}
 
 	email, _ := getFormValue("email") // Email is optional
+	log.Printf("DEBUG: Email value from form: '%s' (length: %d)", email, len(email))
 
 	phone, err := getFormValue("phone")
 	if err != nil {
@@ -2179,6 +2180,7 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 	}
 
 	// Create user account for the service provider (only if email is provided)
+	log.Printf("DEBUG: About to check email for user creation. Email: '%s', IsEmpty: %v", email, email == "")
 	if email != "" {
 		user := models.User{
 			ID:                userID,
@@ -2196,9 +2198,10 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		}
 
 		// Insert user into users collection
+		log.Printf("DEBUG: Attempting to insert user with email: %s, userID: %s", email, userID.Hex())
 		_, err = spc.DB.Database("barrim").Collection("users").InsertOne(context.Background(), user)
 		if err != nil {
-			log.Printf("Error inserting user: %v", err)
+			log.Printf("ERROR inserting user: %v", err)
 			// If user creation fails, clean up the service provider
 			spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
 			return c.JSON(http.StatusInternalServerError, models.Response{
@@ -2206,7 +2209,7 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 				Message: "Failed to create user account: " + err.Error(),
 			})
 		}
-		log.Printf("Successfully created user for service provider with email: %s", email)
+		log.Printf("SUCCESS: Created user for service provider with email: %s, userID: %s", email, userID.Hex())
 	} else {
 		log.Printf("No email provided for service provider, skipping user creation")
 	}
