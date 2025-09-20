@@ -5239,11 +5239,24 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 
 			if requestType == "serviceprovider" {
 				// For service providers, check if user exists and update/create accordingly
+				// Map requestType to correct userType
+				var userType string
+				switch requestType {
+				case "serviceprovider":
+					userType = "serviceProvider"
+				case "company":
+					userType = "company"
+				case "wholesaler":
+					userType = "wholesaler"
+				default:
+					userType = requestType
+				}
+
 				userUpdateDoc := bson.M{
 					"email":         email.(string),
 					"password":      password.(string),
 					"fullName":      fullName,
-					"userType":      requestType,
+					"userType":      userType,
 					"phone":         phone,
 					"contactPerson": contactPerson,
 					"contactPhone":  contactPhone,
@@ -5264,7 +5277,7 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 						"email":             email.(string),
 						"password":          password.(string),
 						"fullName":          fullName,
-						"userType":          requestType,
+						"userType":          userType,
 						"phone":             phone,
 						"contactPerson":     contactPerson,
 						"contactPhone":      contactPhone,
@@ -5285,11 +5298,24 @@ func (ac *AdminController) approvePendingRequest(c echo.Context, requestType str
 				}
 			} else {
 				// For companies and wholesalers, create new user (original behavior)
+				// Map requestType to correct userType
+				var userType string
+				switch requestType {
+				case "serviceprovider":
+					userType = "serviceProvider"
+				case "company":
+					userType = "company"
+				case "wholesaler":
+					userType = "wholesaler"
+				default:
+					userType = requestType
+				}
+
 				userDoc := bson.M{
 					"email":         email.(string),
 					"password":      password.(string),
 					"fullName":      fullName,
-					"userType":      requestType,
+					"userType":      userType,
 					"phone":         phone,
 					"contactPerson": contactPerson,
 					"contactPhone":  contactPhone,
