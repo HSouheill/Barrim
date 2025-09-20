@@ -2195,7 +2195,7 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		Email:             userEmail,
 		Password:          string(hashedPassword),
 		FullName:          businessName,
-		UserType:          "serviceprovider",
+		UserType:          "serviceProvider",
 		Phone:             phone,
 		ContactPerson:     contactPerson,
 		ContactPhone:      contactPhone,
