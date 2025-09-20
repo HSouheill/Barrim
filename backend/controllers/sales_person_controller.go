@@ -2179,40 +2179,45 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 		})
 	}
 
-	// Create user account for the service provider (only if email is provided)
-	log.Printf("DEBUG: About to check email for user creation. Email: '%s', IsEmpty: %v", email, email == "")
+	// Create user account for the service provider (using email if provided, otherwise phone)
+	var userEmail string
 	if email != "" {
-		user := models.User{
-			ID:                userID,
-			Email:             email,
-			Password:          string(hashedPassword),
-			FullName:          businessName,
-			UserType:          "serviceprovider",
-			Phone:             phone,
-			ContactPerson:     contactPerson,
-			ContactPhone:      contactPhone,
-			ServiceProviderID: &serviceProviderID,
-			IsActive:          true,
-			CreatedAt:         time.Now(),
-			UpdatedAt:         time.Now(),
-		}
-
-		// Insert user into users collection
-		log.Printf("DEBUG: Attempting to insert user with email: %s, userID: %s", email, userID.Hex())
-		_, err = spc.DB.Database("barrim").Collection("users").InsertOne(context.Background(), user)
-		if err != nil {
-			log.Printf("ERROR inserting user: %v", err)
-			// If user creation fails, clean up the service provider
-			spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
-			return c.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to create user account: " + err.Error(),
-			})
-		}
-		log.Printf("SUCCESS: Created user for service provider with email: %s, userID: %s", email, userID.Hex())
+		userEmail = email
+		log.Printf("DEBUG: Creating user with email: %s", email)
 	} else {
-		log.Printf("No email provided for service provider, skipping user creation")
+		// Use phone number as email when email is not provided
+		userEmail = phone + "@serviceprovider.local"
+		log.Printf("DEBUG: No email provided, using phone as email: %s", userEmail)
 	}
+
+	user := models.User{
+		ID:                userID,
+		Email:             userEmail,
+		Password:          string(hashedPassword),
+		FullName:          businessName,
+		UserType:          "serviceprovider",
+		Phone:             phone,
+		ContactPerson:     contactPerson,
+		ContactPhone:      contactPhone,
+		ServiceProviderID: &serviceProviderID,
+		IsActive:          true,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+
+	// Insert user into users collection
+	log.Printf("DEBUG: Attempting to insert user with email: %s, userID: %s", userEmail, userID.Hex())
+	_, err = spc.DB.Database("barrim").Collection("users").InsertOne(context.Background(), user)
+	if err != nil {
+		log.Printf("ERROR inserting user: %v", err)
+		// If user creation fails, clean up the service provider
+		spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create user account: " + err.Error(),
+		})
+	}
+	log.Printf("SUCCESS: Created user for service provider with email: %s, userID: %s", userEmail, userID.Hex())
 
 	pendingRequest := models.PendingServiceProviderRequest{
 		ID:                    primitive.NewObjectID(),
@@ -2235,12 +2240,9 @@ func (spc *SalesPersonController) CreateServiceProvider(c echo.Context) error {
 	_, err = spc.DB.Database("barrim").Collection("pending_serviceProviders_requests").InsertOne(context.Background(), pendingRequest)
 	if err != nil {
 		log.Printf("Error inserting pending service provider request: %v", err)
-		// If pending request creation fails, clean up the service provider
+		// If pending request creation fails, clean up the service provider and user
 		spc.DB.Database("barrim").Collection("serviceProviders").DeleteOne(context.Background(), bson.M{"_id": serviceProviderID})
-		// Only clean up user if it was created (email was provided)
-		if email != "" {
-			spc.DB.Database("barrim").Collection("users").DeleteOne(context.Background(), bson.M{"_id": userID})
-		}
+		spc.DB.Database("barrim").Collection("users").DeleteOne(context.Background(), bson.M{"_id": userID})
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to submit service provider for approval: " + err.Error(),
