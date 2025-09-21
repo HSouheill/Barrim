@@ -1308,9 +1308,6 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 		}
 	}
 
-	// Available balance = Total commission - Approved withdrawals - Pending withdrawals
-	availableBalance := totalCommission - totalApprovedWithdrawn - totalPendingWithdrawn
-
 	// For salespersons, also fetch referral balance
 	var referralBalance float64
 	var referralCount int
@@ -1326,6 +1323,9 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 			referralCount = len(salesperson.Referrals)
 		}
 	}
+
+	// Available balance = Total commission + Referral balance - Approved withdrawals - Pending withdrawals
+	availableBalance := totalCommission + referralBalance - totalApprovedWithdrawn - totalPendingWithdrawn
 
 	// Create user-specific message
 	var userTypeDisplay string
@@ -1350,8 +1350,6 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 	if claims.UserType == "salesperson" {
 		responseData["referralBalance"] = referralBalance
 		responseData["referralCount"] = referralCount
-		// Total available balance includes both commission and referral balance
-		responseData["totalAvailableBalance"] = availableBalance + referralBalance
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
