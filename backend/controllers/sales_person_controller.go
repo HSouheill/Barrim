@@ -2919,13 +2919,52 @@ func (spc *SalesPersonController) GetCommissionAndWithdrawalHistory(c echo.Conte
 		})
 	}
 
+	// For salespersons, also fetch referral balance and referral commissions
+	var referralBalance float64
+	var referralCommissions []models.ReferralCommission
+	var referralCount int
+
+	if claims.UserType == "salesperson" {
+		// Get salesperson data to fetch referral balance
+		var salesperson models.Salesperson
+		err := db.Collection("salespersons").FindOne(
+			context.Background(),
+			bson.M{"_id": userID},
+		).Decode(&salesperson)
+		if err == nil {
+			referralBalance = salesperson.ReferralBalance
+			referralCount = len(salesperson.Referrals)
+		}
+
+		// Fetch referral commission records
+		referralCommissionCursor, err := db.Collection("referral_commissions").Find(
+			context.Background(),
+			bson.M{"salespersonId": userID},
+			&options.FindOptions{Sort: bson.M{"createdAt": -1}},
+		)
+		if err == nil {
+			referralCommissionCursor.All(context.Background(), &referralCommissions)
+			referralCommissionCursor.Close(context.Background())
+		}
+	}
+
+	// Prepare response data
+	responseData := map[string]interface{}{
+		"commissions": commissions,
+		"withdrawals": withdrawals,
+	}
+
+	// Add referral data for salespersons
+	if claims.UserType == "salesperson" {
+		responseData["referralBalance"] = referralBalance
+		responseData["referralCount"] = referralCount
+		responseData["referralCommissions"] = referralCommissions
+	}
+
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "Commission and withdrawal history retrieved successfully",
-		Data: map[string]interface{}{
-			"commissions": commissions,
-			"withdrawals": withdrawals,
-		},
+		Data:    responseData,
 	})
 }
 
