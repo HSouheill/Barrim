@@ -105,4 +105,8 @@ func RegisterAuthRoutes(e *echo.Echo, db *mongo.Client, authController *controll
 
 	// Public service provider status update
 	e.PUT("/api/service-provider/status", serviceProviderController.UpdateServiceProviderStatus)
+
+	// Public salesperson referral route (for users to use salesperson referral codes)
+	salespersonReferralController := controllers.NewSalespersonReferralController(db.Database("barrim"))
+	e.POST("/api/salesperson-referral/handle", salespersonReferralController.HandleReferral)
 }

@@ -97,12 +97,22 @@ func (smc *SalesManagerController) CreateSalesperson(c echo.Context) error {
 		})
 	}
 
+	// Generate referral code for salesperson
+	referralCode, err := utils.GenerateSalespersonReferralCode()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to generate referral code",
+		})
+	}
+
 	salesperson := models.Salesperson{
 		FullName:          req.FullName,
 		Email:             req.Email,
 		Password:          string(hashedPassword),
 		PhoneNumber:       req.PhoneNumber,
 		CommissionPercent: req.CommissionPercent,
+		ReferralCode:      referralCode,
 		SalesManagerID:    salesManagerID,
 		CreatedBy:         salesManagerID,
 		CreatedAt:         time.Now(),
@@ -119,6 +129,28 @@ func (smc *SalesManagerController) CreateSalesperson(c echo.Context) error {
 
 	salesperson.ID = result.InsertedID.(primitive.ObjectID)
 	salesperson.Password = "" // Remove password from response
+
+	// Create user entry in users collection
+	user := models.User{
+		ID:           salesperson.ID,
+		FullName:     salesperson.FullName,
+		Email:        salesperson.Email,
+		Password:     string(hashedPassword),
+		UserType:     "salesperson",
+		Phone:        salesperson.PhoneNumber,
+		ReferralCode: referralCode,
+		IsActive:     true,
+		Status:       "active",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	_, err = smc.db.Collection("users").InsertOne(context.Background(), user)
+	if err != nil {
+		log.Printf("Failed to create user entry for salesperson: %v", err)
+		// Don't fail the creation, just log the error
+	}
+
 	return c.JSON(http.StatusCreated, models.Response{
 		Status:  http.StatusCreated,
 		Message: "Salesperson created successfully",
@@ -819,7 +851,7 @@ func (smc *SalesManagerController) GetPendingCompanyCreations(c echo.Context) er
 	if err != nil {
 		return c.JSON(401, map[string]string{"message": "Invalid sales manager ID"})
 	}
-	
+
 	// Use aggregation to join with salesperson collection to get name and email
 	pipeline := []bson.M{
 		{"$match": bson.M{"salesManagerId": salesManagerID}},
@@ -841,14 +873,14 @@ func (smc *SalesManagerController) GetPendingCompanyCreations(c echo.Context) er
 			"salesperson": 0, // Remove the full salesperson object
 		}},
 	}
-	
+
 	coll := smc.db.Collection("pending_company_requests")
 	cursor, err := coll.Aggregate(c.Request().Context(), pipeline)
 	if err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to fetch pending company requests"})
 	}
 	defer cursor.Close(c.Request().Context())
-	
+
 	var results []bson.M
 	if err := cursor.All(c.Request().Context(), &results); err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to decode pending company requests"})
@@ -1036,7 +1068,7 @@ func (smc *SalesManagerController) GetPendingWholesalerCreations(c echo.Context)
 	if err != nil {
 		return c.JSON(401, map[string]string{"message": "Invalid sales manager ID"})
 	}
-	
+
 	// Use aggregation to join with salesperson collection to get name and email
 	pipeline := []bson.M{
 		{"$match": bson.M{"salesManagerId": salesManagerID}},
@@ -1058,14 +1090,14 @@ func (smc *SalesManagerController) GetPendingWholesalerCreations(c echo.Context)
 			"salesperson": 0, // Remove the full salesperson object
 		}},
 	}
-	
+
 	coll := smc.db.Collection("pending_wholesaler_requests")
 	cursor, err := coll.Aggregate(c.Request().Context(), pipeline)
 	if err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to fetch pending wholesaler requests"})
 	}
 	defer cursor.Close(c.Request().Context())
-	
+
 	var results []bson.M
 	if err := cursor.All(c.Request().Context(), &results); err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to decode pending wholesaler requests"})
@@ -1205,7 +1237,7 @@ func (smc *SalesManagerController) GetPendingServiceProviderCreations(c echo.Con
 	if err != nil {
 		return c.JSON(401, map[string]string{"message": "Invalid sales manager ID"})
 	}
-	
+
 	// Use aggregation to join with salesperson collection to get name and email
 	pipeline := []bson.M{
 		{"$match": bson.M{"salesManagerId": salesManagerID}},
@@ -1227,14 +1259,14 @@ func (smc *SalesManagerController) GetPendingServiceProviderCreations(c echo.Con
 			"salesperson": 0, // Remove the full salesperson object
 		}},
 	}
-	
+
 	coll := smc.db.Collection("pending_serviceProviders_requests")
 	cursor, err := coll.Aggregate(c.Request().Context(), pipeline)
 	if err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to fetch pending service provider requests"})
 	}
 	defer cursor.Close(c.Request().Context())
-	
+
 	var results []bson.M
 	if err := cursor.All(c.Request().Context(), &results); err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to decode pending service provider requests"})

@@ -16,6 +16,7 @@ import (
 	"github.com/HSouheill/barrim_backend/config"
 	"github.com/HSouheill/barrim_backend/middleware"
 	"github.com/HSouheill/barrim_backend/models"
+	"github.com/HSouheill/barrim_backend/utils"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -4289,12 +4290,22 @@ func (ac *AdminController) CreateSalesperson(c echo.Context) error {
 		})
 	}
 
+	// Generate referral code for salesperson
+	referralCode, err := utils.GenerateSalespersonReferralCode()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to generate referral code",
+		})
+	}
+
 	salesperson := models.Salesperson{
 		FullName:          req.FullName,
 		Email:             req.Email,
 		Password:          string(hashedPassword),
 		PhoneNumber:       req.PhoneNumber,
 		CommissionPercent: req.CommissionPercent,
+		ReferralCode:      referralCode,
 		CreatedBy:         adminID,
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
@@ -4313,16 +4324,17 @@ func (ac *AdminController) CreateSalesperson(c echo.Context) error {
 
 	// Create user entry in users collection
 	user := models.User{
-		ID:        salesperson.ID,
-		FullName:  salesperson.FullName,
-		Email:     salesperson.Email,
-		Password:  string(hashedPassword),
-		UserType:  "salesperson",
-		Phone:     salesperson.PhoneNumber,
-		IsActive:  true,
-		Status:    "active",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           salesperson.ID,
+		FullName:     salesperson.FullName,
+		Email:        salesperson.Email,
+		Password:     string(hashedPassword),
+		UserType:     "salesperson",
+		Phone:        salesperson.PhoneNumber,
+		ReferralCode: referralCode,
+		IsActive:     true,
+		Status:       "active",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	_, err = ac.DB.Collection("users").InsertOne(context.Background(), user)

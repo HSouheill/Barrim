@@ -11,6 +11,7 @@ import (
 func RegisterSalesRoutes(e *echo.Echo, db *mongo.Client) {
 	salesManagerController := controllers.NewSalesManagerController(db.Database("barrim"))
 	salesPersonController := controllers.NewSalesPersonController(db)
+	salespersonReferralController := controllers.NewSalespersonReferralController(db.Database("barrim"))
 
 	// Sales Manager routes
 	salesManager := e.Group("/api/sales-manager")
@@ -75,4 +76,9 @@ func RegisterSalesRoutes(e *echo.Echo, db *mongo.Client) {
 	salesPerson.GET("/commission-withdrawal-history", salesPersonController.GetCommissionAndWithdrawalHistory)
 	salesPerson.GET("/created-users-details", salesPersonController.GetSalespersonCreatedUsersWithCommission)
 	salesPerson.GET("/created-users", salesPersonController.GetAllCreatedUsers)
+
+	// Salesperson referral routes
+	salesPerson.POST("/referral/handle", salespersonReferralController.HandleReferral)
+	salesPerson.GET("/referral/data", salespersonReferralController.GetSalespersonReferralData)
+	salesPerson.GET("/referral/commissions", salespersonReferralController.GetReferralCommissions)
 }

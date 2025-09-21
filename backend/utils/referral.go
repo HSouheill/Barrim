@@ -13,6 +13,7 @@ const (
 	CompanyType         ReferralType = "COM"
 	ServiceProviderType ReferralType = "SP"
 	WholesalerType      ReferralType = "WS"
+	SalespersonType     ReferralType = "SPR"
 )
 
 // GenerateReferralCode generates a unique referral code for the specified entity type
@@ -62,4 +63,9 @@ func GenerateServiceProviderReferralCode() (string, error) {
 // GenerateWholesalerReferralCode generates a referral code for a wholesaler
 func GenerateWholesalerReferralCode() (string, error) {
 	return GenerateReferralCode(WholesalerType)
+}
+
+// GenerateSalespersonReferralCode generates a referral code for a salesperson
+func GenerateSalespersonReferralCode() (string, error) {
+	return GenerateReferralCode(SalespersonType)
 }
