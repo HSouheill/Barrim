@@ -33,7 +33,7 @@ class SalespersonDashboard extends StatefulWidget {
 class _SalespersonDashboardState extends State<SalespersonDashboard> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  int _selectedTabIndex = 0; // 0 for Listings, 1 for Wallet
+  int _selectedTabIndex = 0; // 0 for Listings, 1 for Wallet, 2 for Referrals
   final SalespersonService _salespersonService = SalespersonService(baseUrl: ApiConstants.baseUrl);
 
   // Commission summary state
@@ -49,11 +49,20 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
   List<Commission> _commissions = [];
   List<Withdrawal> _withdrawals = [];
 
+  // Referral data state
+  bool _isReferralLoading = false;
+  String? _referralError;
+  String _referralCode = '';
+  int _referralCount = 0;
+  double _referralBalance = 0.0;
+  String _referralLink = '';
+
   @override
   void initState() {
     super.initState();
     _fetchCommissionSummary();
     _fetchHistory();
+    _fetchReferralData();
   }
 
   Future<void> _fetchCommissionSummary() async {
@@ -101,7 +110,29 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
     }
   }
 
-
+  Future<void> _fetchReferralData() async {
+    setState(() {
+      _isReferralLoading = true;
+      _referralError = null;
+    });
+    
+    try {
+      final data = await _salespersonService.getReferralData();
+      
+      setState(() {
+        _referralCode = data['referralCode']?.toString() ?? '';
+        _referralCount = (data['referralCount'] ?? 0).toInt();
+        _referralBalance = (data['referralBalance'] ?? 0.0).toDouble();
+        _referralLink = data['referralLink']?.toString() ?? '';
+        _isReferralLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _referralError = e.toString();
+        _isReferralLoading = false;
+      });
+    }
+  }
 
   Future<void> _handleLogout() async {
     try {
@@ -157,6 +188,10 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
       _fetchCommissionSummary();
       _fetchHistory();
     }
+    // Refresh data when switching to referrals tab
+    else if (index == 2) {
+      _fetchReferralData();
+    }
   }
 
   void _showAddNewDialog() {
@@ -165,6 +200,25 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
       barrierDismissible: true,
       builder: (BuildContext context) {
         return AddNewDialog(salespersonService: _salespersonService);
+      },
+    );
+  }
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Filter Options'),
+          content: const Text('Filter functionality will be implemented here.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
       },
     );
   }
@@ -230,6 +284,34 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
             ),
             const SizedBox(height: 20),
 
+            // Action Buttons
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (_selectedTabIndex == 0) ...[
+                    GestureDetector(
+                      onTap: _showAddNewDialog,
+                      child: _buildActionButton(Icons.add, const Color(0xFF1E40AF)),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: _showFilterDialog,
+                      child: _buildActionButton(Icons.filter_alt_outlined, Colors.grey),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  GestureDetector(
+                    onTap: _handleLogout,
+                    child: _buildActionButton(Icons.logout, Colors.red),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // Navigation Tabs
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -244,19 +326,10 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
                     onTap: () => _selectTab(1),
                     child: _buildTabButton('Wallet', isActive: _selectedTabIndex == 1),
                   ),
-                  const Spacer(),
-                  if (_selectedTabIndex == 0) ...[
-                    GestureDetector(
-                      onTap: _showAddNewDialog,
-                      child: _buildActionButton(Icons.add, const Color(0xFF1E40AF)),
-                    ),
-                    const SizedBox(width: 12),
-                    _buildActionButton(Icons.filter_alt_outlined, Colors.grey),
-                  ],
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   GestureDetector(
-                    onTap: _handleLogout,
-                    child: _buildActionButton(Icons.logout, Colors.red),
+                    onTap: () => _selectTab(2),
+                    child: _buildTabButton('Referrals', isActive: _selectedTabIndex == 2),
                   ),
                 ],
               ),
@@ -266,7 +339,11 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
 
             // Content based on selected tab
             Expanded(
-              child: _selectedTabIndex == 0 ? _buildListingsContent() : _buildWalletContent(),
+              child: _selectedTabIndex == 0 
+                  ? _buildListingsContent() 
+                  : _selectedTabIndex == 1 
+                      ? _buildWalletContent() 
+                      : _buildReferralsContent(),
             ),
           ],
         ),
@@ -904,6 +981,380 @@ _availableBalance.toStringAsFixed(2),
       ],
     ),
   );
+  }
+
+  Widget _buildReferralsContent() {
+    if (_isReferralLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_referralError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Error: $_referralError',
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _fetchReferralData,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchReferralData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Referral Code Section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.share,
+                        color: Color(0xFF1E40AF),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Your Referral Code',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E40AF).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF1E40AF).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _referralCode,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E40AF),
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: _referralCode));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Referral code copied to clipboard!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E40AF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.copy,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Referral Link Section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.link,
+                        color: Color(0xFF059669),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Referral Link',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF059669).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF059669).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _referralLink,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF059669),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: _referralLink));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Referral link copied to clipboard!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.copy,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Referral Stats Section
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.people,
+                          color: Color(0xFFDC2626),
+                          size: 32,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '$_referralCount',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const Text(
+                          'Referrals',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.account_balance_wallet,
+                          color: Color(0xFF7C3AED),
+                          size: 32,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '\$${_referralBalance.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const Text(
+                          'Referral Balance',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // How it works section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.help_outline,
+                        color: Color(0xFF6B7280),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'How Referrals Work',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '1. Share your referral code or link with potential customers\n'
+                    '2. When they register using your code, you earn a commission\n'
+                    '3. Track your referrals and earnings in this dashboard\n'
+                    '4. Referral balance can be withdrawn to your wallet',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF6B7280),
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Widget> _buildHistoryItems() {

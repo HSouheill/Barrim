@@ -827,6 +827,31 @@ class SalespersonService {
     throw Exception('Unknown error occurred while fetching service providers');
   }
 
+  // Get referral data for the logged-in salesperson
+  Future<Map<String, dynamic>> getReferralData() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/sales-person/referral/data'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['data'] != null) {
+          return jsonResponse['data'] as Map<String, dynamic>;
+        } else {
+          throw Exception('Invalid response format: missing data field');
+        }
+      } else {
+        _handleError(response);
+      }
+    } catch (e) {
+      rethrow;
+    }
+    throw Exception('Unknown error occurred while fetching referral data');
+  }
+
   // Get commission summary for the logged-in user
   Future<Map<String, dynamic>> getCommissionSummary() async {
     try {
