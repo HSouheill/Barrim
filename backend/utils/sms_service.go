@@ -34,7 +34,7 @@ func NewSMSService() *SMSService {
 	return &SMSService{
 		Username: "Barrim",
 		Password: "TZTbPyWtq5L@Ne8",
-		SenderID: "WinP",
+		SenderID: "Barrim",
 		APIPath:  "https://www.bestsmsbulk.com/bestsmsbulkapi/common/sendSmsWpAPI.php",
 		Client: &http.Client{
 			Timeout: 30 * time.Second,
