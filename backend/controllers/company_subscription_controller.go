@@ -1311,6 +1311,22 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 	// Available balance = Total commission - Approved withdrawals - Pending withdrawals
 	availableBalance := totalCommission - totalApprovedWithdrawn - totalPendingWithdrawn
 
+	// For salespersons, also fetch referral balance
+	var referralBalance float64
+	var referralCount int
+	if claims.UserType == "salesperson" {
+		// Get salesperson data to fetch referral balance
+		var salesperson models.Salesperson
+		err := sc.DB.Collection("salespersons").FindOne(
+			ctx,
+			bson.M{"_id": userID},
+		).Decode(&salesperson)
+		if err == nil {
+			referralBalance = salesperson.ReferralBalance
+			referralCount = len(salesperson.Referrals)
+		}
+	}
+
 	// Create user-specific message
 	var userTypeDisplay string
 	switch claims.UserType {
@@ -1322,15 +1338,26 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 		userTypeDisplay = claims.UserType
 	}
 
+	// Prepare response data
+	responseData := map[string]interface{}{
+		"totalCommission":        totalCommission,
+		"totalApprovedWithdrawn": totalApprovedWithdrawn,
+		"totalPendingWithdrawn":  totalPendingWithdrawn,
+		"availableBalance":       availableBalance,
+	}
+
+	// Add referral data for salespersons
+	if claims.UserType == "salesperson" {
+		responseData["referralBalance"] = referralBalance
+		responseData["referralCount"] = referralCount
+		// Total available balance includes both commission and referral balance
+		responseData["totalAvailableBalance"] = availableBalance + referralBalance
+	}
+
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: fmt.Sprintf("Commission summary retrieved successfully for %s", userTypeDisplay),
-		Data: map[string]interface{}{
-			"totalCommission":        totalCommission,
-			"totalApprovedWithdrawn": totalApprovedWithdrawn,
-			"totalPendingWithdrawn":  totalPendingWithdrawn,
-			"availableBalance":       availableBalance,
-		},
+		Data:    responseData,
 	})
 }
 
