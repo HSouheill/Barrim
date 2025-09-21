@@ -836,7 +836,12 @@ class _DashboardPageState extends State<DashboardPage> {
   void _applyUserFilters() {
     List<User> filtered = List.from(_allUsers);
     
-    // Apply type filter
+    // Filter to show only users with userType "user"
+    filtered = filtered
+        .where((user) => user.userType.toLowerCase() == 'user')
+        .toList();
+    
+    // Apply type filter (if needed for additional filtering)
     if (_selectedFilter != 'all') {
       filtered = filtered
           .where((user) => user.userType.toLowerCase() == _selectedFilter.toLowerCase())

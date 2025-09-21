@@ -433,18 +433,28 @@ class AdminService {
     required String requestType,
     required String requestId,
     required String action,
-    String? reason,
   }) async {
+    // Map action to the correct endpoint
+    String endpoint;
+    if (action.toLowerCase() == 'approve') {
+      endpoint = '$secureBaseUrl/api/admin/pending-requests/approve';
+    } else if (action.toLowerCase() == 'reject') {
+      endpoint = '$secureBaseUrl/api/admin/pending-requests/reject';
+    } else {
+      return {
+        'success': false,
+        'message': 'Invalid action. Must be "approve" or "reject"',
+      };
+    }
+
     final body = {
       'requestType': requestType,
       'requestId': requestId,
-      'action': action,
-      if (reason != null) 'reason': reason,
     };
 
     final response = await _makeRequest(
       'post',
-      '$secureBaseUrl/api/admin/pending-requests/process',
+      endpoint,
       headers: await _getHeaders(),
       body: jsonEncode(body),
     );

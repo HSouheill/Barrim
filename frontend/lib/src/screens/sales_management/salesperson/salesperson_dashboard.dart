@@ -351,7 +351,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'There are no companies or wholesalers available at the moment.',
+                  'There are no companies, wholesalers, or service providers available at the moment.',
                   style: TextStyle(color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
@@ -380,6 +380,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
                 listing['contactPerson'] ?? '',
                 listing['planPrice'] ?? 0.0,
                 listing['logoUrl'],
+                listing['type'] ?? '',
               ),
             );
           },
@@ -469,13 +470,59 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
     }
   }
 
+  // Fetch raw service providers data from API
+  Future<List<Map<String, dynamic>>> _fetchRawServiceProviders() async {
+    try {
+      // Use the new raw method to get contactPerson and contactPhone fields
+      final serviceProvidersData = await _salespersonService.getServiceProviders();
+      
+      print('Raw service providers data received: ${serviceProvidersData.length} service providers');
+      if (serviceProvidersData.isNotEmpty) {
+        print('First service provider data: ${serviceProvidersData.first}');
+      }
+      
+      final List<Map<String, dynamic>> rawData = [];
+      for (var sp in serviceProvidersData) {
+        try {
+          // Map the service provider data to match the expected format
+          final mappedData = {
+            'id': sp['id']?.toString() ?? '',
+            'businessName': sp['businessName']?.toString() ?? '',
+            'category': sp['category']?.toString() ?? '',
+            'logoURL': sp['logoURL']?.toString() ?? '',
+            'contactPerson': sp['contactPerson']?.toString() ?? '',
+            'contactPhone': sp['contactPhone']?.toString() ?? '',
+            'phone': sp['phone']?.toString() ?? '',
+            'email': sp['email']?.toString() ?? '',
+            'address': sp['address'] ?? {},
+            'createdAt': sp['createdAt'],
+            'status': sp['status']?.toString() ?? '',
+            'user': sp['user'] ?? {},
+            'subscription': sp['subscription'] ?? {},
+          };
+          rawData.add(mappedData);
+        } catch (e) {
+          print('Error mapping service provider data: $e');
+          print('Problematic data: $sp');
+        }
+      }
+      
+      print('Total mapped service providers: ${rawData.length}');
+      return rawData;
+    } catch (e) {
+      print('Error fetching raw service providers: $e');
+      return [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _fetchListingsWithSubscription() async {
     try {
       // Fetch raw API responses to get the actual data structure
       final companiesResponse = await _fetchRawCompanies();
       final wholesalersResponse = await _fetchRawWholesalers();
+      final serviceProvidersResponse = await _fetchRawServiceProviders();
       
-      print('Fetched ${companiesResponse.length} companies and ${wholesalersResponse.length} wholesalers');
+      print('Fetched ${companiesResponse.length} companies, ${wholesalersResponse.length} wholesalers, and ${serviceProvidersResponse.length} service providers');
       
       final List<Map<String, dynamic>> allListings = [];
       
@@ -561,6 +608,49 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
         
         // Debug: Print wholesaler data
         print('Wholesaler data: $listingData');
+        
+        allListings.add(listingData);
+      }
+      
+      // Process service providers from raw API response
+      for (var serviceProviderData in serviceProvidersResponse) {
+        // Validate service provider data
+        if (serviceProviderData['businessName']?.toString().isEmpty ?? true) {
+          print('Warning: Service provider has empty business name: ${serviceProviderData['id']}');
+          continue;
+        }
+        
+        // Extract subscription data if available
+        String planTitle = '';
+        double planPrice = 0.0;
+        
+        if (serviceProviderData['subscription'] != null) {
+          final subscription = serviceProviderData['subscription'] as Map<String, dynamic>;
+          print('Service provider subscription data: $subscription');
+          
+          planTitle = subscription['planTitle']?.toString().isNotEmpty == true 
+              ? subscription['planTitle'] 
+              : '${serviceProviderData['category']} Plan';
+          planPrice = (subscription['planPrice'] ?? 0).toDouble();
+          
+          print('Extracted planTitle: $planTitle, planPrice: $planPrice');
+        } else {
+          print('No subscription data found for service provider: ${serviceProviderData['businessName']}');
+        }
+        
+        final listingData = {
+          'businessName': serviceProviderData['businessName'] ?? '',
+          'contactPerson': serviceProviderData['contactPerson'] ?? 'N/A',
+          'contactPhone': serviceProviderData['contactPhone'] ?? 'N/A',
+          'category': serviceProviderData['category'] ?? '',
+          'logoUrl': serviceProviderData['logoURL'] ?? '',
+          'planTitle': planTitle,
+          'planPrice': planPrice,
+          'type': 'service_provider',
+        };
+        
+        // Debug: Print service provider data
+        print('Service provider data: $listingData');
         
         allListings.add(listingData);
       }
@@ -957,6 +1047,7 @@ _availableBalance.toStringAsFixed(2),
       String contactPerson,
       double planPrice,
       String? logoUrl,
+      String type,
       ) {
     // Construct the full image URL
     final fullImageUrl = logoUrl != null && logoUrl.isNotEmpty
@@ -1029,16 +1120,39 @@ _availableBalance.toStringAsFixed(2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Business Name
-                Text(
-                  businessName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Color(0xFF1F2937),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // Business Name and Type
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        businessName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF1F2937),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getTypeColor(type).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: _getTypeColor(type).withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        _getTypeLabel(type),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: _getTypeColor(type),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 
                 const SizedBox(height: 4),
@@ -1167,6 +1281,34 @@ _availableBalance.toStringAsFixed(2),
         ],
       ),
     );
+  }
+
+  // Helper method to get type color
+  Color _getTypeColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'company':
+        return const Color(0xFF1E40AF); // Blue
+      case 'wholesaler':
+        return const Color(0xFF059669); // Green
+      case 'service_provider':
+        return const Color(0xFFDC2626); // Red
+      default:
+        return const Color(0xFF6B7280); // Gray
+    }
+  }
+
+  // Helper method to get type label
+  String _getTypeLabel(String type) {
+    switch (type.toLowerCase()) {
+      case 'company':
+        return 'Company';
+      case 'wholesaler':
+        return 'Wholesaler';
+      case 'service_provider':
+        return 'Service Provider';
+      default:
+        return 'Unknown';
+    }
   }
 }
 

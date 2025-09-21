@@ -170,7 +170,7 @@ class SalespersonService {
     required String businessName,
     required String category,
     String? subcategory,
-    required String email,
+    String email = '',
     required String phone,
     required String password,
     required String contactPerson,
@@ -212,9 +212,9 @@ class SalespersonService {
         fields['lng'] = lng.toString();
       }
 
-      // Validate required fields
+      // Validate required fields (email is optional)
       for (final entry in fields.entries) {
-        if (entry.value.isEmpty && !entry.key.startsWith('lat')) {
+        if (entry.value.isEmpty && !entry.key.startsWith('lat') && entry.key != 'email') {
           throw Exception('${entry.key} is required');
         }
       }
@@ -440,7 +440,7 @@ class SalespersonService {
     required String businessName,
     required String category,
     String? subcategory,
-    required String email,
+    String email = '',
     required String phone,
     required String password,
     required String contactPerson,
@@ -679,7 +679,7 @@ class SalespersonService {
   Future<Company> createServiceProvider({
     required String businessName,
     required String category,
-    required String email,
+    String email = '',
     required String phone,
     required String password,
     required String contactPerson,
@@ -730,9 +730,9 @@ class SalespersonService {
 
       print('Request fields: $fields');
 
-      // Validate required fields
+      // Validate required fields (email is optional)
       for (final entry in fields.entries) {
-        if (entry.value.isEmpty && !entry.key.startsWith('lat')) {
+        if (entry.value.isEmpty && !entry.key.startsWith('lat') && entry.key != 'email') {
           throw Exception('${entry.key} is required');
         }
         request.fields[entry.key] = entry.value;
@@ -801,26 +801,31 @@ class SalespersonService {
   }
 
   // Get all service providers created by the salesperson
-  // Future<List<Company>> getServiceProviders() async {
-  //   try {
-  //     final headers = await _getHeaders();
-  //     final response = await http.get(
-  //       Uri.parse('$baseUrl/api/sales-person/service-providers'),
-  //       headers: headers,
-  //     );
+  Future<List<Map<String, dynamic>>> getServiceProviders() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/sales-person/service-providers'),
+        headers: headers,
+      );
 
-  //     if (response.statusCode == 200) {
-  //       final jsonResponse = jsonDecode(response.body);
-  //       final List<dynamic> serviceProvidersData = jsonResponse['data'];
-  //       return serviceProvidersData.map((data) => Company.fromJson(data)).toList();
-  //     } else {
-  //       _handleError(response);
-  //     }
-  //   } catch (e) {
-  //     rethrow;
-  //   }
-  //   throw Exception('Unknown error occurred while fetching service providers');
-  // }
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['data'] != null) {
+          return (jsonResponse['data'] as List)
+              .map((json) => json as Map<String, dynamic>)
+              .toList();
+        } else {
+          throw Exception('Invalid response format: missing data field');
+        }
+      } else {
+        _handleError(response);
+      }
+    } catch (e) {
+      rethrow;
+    }
+    throw Exception('Unknown error occurred while fetching service providers');
+  }
 
   // Get commission summary for the logged-in user
   Future<Map<String, dynamic>> getCommissionSummary() async {

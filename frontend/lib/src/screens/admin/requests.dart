@@ -99,7 +99,6 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
     required String requestType,
     required String requestId,
     required String action,
-    String? reason,
   }) async {
     final requestKey = '${requestType}_$requestId';
     
@@ -112,7 +111,6 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
         requestType: requestType,
         requestId: requestId,
         action: action,
-        reason: reason,
       );
 
       if (result['success'] == true) {
@@ -168,29 +166,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
     required String requestId,
     required String action,
   }) {
-    final TextEditingController reasonController = TextEditingController();
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('${action.capitalize()} Request'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Are you sure you want to $action this $requestType request?'),
-            if (action == 'reject') ...[
-              const SizedBox(height: 16),
-              TextField(
-                controller: reasonController,
-                decoration: const InputDecoration(
-                  labelText: 'Reason for rejection',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
-          ],
-        ),
+        content: Text('Are you sure you want to $action this $requestType request?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -203,7 +183,6 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen>
                 requestType: requestType,
                 requestId: requestId,
                 action: action,
-                reason: action == 'reject' ? reasonController.text : null,
               );
             },
             style: ElevatedButton.styleFrom(
