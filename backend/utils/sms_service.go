@@ -32,7 +32,7 @@ type SMSResponse struct {
 // NewSMSService creates a new SMS service instance
 func NewSMSService() *SMSService {
 	return &SMSService{
-		Username: "Joe",
+		Username: "Barrim",
 		Password: "TZTbPyWtq5L@Ne8",
 		SenderID: "WinP",
 		APIPath:  "https://www.bestsmsbulk.com/bestsmsbulkapi/common/sendSmsWpAPI.php",

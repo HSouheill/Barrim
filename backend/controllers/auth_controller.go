@@ -1624,18 +1624,52 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 
 		// If it's a company signup and a referral code was provided, handle the referral
 		if signupData.CompanyData.ReferralCode != "" {
-			companiesCollection := ac.DB.Database("barrim").Collection("companies")
-			var referrerCompany models.Company
-			err := companiesCollection.FindOne(ctx, bson.M{"referralCode": signupData.CompanyData.ReferralCode}).Decode(&referrerCompany)
-			if err == nil && referrerCompany.ID != company.ID {
-				// Increment points for the referring company
+			// First check if it's a salesperson referral code
+			salespersonsCollection := ac.DB.Database("barrim").Collection("salespersons")
+			var referrerSalesperson models.Salesperson
+			err := salespersonsCollection.FindOne(ctx, bson.M{"referralCode": signupData.CompanyData.ReferralCode}).Decode(&referrerSalesperson)
+			if err == nil {
+				// Award $1 to the salesperson
+				referralReward := 1.0
 				update := bson.M{
-					"$inc": bson.M{"points": 10}, // or whatever amount of points is appropriate
+					"$inc": bson.M{
+						"referralBalance": referralReward,
+					},
 					"$push": bson.M{
 						"referrals": company.ID,
 					},
+					"$set": bson.M{
+						"updatedAt": time.Now(),
+					},
 				}
-				_, _ = companiesCollection.UpdateOne(ctx, bson.M{"_id": referrerCompany.ID}, update)
+				_, _ = salespersonsCollection.UpdateByID(ctx, referrerSalesperson.ID, update)
+
+				// Create a referral commission record
+				referralCommission := models.ReferralCommission{
+					ID:            primitive.NewObjectID(),
+					SalespersonID: referrerSalesperson.ID,
+					UserID:        company.ID, // Using company ID as the referred entity
+					Amount:        referralReward,
+					ReferralCode:  signupData.CompanyData.ReferralCode,
+					Status:        "earned",
+					CreatedAt:     time.Now(),
+				}
+				_, _ = ac.DB.Database("barrim").Collection("referral_commissions").InsertOne(ctx, referralCommission)
+			} else {
+				// If not a salesperson, check if it's a company referral
+				companiesCollection := ac.DB.Database("barrim").Collection("companies")
+				var referrerCompany models.Company
+				err := companiesCollection.FindOne(ctx, bson.M{"referralCode": signupData.CompanyData.ReferralCode}).Decode(&referrerCompany)
+				if err == nil && referrerCompany.ID != company.ID {
+					// Increment points for the referring company
+					update := bson.M{
+						"$inc": bson.M{"points": 10}, // or whatever amount of points is appropriate
+						"$push": bson.M{
+							"referrals": company.ID,
+						},
+					}
+					_, _ = companiesCollection.UpdateOne(ctx, bson.M{"_id": referrerCompany.ID}, update)
+				}
 			}
 		}
 	}
@@ -1765,18 +1799,52 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 
 		// If it's a wholesaler signup and a referral code was provided, handle the referral
 		if signupData.WholesalerData != nil && signupData.WholesalerData.ReferralCode != "" {
-			wholesalersCollection := ac.DB.Database("barrim").Collection("wholesalers")
-			var referrerWholesaler models.Wholesaler
-			err := wholesalersCollection.FindOne(ctx, bson.M{"referralCode": signupData.WholesalerData.ReferralCode}).Decode(&referrerWholesaler)
-			if err == nil && referrerWholesaler.ID != wholesalerID {
-				// Increment points for the referring wholesaler
+			// First check if it's a salesperson referral code
+			salespersonsCollection := ac.DB.Database("barrim").Collection("salespersons")
+			var referrerSalesperson models.Salesperson
+			err := salespersonsCollection.FindOne(ctx, bson.M{"referralCode": signupData.WholesalerData.ReferralCode}).Decode(&referrerSalesperson)
+			if err == nil {
+				// Award $1 to the salesperson
+				referralReward := 1.0
 				update := bson.M{
-					"$inc": bson.M{"points": 5}, // 5 points for wholesaler referrals
+					"$inc": bson.M{
+						"referralBalance": referralReward,
+					},
 					"$push": bson.M{
 						"referrals": wholesalerID,
 					},
+					"$set": bson.M{
+						"updatedAt": time.Now(),
+					},
 				}
-				_, _ = wholesalersCollection.UpdateOne(ctx, bson.M{"_id": referrerWholesaler.ID}, update)
+				_, _ = salespersonsCollection.UpdateByID(ctx, referrerSalesperson.ID, update)
+
+				// Create a referral commission record
+				referralCommission := models.ReferralCommission{
+					ID:            primitive.NewObjectID(),
+					SalespersonID: referrerSalesperson.ID,
+					UserID:        wholesalerID, // Using wholesaler ID as the referred entity
+					Amount:        referralReward,
+					ReferralCode:  signupData.WholesalerData.ReferralCode,
+					Status:        "earned",
+					CreatedAt:     time.Now(),
+				}
+				_, _ = ac.DB.Database("barrim").Collection("referral_commissions").InsertOne(ctx, referralCommission)
+			} else {
+				// If not a salesperson, check if it's a wholesaler referral
+				wholesalersCollection := ac.DB.Database("barrim").Collection("wholesalers")
+				var referrerWholesaler models.Wholesaler
+				err := wholesalersCollection.FindOne(ctx, bson.M{"referralCode": signupData.WholesalerData.ReferralCode}).Decode(&referrerWholesaler)
+				if err == nil && referrerWholesaler.ID != wholesalerID {
+					// Increment points for the referring wholesaler
+					update := bson.M{
+						"$inc": bson.M{"points": 5}, // 5 points for wholesaler referrals
+						"$push": bson.M{
+							"referrals": wholesalerID,
+						},
+					}
+					_, _ = wholesalersCollection.UpdateOne(ctx, bson.M{"_id": referrerWholesaler.ID}, update)
+				}
 			}
 		}
 	}
@@ -1870,14 +1938,48 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		}
 	}
 
-	// If it's a service provider signup and a referral code was provided, increment points for the referring service provider
+	// If it's a service provider signup and a referral code was provided, handle the referral
 	if signupData.UserType == "serviceProvider" && signupData.ReferralCode != "" {
-		usersCollection := ac.DB.Database("barrim").Collection("users")
-		var referrer models.User
-		err := usersCollection.FindOne(ctx, bson.M{"referralCode": signupData.ReferralCode, "userType": "serviceProvider"}).Decode(&referrer)
-		if err == nil && referrer.ID != userID {
-			// Increment points for the referring service provider (prevent self-referral)
-			_, _ = usersCollection.UpdateOne(ctx, bson.M{"_id": referrer.ID}, bson.M{"$inc": bson.M{"points": 10}})
+		// First check if it's a salesperson referral code
+		salespersonsCollection := ac.DB.Database("barrim").Collection("salespersons")
+		var referrerSalesperson models.Salesperson
+		err := salespersonsCollection.FindOne(ctx, bson.M{"referralCode": signupData.ReferralCode}).Decode(&referrerSalesperson)
+		if err == nil {
+			// Award $1 to the salesperson
+			referralReward := 1.0
+			update := bson.M{
+				"$inc": bson.M{
+					"referralBalance": referralReward,
+				},
+				"$push": bson.M{
+					"referrals": userID,
+				},
+				"$set": bson.M{
+					"updatedAt": time.Now(),
+				},
+			}
+			_, _ = salespersonsCollection.UpdateByID(ctx, referrerSalesperson.ID, update)
+
+			// Create a referral commission record
+			referralCommission := models.ReferralCommission{
+				ID:            primitive.NewObjectID(),
+				SalespersonID: referrerSalesperson.ID,
+				UserID:        userID, // Using user ID as the referred entity
+				Amount:        referralReward,
+				ReferralCode:  signupData.ReferralCode,
+				Status:        "earned",
+				CreatedAt:     time.Now(),
+			}
+			_, _ = ac.DB.Database("barrim").Collection("referral_commissions").InsertOne(ctx, referralCommission)
+		} else {
+			// If not a salesperson, check if it's a service provider referral
+			usersCollection := ac.DB.Database("barrim").Collection("users")
+			var referrer models.User
+			err := usersCollection.FindOne(ctx, bson.M{"referralCode": signupData.ReferralCode, "userType": "serviceProvider"}).Decode(&referrer)
+			if err == nil && referrer.ID != userID {
+				// Increment points for the referring service provider (prevent self-referral)
+				_, _ = usersCollection.UpdateOne(ctx, bson.M{"_id": referrer.ID}, bson.M{"$inc": bson.M{"points": 10}})
+			}
 		}
 	}
 
