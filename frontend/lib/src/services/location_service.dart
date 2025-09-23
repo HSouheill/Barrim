@@ -2,8 +2,54 @@ class LocationService {
   // Sample location data - in a real app, this would come from an API
   static final Map<String, Map<String, Map<String, List<String>>>> _locationData = {
     'Lebanon': {
-      'Beirut': {
-        'Beirut': [
+      'Akkar Governorate (Halba)': {
+        'Akkar (Halba)': [
+          'Halba Main Street',
+          'Akkar Castle',
+          'Qobayat Village',
+          'Fneideq Port',
+          'Halba Market',
+          'Akkar Mountains',
+          'Qobayat Valley',
+          'Fneideq Beach',
+          'Halba Square',
+          'Akkar Forest',
+          'Qobayat Hills',
+          'Fneideq Marina'
+        ]
+      },
+      'Baalbek-Hermel Governorate (Baalbek)': {
+        'Baalbek (Baalbek)': [
+          'Baalbek Temples',
+          'Baalbek Center',
+          'Baalbek Archaeological Site',
+          'Temple of Jupiter',
+          'Temple of Bacchus',
+          'Temple of Venus',
+          'Baalbek Citadel',
+          'Baalbek Museum',
+          'Baalbek Main Street',
+          'Baalbek Market',
+          'Baalbek Square',
+          'Baalbek Souk',
+          'Baalbek Valley',
+          'Baalbek Hills'
+        ],
+        'Hermel (Hermel)': [
+          'Hermel Center',
+          'Hermel Main Street',
+          'Hermel Market',
+          'Hermel Square',
+          'Hermel Village',
+          'Hermel Souk',
+          'Hermel Valley',
+          'Hermel Mountains',
+          'Hermel Forest',
+          'Hermel Area'
+        ]
+      },
+      'Beirut Governorate (Beirut)': {
+        'Beirut (Beirut)': [
           'Hamra Street',
           'Corniche Beirut',
           'Gemmayzeh Street',
@@ -31,39 +77,67 @@ class LocationService {
           'Monot',
           'Gouraud',
           'Sursock',
-          'Rmeil',
-          'Mina el Hosn',
           'Sassine Square',
           'Monot Street',
           'Gouraud Street'
         ]
       },
-      'Mount Lebanon': {
-        'Baabda': [
-          'Baabda Main Street',
-          'Hazmieh',
-          'Chouf',
-          'Aley',
-          'Bhamdoun',
-          'Deir el Qamar',
-          'Beit ed-Dine',
-          'Barouk',
-          'Ain Zhalta',
-          'Bmariam',
-          'Kfarmatta',
-          'Kfarnabrakh',
-          'Baabda Palace',
-          'Chouf Cedar Reserve',
-          'Beit ed-Dine Palace',
-          'Deir el Qamar Square',
-          'Moussa Castle',
-          'Ain Zhalta Waterfall',
-          'Barouk Mountain',
-          'Bhamdoun Station',
-          'Aley Main Street',
-          'Chouf Mountains'
+      'Beqaa Governorate (Zahlé)': {
+        'Rashaya (Rashaya)': [
+          'Rashaya Citadel',
+          'Rashaya Center',
+          'Rashaya Main Street',
+          'Rashaya Market',
+          'Rashaya Square',
+          'Rashaya Village',
+          'Rashaya Souk',
+          'Rashaya Valley',
+          'Rashaya Mountains',
+          'Rashaya Forest'
         ],
-        'Jounieh': [
+        'Western Beqaa (Joub Jannine - winter / Saghbine - summer)': [
+          'Joub Jannine Center',
+          'Saghbine Center',
+          'Western Beqaa Valley',
+          'Joub Jannine Market',
+          'Saghbine Market',
+          'Western Beqaa Souk',
+          'Joub Jannine Main Street',
+          'Saghbine Main Street'
+        ],
+        'Zahlé (Zahlé)': [
+          'Zahlé Center',
+          'Chtaura',
+          'Anjar',
+          'Zahlé Main Street',
+          'Chtaura Junction',
+          'Anjar Archaeological Site',
+          'Zahlé Market',
+          'Chtaura Square',
+          'Anjar Castle',
+          'Zahlé Souk',
+          'Chtaura Station',
+          'Anjar Village',
+          'Zahlé Valley',
+          'Chtaura Center',
+          'Anjar Main Street'
+        ]
+      },
+      'Keserwan-Jbeil Governorate (Jounieh)': {
+        'Byblos (Byblos)': [
+          'Byblos Castle',
+          'Byblos Port',
+          'Old Souk',
+          'Wax Museum',
+          'St. John Church',
+          'Temple of Baalat Gebal',
+          'Byblos Archaeological Site',
+          'Byblos Marina',
+          'Byblos Beach',
+          'Byblos Main Street',
+          'Byblos Souk'
+        ],
+        'Keserwan (Jounieh)': [
           'Jounieh Bay',
           'Maameltein',
           'Harissa',
@@ -88,25 +162,41 @@ class LocationService {
           'Faitroun Village',
           'Ghazir Palace',
           'Bikfaya Main Street'
+        ]
+      },
+      'Mount Lebanon Governorate (Baabda)': {
+        'Aley (Aley)': [
+          'Aley Main Street',
+          'Aley Center',
+          'Aley Market',
+          'Aley Square',
+          'Aley Souk',
+          'Aley Mountains',
+          'Aley Valley',
+          'Aley Forest'
         ],
-        'Keserwan': [
-          'Jbeil',
-          'Byblos',
-          'Jbeil Port',
-          'Byblos Castle',
-          'Old Souk',
-          'Wax Museum',
-          'St. John Church',
-          'Temple of Baalat Gebal',
-          'Byblos Archaeological Site',
-          'Jbeil Marina',
-          'Byblos Beach',
-          'Jbeil Main Street',
-          'Byblos Souk',
-          'Jbeil Castle',
-          'Byblos Port'
+        'Baabda (Baabda)': [
+          'Baabda Main Street',
+          'Baabda Palace',
+          'Baabda Center',
+          'Baabda Market',
+          'Baabda Square',
+          'Baabda Souk'
         ],
-        'Metn': [
+        'Chouf (Beiteddine)': [
+          'Beiteddine Palace',
+          'Chouf Cedar Reserve',
+          'Deir el Qamar',
+          'Deir el Qamar Square',
+          'Moussa Castle',
+          'Ain Zhalta',
+          'Ain Zhalta Waterfall',
+          'Barouk',
+          'Barouk Mountain',
+          'Chouf Mountains'
+        ],
+        'Matn/Metn (Jdeideh)': [
+          'Jdeideh Center',
           'Antelias',
           'Bourj Hammoud',
           'Sin el Fil',
@@ -124,8 +214,83 @@ class LocationService {
           'Sin el Fil Station'
         ]
       },
-      'North Lebanon': {
-        'Tripoli': [
+      'Nabatieh Governorate (Nabatieh)': {
+        'Bint Jbeil (Bint Jbeil)': [
+          'Bint Jbeil Center',
+          'Bint Jbeil Main Street',
+          'Bint Jbeil Market',
+          'Bint Jbeil Square',
+          'Bint Jbeil Souk'
+        ],
+        'Hasbaya (Hasbaya)': [
+          'Hasbaya Palace',
+          'Hasbaya Center',
+          'Hasbaya Main Street',
+          'Hasbaya Market',
+          'Hasbaya Square',
+          'Hasbaya Souk'
+        ],
+        'Marjeyoun (Marjeyoun)': [
+          'Marjeyoun Castle',
+          'Marjeyoun Center',
+          'Marjeyoun Main Street',
+          'Marjeyoun Market',
+          'Marjeyoun Square',
+          'Marjeyoun Souk'
+        ],
+        'Nabatieh (Nabatieh)': [
+          'Nabatieh Center',
+          'Nabatieh Main Street',
+          'Nabatieh Market',
+          'Nabatieh Square',
+          'Nabatieh Souk'
+        ]
+      },
+      'North Governorate (Tripoli)': {
+        'Batroun (Batroun)': [
+          'Batroun Center',
+          'Batroun Port',
+          'Batroun Main Street',
+          'Batroun Market',
+          'Batroun Square',
+          'Batroun Souk',
+          'Batroun Beach'
+        ],
+        'Bsharri (Bsharri)': [
+          'Bsharri Cedars',
+          'Bsharri Center',
+          'Bsharri Main Street',
+          'Bsharri Market',
+          'Bsharri Square',
+          'Bsharri Souk',
+          'Bsharri Cedar Reserve'
+        ],
+        'Koura (Amioun)': [
+          'Amioun',
+          'Koura Center',
+          'Kfarhazir',
+          'Kfarhata',
+          'Kfarzina',
+          'Kfarhbab',
+          'Amioun Main Street',
+          'Koura Valley',
+          'Kfarhazir Village',
+          'Kfarhata Center',
+          'Kfarzina Street',
+          'Kfarhbab Area',
+          'Amioun Square',
+          'Koura Hills',
+          'Kfarhazir Market',
+          'Kfarhata Village'
+        ],
+        'Miniyeh-Danniyeh District (Miniyeh)': [
+          'Miniyeh Center',
+          'Miniyeh Main Street',
+          'Miniyeh Market',
+          'Miniyeh Square',
+          'Miniyeh Souk'
+        ],
+        'Tripoli (Tripoli)': [
           'Tripoli Port',
           'Al Mina',
           'El Tall',
@@ -151,69 +316,16 @@ class LocationService {
           'Tripoli Clock Tower',
           'Al Mina Corniche'
         ],
-        'Zgharta': [
+        'Zgharta (Zgharta)': [
           'Zgharta Center',
           'Ehden',
-          'Bsharri',
-          'Koura',
-          'Amioun',
-          'Kfarhazir',
-          'Kfarhata',
-          'Kfarzina',
-          'Kfarhbab',
           'Zgharta Main Street',
           'Ehden Forest',
-          'Bsharri Cedars',
-          'Koura Valley',
-          'Amioun Square',
-          'Kfarhazir Village',
-          'Kfarhata Center',
-          'Kfarzina Street',
-          'Kfarhbab Area',
-          'Ehden Mountain',
-          'Bsharri Cedar Reserve',
-          'Koura Hills',
-          'Amioun Market'
-        ],
-        'Akkar': [
-          'Halba',
-          'Akkar Center',
-          'Qobayat',
-          'Fneideq',
-          'Halba Main Street',
-          'Akkar Castle',
-          'Qobayat Village',
-          'Fneideq Port',
-          'Halba Market',
-          'Akkar Mountains',
-          'Qobayat Valley',
-          'Fneideq Beach',
-          'Halba Square',
-          'Akkar Forest',
-          'Qobayat Hills',
-          'Fneideq Marina'
-        ],
-        'Koura': [
-          'Amioun',
-          'Koura Center',
-          'Kfarhazir',
-          'Kfarhata',
-          'Kfarzina',
-          'Kfarhbab',
-          'Amioun Main Street',
-          'Koura Valley',
-          'Kfarhazir Village',
-          'Kfarhata Center',
-          'Kfarzina Street',
-          'Kfarhbab Area',
-          'Amioun Square',
-          'Koura Hills',
-          'Kfarhazir Market',
-          'Kfarhata Village'
+          'Ehden Mountain'
         ]
       },
-      'South Lebanon': {
-        'Sidon': [
+      'South Governorate (Sidon)': {
+        'Sidon (Sidon)': [
           'Sidon Port',
           'Old City',
           'Sidon Castle',
@@ -237,7 +349,19 @@ class LocationService {
           'Sidon Museum',
           'Sidon Port Area'
         ],
-        'Tyre': [
+        'Jezzine (Jezzine)': [
+          'Jezzine Center',
+          'Jezzine Waterfall',
+          'Jezzine Valley',
+          'Jezzine Main Street',
+          'Jezzine Market',
+          'Jezzine Square',
+          'Jezzine Forest',
+          'Jezzine Mountains',
+          'Jezzine Village',
+          'Jezzine Souk'
+        ],
+        'Tyre (Tyre)': [
           'Tyre Port',
           'Al Mina',
           'Rashidieh',
@@ -257,107 +381,6 @@ class LocationService {
           'Tyre Souk',
           'Tyre Corniche',
           'Tyre Port Area'
-        ],
-        'Nabatieh': [
-          'Nabatieh Center',
-          'Jezzine',
-          'Marjayoun',
-          'Hasbaya',
-          'Rashaya',
-          'Nabatieh Main Street',
-          'Jezzine Waterfall',
-          'Marjayoun Castle',
-          'Hasbaya Palace',
-          'Rashaya Citadel',
-          'Nabatieh Market',
-          'Jezzine Valley',
-          'Marjayoun Square',
-          'Hasbaya Center',
-          'Rashaya Village',
-          'Nabatieh Souk'
-        ],
-        'Jezzine': [
-          'Jezzine Center',
-          'Jezzine Waterfall',
-          'Jezzine Valley',
-          'Jezzine Main Street',
-          'Jezzine Market',
-          'Jezzine Square',
-          'Jezzine Forest',
-          'Jezzine Mountains',
-          'Jezzine Village',
-          'Jezzine Souk'
-        ]
-      },
-      'Bekaa': {
-        'Zahle': [
-          'Zahle Center',
-          'Chtaura',
-          'Anjar',
-          'Zahle Main Street',
-          'Chtaura Junction',
-          'Anjar Archaeological Site',
-          'Zahle Market',
-          'Chtaura Square',
-          'Anjar Castle',
-          'Zahle Souk',
-          'Chtaura Station',
-          'Anjar Village',
-          'Zahle Valley',
-          'Chtaura Center',
-          'Anjar Main Street'
-        ],
-        'Baalbek': [
-          'Baalbek Temples',
-          'Baalbek Center',
-          'Baalbek Archaeological Site',
-          'Temple of Jupiter',
-          'Temple of Bacchus',
-          'Temple of Venus',
-          'Baalbek Citadel',
-          'Baalbek Museum',
-          'Baalbek Main Street',
-          'Baalbek Market',
-          'Baalbek Square',
-          'Baalbek Souk',
-          'Baalbek Valley',
-          'Baalbek Hills'
-        ],
-        'Hermel': [
-          'Hermel Center',
-          'Hermel Main Street',
-          'Hermel Market',
-          'Hermel Square',
-          'Hermel Village',
-          'Hermel Souk',
-          'Hermel Valley',
-          'Hermel Mountains',
-          'Hermel Forest',
-          'Hermel Area'
-        ],
-        'Rashaya': [
-          'Rashaya Citadel',
-          'Rashaya Center',
-          'Rashaya Main Street',
-          'Rashaya Market',
-          'Rashaya Square',
-          'Rashaya Village',
-          'Rashaya Souk',
-          'Rashaya Valley',
-          'Rashaya Mountains',
-          'Rashaya Forest'
-        ],
-        'Western Bekaa': [
-          'Chtaura',
-          'Western Bekaa Center',
-          'Chtaura Junction',
-          'Western Bekaa Valley',
-          'Chtaura Square',
-          'Western Bekaa Market',
-          'Chtaura Station',
-          'Western Bekaa Souk',
-          'Chtaura Center',
-          'Western Bekaa Main Street'
         ]
       }
     },
@@ -1862,8 +1885,40 @@ class LocationService {
     return cityData..sort();
   }
 
-  // Get governorates for a specific country, district, and city (same as streets for now)
-  static List<String> getGovernorates(String country, String district, String city) {
+  // Get governorates for a specific country (for Lebanon, these are the main governorates)
+  static List<String> getGovernorates(String country) {
+    final countryData = _locationData[country];
+    if (countryData == null) return [];
+    return countryData.keys.toList()..sort();
+  }
+
+  // Get districts for a specific country and governorate
+  static List<String> getDistrictsByGovernorate(String country, String governorate) {
+    final countryData = _locationData[country];
+    if (countryData == null) return [];
+    
+    final governorateData = countryData[governorate];
+    if (governorateData == null) return [];
+    
+    return governorateData.keys.toList()..sort();
+  }
+
+  // Get streets for a specific country, governorate, and district
+  static List<String> getStreetsByGovernorate(String country, String governorate, String district) {
+    final countryData = _locationData[country];
+    if (countryData == null) return [];
+    
+    final governorateData = countryData[governorate];
+    if (governorateData == null) return [];
+    
+    final districtData = governorateData[district];
+    if (districtData == null) return [];
+    
+    return districtData..sort();
+  }
+
+  // Legacy method for backward compatibility - Get governorates for a specific country, district, and city
+  static List<String> getGovernoratesLegacy(String country, String district, String city) {
     return getStreets(country, district, city);
   }
 
@@ -1871,5 +1926,28 @@ class LocationService {
   static bool isValidLocation(String country, String district, String city, String street) {
     final streets = getStreets(country, district, city);
     return streets.contains(street);
+  }
+
+  // Validate if a governorate/district/street combination exists
+  static bool isValidLocationByGovernorate(String country, String governorate, String district, String street) {
+    final streets = getStreetsByGovernorate(country, governorate, district);
+    return streets.contains(street);
+  }
+
+  // Get the capital of a governorate (extract from parentheses)
+  static String? getGovernorateCapital(String governorate) {
+    final match = RegExp(r'\(([^)]+)\)').firstMatch(governorate);
+    return match?.group(1);
+  }
+
+  // Get the capital of a district (extract from parentheses)
+  static String? getDistrictCapital(String district) {
+    final match = RegExp(r'\(([^)]+)\)').firstMatch(district);
+    return match?.group(1);
+  }
+
+  // Check if a country uses the new governorate structure
+  static bool usesGovernorateStructure(String country) {
+    return country == 'Lebanon';
   }
 } 

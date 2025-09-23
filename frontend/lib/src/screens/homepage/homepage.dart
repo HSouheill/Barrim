@@ -7,6 +7,7 @@ import '../../services/api_services.dart';
 import '../../models/user_model.dart';
 import '../../models/company_model.dart' as company_model;
 import '../../models/pending_request_models.dart';
+import '../../models/salesperson_model.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -30,6 +31,8 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Wholesaler> _filteredWholesalers = [];
   List<User> _allServiceProviders = [];
   List<User> _filteredServiceProviders = [];
+  List<Salesperson> _allSalespersons = [];
+  List<Salesperson> _filteredSalespersons = [];
   
   bool _isLoading = true;
   String _errorMessage = '';
@@ -52,6 +55,14 @@ class _DashboardPageState extends State<DashboardPage> {
     {'key': 'type', 'label': 'User Type', 'icon': Icons.category},
   ];
 
+  // Salesperson search categories
+  final List<Map<String, dynamic>> _salespersonSearchCategories = [
+    {'key': 'all', 'label': 'All', 'icon': Icons.search},
+    {'key': 'name', 'label': 'Name', 'icon': Icons.person},
+    {'key': 'email', 'label': 'Email', 'icon': Icons.email},
+    {'key': 'region', 'label': 'Region', 'icon': Icons.location_on},
+  ];
+
 
 
   @override
@@ -60,6 +71,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _searchController = TextEditingController(text: _searchQuery);
     _searchController.addListener(_onSearchChanged);
     _fetchAllEntities();
+    _fetchAllSalespersons();
     _loadSearchHistory();
   }
 
@@ -293,6 +305,29 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // Fetch all salespersons from API
+  Future<void> _fetchAllSalespersons() async {
+    try {
+      final response = await ApiService.getAllSalespersons();
+
+      if (response.success && response.data != null) {
+        setState(() {
+          final salespersonsList = response.data['salespersons'] as List?;
+          if (salespersonsList != null) {
+            _allSalespersons = salespersonsList.map((json) => Salesperson.fromJson(json)).toList();
+            _filteredSalespersons = List.from(_allSalespersons);
+          } else {
+            _allSalespersons = [];
+            _filteredSalespersons = [];
+          }
+        });
+        _applyFilters(); // Apply current filters to the new data
+      }
+    } catch (e) {
+      print('Error fetching salespersons: $e');
+    }
+  }
+
 
 
 
@@ -349,7 +384,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   _selectedTabIndex == 0 ? _buildSearchBar() : 
                   _selectedTabIndex == 1 ? _buildCompanySearchBar() :
                   _selectedTabIndex == 2 ? _buildWholesalerSearchBar() :
-                  _selectedTabIndex == 3 ? _buildServiceProviderSearchBar() : 
+                  _selectedTabIndex == 3 ? _buildServiceProviderSearchBar() :
+                  _selectedTabIndex == 4 ? _buildSalespersonSearchBar() :
                   const SizedBox.shrink(),
                   
                   // Display content based on selected tab
@@ -359,6 +395,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 _selectedTabIndex == 1 ? _fetchAllEntities :
                                 _selectedTabIndex == 2 ? _fetchAllEntities :
                                 _selectedTabIndex == 3 ? _fetchAllEntities :
+                                _selectedTabIndex == 4 ? _fetchAllSalespersons :
                                 _fetchAllEntities,
                       child: _selectedTabIndex == 0 
                           ? _buildAllUsersList()
@@ -366,7 +403,9 @@ class _DashboardPageState extends State<DashboardPage> {
                               ? _buildCompaniesList()
                               : _selectedTabIndex == 2
                                   ? _buildWholesalersList()
-                                  : _buildServiceProvidersList(),
+                                  : _selectedTabIndex == 3
+                                      ? _buildServiceProvidersList()
+                                      : _buildSalespersonsList(),
                     ),
                   ),
                 ],
@@ -604,6 +643,9 @@ class _DashboardPageState extends State<DashboardPage> {
       case 3: // Service Providers
         _applyServiceProviderFilters();
         break;
+      case 4: // Salespersons
+        _applySalespersonFilters();
+        break;
       default:
         _applyUserFilters();
     }
@@ -765,6 +807,42 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
+  void _applySalespersonFilters() {
+    List<Salesperson> filtered = List.from(_allSalespersons);
+    
+    // Apply search filter based on selected category
+    if (_searchQuery.isNotEmpty) {
+      switch (_selectedSearchCategory) {
+        case 'name':
+          filtered = filtered
+              .where((sp) => sp.fullName.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'email':
+          filtered = filtered
+              .where((sp) => sp.email.toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        case 'region':
+          filtered = filtered
+              .where((sp) => (sp.region ?? '').toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+          break;
+        default: // 'all'
+          filtered = filtered
+              .where((sp) => 
+                  sp.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  sp.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  (sp.region ?? '').toLowerCase().contains(_searchQuery.toLowerCase()))
+              .toList();
+      }
+    }
+    
+    setState(() {
+      _filteredSalespersons = filtered;
+    });
+  }
+
   Widget _buildTabs() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -779,6 +857,8 @@ class _DashboardPageState extends State<DashboardPage> {
             _buildTab('Wholesalers', 2, _allWholesalers.length.toString()),
             const SizedBox(width: 12),
             _buildTab('Service Providers', 3, _allServiceProviders.length.toString()),
+            const SizedBox(width: 12),
+            _buildTab('Salespersons', 4, _allSalespersons.length.toString()),
           ],
         ),
       ),
@@ -1242,6 +1322,110 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               decoration: InputDecoration(
                 hintText: 'Search service providers by name, email, or service type...',
+                hintStyle: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: Colors.grey.shade400,
+                  size: 24,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                        onPressed: _clearSearch,
+                        tooltip: 'Clear search',
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSalespersonSearchBar() {
+    return Column(
+      children: [
+        // Search categories
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _salespersonSearchCategories.map((category) {
+                final isSelected = _selectedSearchCategory == category['key'];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => _onSearchCategoryChanged(category['key']),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF0D1C4B) : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF0D1C4B) : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            category['icon'],
+                            size: 16,
+                            color: isSelected ? Colors.white : Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            category['label'],
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              color: isSelected ? Colors.white : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        
+        // Enhanced search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(
+                color: Color(0xFF0D1C4B),
+                fontSize: 16,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search salespersons by name, email, or region...',
                 hintStyle: TextStyle(
                   color: Colors.grey.shade500,
                   fontSize: 14,
@@ -1948,6 +2132,237 @@ class _DashboardPageState extends State<DashboardPage> {
     
   }
 
+  Widget _buildSalespersonsList() {
+    // Show loading indicator if data is being loaded
+    if (_isLoading) {
+      return const Expanded(
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Show error message if loading failed
+    if (_errorMessage.isNotEmpty) {
+      return Expanded(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage,
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _fetchAllSalespersons,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show empty state if no salespersons
+    if (_filteredSalespersons.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_outline, color: Colors.grey.shade400, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _allSalespersons.isEmpty 
+                  ? 'No salespersons at the moment'
+                  : 'No salespersons match the selected filter',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show list of salespersons
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView.builder(
+          itemCount: _filteredSalespersons.length,
+          itemBuilder: (context, index) {
+            final salesperson = _filteredSalespersons[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Salesperson header with avatar and status
+                    Row(
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: (salesperson.status == 'active') ? Colors.green : Colors.grey,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                salesperson.fullName,
+                                style: const TextStyle(
+                                  color: Color(0xFF0D1C4B),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                salesperson.email,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'Salesperson',
+                                      style: TextStyle(
+                                        color: Colors.green,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  if (salesperson.region != null && salesperson.region!.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        salesperson.region!,
+                                        style: TextStyle(
+                                          color: Colors.blue,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Salesperson details section
+                    _buildSalespersonDetails(salesperson),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Salesperson info
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Phone: ${salesperson.phoneNumber}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        // Add expand/collapse button for more details
+                        IconButton(
+                          icon: Icon(
+                            Icons.more_vert,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            _showSalespersonDetailsDialog(salesperson);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    
+  }
+
 
   Widget _buildCompanyDetails(company_model.Company company) {
     final List<Widget> details = [];
@@ -2005,6 +2420,27 @@ class _DashboardPageState extends State<DashboardPage> {
     
     if (serviceProvider.serviceProviderInfo?.description != null && serviceProvider.serviceProviderInfo!.description!.isNotEmpty) {
       details.add(_buildDetailRow('Description', serviceProvider.serviceProviderInfo!.description!));
+    }
+    
+    if (details.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Column(
+      children: details,
+    );
+  }
+
+  Widget _buildSalespersonDetails(Salesperson salesperson) {
+    final List<Widget> details = [];
+    
+    // Add salesperson information
+    if (salesperson.commissionPercent > 0) {
+      details.add(_buildDetailRow('Commission', '${salesperson.commissionPercent}%'));
+    }
+    
+    if (salesperson.status != null && salesperson.status!.isNotEmpty) {
+      details.add(_buildDetailRow('Status', salesperson.status!));
     }
     
     if (details.isEmpty) {
@@ -2271,6 +2707,45 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildDetailRow('Points', serviceProvider.points.toString()),
                 _buildDetailRow('Created', _formatDate(serviceProvider.createdAt)),
                 _buildDetailRow('Updated', _formatDate(serviceProvider.updatedAt)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method to show salesperson details dialog
+  void _showSalespersonDetailsDialog(Salesperson salesperson) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(salesperson.fullName),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDetailRow('Email', salesperson.email),
+                _buildDetailRow('Phone', salesperson.phoneNumber),
+                if (salesperson.region != null && salesperson.region!.isNotEmpty)
+                  _buildDetailRow('Region', salesperson.region!),
+                _buildDetailRow('Commission', '${salesperson.commissionPercent}%'),
+                if (salesperson.status != null && salesperson.status!.isNotEmpty)
+                  _buildDetailRow('Status', salesperson.status!),
+                if (salesperson.image != null && salesperson.image!.isNotEmpty)
+                  _buildDetailRow('Image', salesperson.image!),
+                if (salesperson.createdAt != null)
+                  _buildDetailRow('Created', _formatDate(salesperson.createdAt!)),
+                if (salesperson.updatedAt != null)
+                  _buildDetailRow('Updated', _formatDate(salesperson.updatedAt!)),
               ],
             ),
           ),

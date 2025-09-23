@@ -1239,6 +1239,25 @@ class ApiService {
     }
   }
 
+  // Get all salespersons (admin only)
+  static Future<ApiResponse> getAllSalespersons() async {
+    try {
+      final headers = await getAuthHeaders();
+      final response = await _makeRequest(
+        'get',
+        '${baseUrl}${ApiConstants.getAllSalespersons}',
+        headers: headers,
+      );
+
+      return _handleResponse(response);
+    } catch (e) {
+      return ApiResponse(
+        success: false,
+        message: 'Failed to load salespersons: ${e.toString()}',
+      );
+    }
+  }
+
   // Fetch all entities (users, companies, wholesalers, service providers) for admin
   static Future<ApiResponse> getAllEntities() async {
     try {
