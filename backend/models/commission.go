@@ -13,11 +13,11 @@ type Commission struct {
 	PlanID         primitive.ObjectID `bson:"planId" json:"planId"`
 	PlanPrice      float64            `bson:"planPrice" json:"planPrice"`
 
-	SalespersonID                primitive.ObjectID `bson:"salespersonId" json:"salespersonId"`
+	SalespersonID                primitive.ObjectID `bson:"salespersonID" json:"salespersonId"`
 	SalespersonCommission        float64            `bson:"salespersonCommission" json:"salespersonCommission"`
 	SalespersonCommissionPercent float64            `bson:"salespersonCommissionPercent" json:"salespersonCommissionPercent"`
 
-	SalesManagerID                primitive.ObjectID `bson:"salesManagerId" json:"salesManagerId"`
+	SalesManagerID                primitive.ObjectID `bson:"salesManagerID" json:"salesManagerId"`
 	SalesManagerCommission        float64            `bson:"salesManagerCommission" json:"salesManagerCommission"`
 	SalesManagerCommissionPercent float64            `bson:"salesManagerCommissionPercent" json:"salesManagerCommissionPercent"`
 

@@ -1590,6 +1590,7 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		company := models.Company{
 			ID:           primitive.NewObjectID(),
 			UserID:       userID,
+			Email:        signupData.Email, // Add the missing email field
 			BusinessName: signupData.CompanyData.BusinessName,
 			Category:     signupData.CompanyData.Category,
 			SubCategory:  signupData.CompanyData.SubCategory,

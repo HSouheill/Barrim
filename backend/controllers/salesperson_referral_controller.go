@@ -316,7 +316,7 @@ func (src *SalespersonReferralController) GetReferralCommissions(c echo.Context)
 	// Find referral commissions for this salesperson
 	cursor, err := src.DB.Collection("referral_commissions").Find(
 		ctx,
-		bson.M{"salespersonId": objID},
+		bson.M{"salespersonID": objID},
 		options.Find().SetSort(bson.M{"createdAt": -1}).SetSkip(int64(skip)).SetLimit(int64(limit)),
 	)
 	if err != nil {
@@ -336,7 +336,7 @@ func (src *SalespersonReferralController) GetReferralCommissions(c echo.Context)
 	}
 
 	// Get total count
-	totalCount, err := src.DB.Collection("referral_commissions").CountDocuments(ctx, bson.M{"salespersonId": objID})
+	totalCount, err := src.DB.Collection("referral_commissions").CountDocuments(ctx, bson.M{"salespersonID": objID})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,

@@ -531,51 +531,56 @@ func (sc *SubscriptionController) ApproveCompanySubscriptionRequest(c echo.Conte
 		// --- Commission logic start ---
 		// Only proceed if company was created by a salesperson
 		if !request.CompanyID.IsZero() {
-			// Get salesperson
-			var salesperson models.Salesperson
-			err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": request.CompanyID}).Decode(&salesperson)
-			if err == nil {
-				// Get sales manager
-				var salesManager models.SalesManager
-				err := sc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+			// Get company details first
+			var company models.Company
+			err := sc.DB.Collection("companies").FindOne(ctx, bson.M{"_id": request.CompanyID}).Decode(&company)
+			if err == nil && !company.CreatedBy.IsZero() {
+				// Get salesperson
+				var salesperson models.Salesperson
+				err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": company.CreatedBy}).Decode(&salesperson)
 				if err == nil {
-					// Get plan details
-					var plan models.SubscriptionPlan
-					err := sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": request.PlanID}).Decode(&plan)
+					// Get sales manager
+					var salesManager models.SalesManager
+					err := sc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
 					if err == nil {
-						planPrice := plan.Price
-						salespersonPercent := salesperson.CommissionPercent
-						salesManagerPercent := salesManager.CommissionPercent
+						// Get plan details
+						var plan models.SubscriptionPlan
+						err := sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": request.PlanID}).Decode(&plan)
+						if err == nil {
+							planPrice := plan.Price
+							salespersonPercent := salesperson.CommissionPercent
+							salesManagerPercent := salesManager.CommissionPercent
 
-						// Calculate commissions correctly
-						// Salesperson gets their percentage directly from the plan price
-						salespersonCommission := planPrice * salespersonPercent / 100.0
-						// Sales manager gets their percentage directly from the plan price
-						salesManagerCommission := planPrice * salesManagerPercent / 100.0
+							// Calculate commissions correctly
+							// Salesperson gets their percentage directly from the plan price
+							salespersonCommission := planPrice * salespersonPercent / 100.0
+							// Sales manager gets their percentage directly from the plan price
+							salesManagerCommission := planPrice * salesManagerPercent / 100.0
 
-						// Insert commission document using Commission model
-						commission := models.Commission{
-							ID:                            primitive.NewObjectID(),
-							SubscriptionID:                request.ID,
-							CompanyID:                     request.CompanyID,
-							PlanID:                        plan.ID,
-							PlanPrice:                     planPrice,
-							SalespersonID:                 salesperson.ID,
-							SalespersonCommission:         salespersonCommission,
-							SalespersonCommissionPercent:  salespersonPercent,
-							SalesManagerID:                salesManager.ID,
-							SalesManagerCommission:        salesManagerCommission,
-							SalesManagerCommissionPercent: salesManagerPercent,
-							CreatedAt:                     time.Now(),
-							Paid:                          false,
-							PaidAt:                        nil,
-						}
-						_, err := sc.DB.Collection("commissions").InsertOne(ctx, commission)
-						if err != nil {
-							log.Printf("Failed to insert commission: %v", err)
-						} else {
-							log.Printf("Commission inserted successfully - Plan Price: $%.2f, Sales Manager Commission: $%.2f, Salesperson Commission: $%.2f",
-								planPrice, salesManagerCommission, salespersonCommission)
+							// Insert commission document using Commission model
+							commission := models.Commission{
+								ID:                            primitive.NewObjectID(),
+								SubscriptionID:                request.ID,
+								CompanyID:                     request.CompanyID,
+								PlanID:                        plan.ID,
+								PlanPrice:                     planPrice,
+								SalespersonID:                 salesperson.ID,
+								SalespersonCommission:         salespersonCommission,
+								SalespersonCommissionPercent:  salespersonPercent,
+								SalesManagerID:                salesManager.ID,
+								SalesManagerCommission:        salesManagerCommission,
+								SalesManagerCommissionPercent: salesManagerPercent,
+								CreatedAt:                     time.Now(),
+								Paid:                          false,
+								PaidAt:                        nil,
+							}
+							_, err := sc.DB.Collection("commissions").InsertOne(ctx, commission)
+							if err != nil {
+								log.Printf("Failed to insert commission: %v", err)
+							} else {
+								log.Printf("Commission inserted successfully - Plan Price: $%.2f, Sales Manager Commission: $%.2f, Salesperson Commission: $%.2f",
+									planPrice, salesManagerCommission, salespersonCommission)
+							}
 						}
 					}
 				}
@@ -823,10 +828,10 @@ func (sc *SubscriptionController) GetTotalCommissionBalance(c echo.Context) erro
 
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonId": userID}
+		match = bson.M{"salespersonID": userID}
 		sumField = "$salespersonCommission"
 	case "sales_manager":
-		match = bson.M{"salesManagerId": userID}
+		match = bson.M{"salesManagerID": userID}
 		sumField = "$salesManagerCommission"
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
@@ -962,10 +967,10 @@ func (sc *SubscriptionController) RequestCommissionWithdrawal(c echo.Context) er
 	var sumField string
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonId": userID}
+		match = bson.M{"salespersonID": userID}
 		sumField = "$salespersonCommission"
 	case "sales_manager":
-		match = bson.M{"salesManagerId": userID}
+		match = bson.M{"salesManagerID": userID}
 		sumField = "$salesManagerCommission"
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
@@ -1227,10 +1232,10 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 	var sumField string
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonId": userID}
+		match = bson.M{"salespersonID": userID}
 		sumField = "$salespersonCommission"
 	case "sales_manager":
-		match = bson.M{"salesManagerId": userID}
+		match = bson.M{"salesManagerID": userID}
 		sumField = "$salesManagerCommission"
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
@@ -2438,9 +2443,9 @@ func (sc *SubscriptionController) GetCommissions(c echo.Context) error {
 	var match bson.M
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonId": userID}
+		match = bson.M{"salespersonID": userID}
 	case "sales_manager":
-		match = bson.M{"salesManagerId": userID}
+		match = bson.M{"salesManagerID": userID}
 	}
 
 	// Aggregate pipeline to get commission details with subscription and company information
@@ -2495,10 +2500,10 @@ func (sc *SubscriptionController) GetCommissions(c echo.Context) error {
 				"companyId":                     1,
 				"planId":                        1,
 				"planPrice":                     1,
-				"salespersonId":                 1,
+				"salespersonID":                 1,
 				"salespersonCommission":         1,
 				"salespersonCommissionPercent":  1,
-				"salesManagerId":                1,
+				"salesManagerID":                1,
 				"salesManagerCommission":        1,
 				"salesManagerCommissionPercent": 1,
 				"createdAt":                     1,

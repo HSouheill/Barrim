@@ -479,7 +479,7 @@ func (ac *AdminController) UnifiedLogin(c echo.Context) error {
 					"fullName":       salesperson.FullName,
 					"phoneNumber":    salesperson.PhoneNumber,
 					"region":         salesperson.Region,
-					"salesManagerId": salesperson.SalesManagerID,
+					"salesManagerID": salesperson.SalesManagerID,
 					"role":           "salesperson",
 					"type":           "salesperson",
 				},
@@ -886,7 +886,7 @@ type SalesManagerInfo struct {
 
 type SalespersonInfo struct {
 	Email          string             `json:"email"`
-	SalesManagerID primitive.ObjectID `json:"salesManagerId"`
+	SalesManagerID primitive.ObjectID `json:"salesManagerID"`
 }
 
 // GetAllUsers retrieves all users with userType "user"
@@ -1182,7 +1182,7 @@ func (ac *AdminController) GetSalesManager(c echo.Context) error {
 	var salespersons []models.Salesperson
 	cursor, err := ac.DB.Collection("salespersons").Find(
 		context.Background(),
-		bson.M{"salesManagerId": id},
+		bson.M{"salesManagerID": id},
 		&options.FindOptions{
 			Sort: bson.M{"createdAt": -1}, // Sort by creation date, newest first
 		},

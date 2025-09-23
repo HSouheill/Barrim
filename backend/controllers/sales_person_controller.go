@@ -557,6 +557,7 @@ func (spc *SalesPersonController) CreateCompany(c echo.Context) error {
 	company := models.Company{
 		ID:               companyID,
 		UserID:           userID,
+		Email:            email, // Add the missing email field
 		BusinessName:     businessName,
 		Category:         category,
 		SubCategory:      subcategory,
@@ -2341,7 +2342,7 @@ func (spc *SalesPersonController) GetAllCreatedUsers(c echo.Context) error {
 		var salespersons []models.Salesperson
 		_ = personCursor.All(context.Background(), &salespersons)
 		personCursor.Close(context.Background())
-		// Build map: salespersonId -> {fullName, email, logo}
+		// Build map: salespersonID -> {fullName, email, logo}
 		spMap := make(map[string]map[string]string)
 		for _, sp := range salespersons {
 			spMap[sp.ID.Hex()] = map[string]string{
@@ -2870,9 +2871,9 @@ func (spc *SalesPersonController) GetCommissionAndWithdrawalHistory(c echo.Conte
 	var commissionFilter bson.M
 	switch claims.UserType {
 	case "salesperson":
-		commissionFilter = bson.M{"salespersonId": userID}
+		commissionFilter = bson.M{"salespersonID": userID}
 	case "sales_manager":
-		commissionFilter = bson.M{"salesManagerId": userID}
+		commissionFilter = bson.M{"salesManagerID": userID}
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
@@ -2939,7 +2940,7 @@ func (spc *SalesPersonController) GetCommissionAndWithdrawalHistory(c echo.Conte
 		// Fetch referral commission records
 		referralCommissionCursor, err := db.Collection("referral_commissions").Find(
 			context.Background(),
-			bson.M{"salespersonId": userID},
+			bson.M{"salespersonID": userID},
 			&options.FindOptions{Sort: bson.M{"createdAt": -1}},
 		)
 		if err == nil {
