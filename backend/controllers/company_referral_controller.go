@@ -140,7 +140,7 @@ func (rc *CompanyReferralController) handleCompanyReferral(c echo.Context, ctx c
 	}
 
 	// Update the referrer company - add points and add to referrals list
-	const pointsToAdd = 5
+	const pointsToAdd = 1
 	update := bson.M{
 		"$inc":  bson.M{"points": pointsToAdd},
 		"$push": bson.M{"referrals": currentCompany.ID},
