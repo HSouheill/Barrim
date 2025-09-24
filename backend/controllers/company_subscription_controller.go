@@ -1227,6 +1227,8 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 		})
 	}
 
+	log.Printf("DEBUG: GetCommissionSummary - UserID: %s, UserType: %s", userID.Hex(), claims.UserType)
+
 	// Calculate total commission
 	var match bson.M
 	var sumField string
@@ -1234,21 +1236,51 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 	case "salesperson":
 		match = bson.M{"salespersonID": userID}
 		sumField = "$salespersonCommission"
+		log.Printf("DEBUG: Looking for commissions with salespersonID: %s", userID.Hex())
 	case "sales_manager":
 		match = bson.M{"salesManagerID": userID}
 		sumField = "$salesManagerCommission"
+		log.Printf("DEBUG: Looking for commissions with salesManagerID: %s", userID.Hex())
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
 			Message: "User type not allowed for commission summary",
 		})
 	}
+
+	// First, let's check if there are any commissions in the database at all
+	totalCommissions, err := sc.DB.Collection("commissions").CountDocuments(ctx, bson.M{})
+	if err != nil {
+		log.Printf("DEBUG: Error counting total commissions: %v", err)
+	} else {
+		log.Printf("DEBUG: Total commissions in database: %d", totalCommissions)
+	}
+
+	// Check if there are any commissions for this user
+	userCommissions, err := sc.DB.Collection("commissions").CountDocuments(ctx, match)
+	if err != nil {
+		log.Printf("DEBUG: Error counting user commissions: %v", err)
+	} else {
+		log.Printf("DEBUG: Commissions for user %s: %d", userID.Hex(), userCommissions)
+	}
+
+	// Let's also check what commissions exist (first 5)
+	var sampleCommissions []bson.M
+	sampleCursor, err := sc.DB.Collection("commissions").Find(ctx, bson.M{}, options.Find().SetLimit(5))
+	if err == nil {
+		defer sampleCursor.Close(ctx)
+		if err := sampleCursor.All(ctx, &sampleCommissions); err == nil {
+			log.Printf("DEBUG: Sample commissions in database: %+v", sampleCommissions)
+		}
+	}
 	commissionPipeline := []bson.M{
 		{"$match": match},
 		{"$group": bson.M{"_id": nil, "totalCommission": bson.M{"$sum": sumField}}},
 	}
+	log.Printf("DEBUG: Commission pipeline: %+v", commissionPipeline)
 	commissionCursor, err := sc.DB.Collection("commissions").Aggregate(ctx, commissionPipeline)
 	if err != nil {
+		log.Printf("DEBUG: Error in commission aggregation: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to aggregate commissions",
@@ -1262,7 +1294,12 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 		}
 		if err := commissionCursor.Decode(&result); err == nil {
 			totalCommission = result.TotalCommission
+			log.Printf("DEBUG: Found total commission: %.2f", totalCommission)
+		} else {
+			log.Printf("DEBUG: Error decoding commission result: %v", err)
 		}
+	} else {
+		log.Printf("DEBUG: No commission results found")
 	}
 
 	// Calculate total approved withdrawals (actual money withdrawn)
