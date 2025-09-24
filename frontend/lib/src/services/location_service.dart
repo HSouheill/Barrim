@@ -2,385 +2,212 @@ class LocationService {
   // Sample location data - in a real app, this would come from an API
   static final Map<String, Map<String, Map<String, List<String>>>> _locationData = {
     'Lebanon': {
-      'Akkar Governorate (Halba)': {
-        'Akkar (Halba)': [
-          'Halba Main Street',
-          'Akkar Castle',
-          'Qobayat Village',
-          'Fneideq Port',
-          'Halba Market',
-          'Akkar Mountains',
-          'Qobayat Valley',
-          'Fneideq Beach',
-          'Halba Square',
-          'Akkar Forest',
-          'Qobayat Hills',
-          'Fneideq Marina'
+      'Akkar': {
+        'Akkar': [
+          'Halba',
+          'Kobayat',
+          'Rahbeh'
         ]
       },
-      'Baalbek-Hermel Governorate (Baalbek)': {
-        'Baalbek (Baalbek)': [
-          'Baalbek Temples',
-          'Baalbek Center',
-          'Baalbek Archaeological Site',
-          'Temple of Jupiter',
-          'Temple of Bacchus',
-          'Temple of Venus',
-          'Baalbek Citadel',
-          'Baalbek Museum',
-          'Baalbek Main Street',
-          'Baalbek Market',
-          'Baalbek Square',
-          'Baalbek Souk',
-          'Baalbek Valley',
-          'Baalbek Hills'
+      'Baalbek-Hermel': {
+        'Baalbek': [
+          'Baalbek',
+          'Deir el Ahmar',
+          'Bodai',
+          'Hallanieh',
+          'Temnin el Fawka',
+          'Chmestar',
+          'Kasarnaba',
+          'Duris',
+          'Arsal',
+          'Haouch Er Rafqa',
+          'Hadath Baalbek',
+          'Yunin',
+          'Bouday',
+          'Yammouné',
+          'Ali El Nahri',
+          'Jdeide',
+          'Ksarnaba'
         ],
-        'Hermel (Hermel)': [
-          'Hermel Center',
-          'Hermel Main Street',
-          'Hermel Market',
-          'Hermel Square',
-          'Hermel Village',
-          'Hermel Souk',
-          'Hermel Valley',
-          'Hermel Mountains',
-          'Hermel Forest',
-          'Hermel Area'
+        'Hermel': [
+          'Al Hermel',
+          'Al Qasr',
+          'Al Shawagir Al Fawqa wa Al Thta',
+          'Al Kawakh',
+          'Fissan',
+          'Jawar Al Hashish'
         ]
       },
-      'Beirut Governorate (Beirut)': {
-        'Beirut (Beirut)': [
-          'Hamra Street',
-          'Corniche Beirut',
-          'Gemmayzeh Street',
-          'Mar Mikhael',
-          'Achrafieh',
-          'Ras Beirut',
-          'Downtown Beirut',
-          'Verdun',
-          'Manara',
-          'Raouche',
-          'Sodeco',
-          'Tabaris',
-          'Furn el Chebbak',
-          'Mazraa',
-          'Basta',
-          'Bourj Hammoud',
-          'Sin el Fil',
-          'Hazmieh',
-          'Chiyah',
-          'Haret Hreik',
-          'Ashrafieh',
-          'Rmeil',
-          'Mina el Hosn',
-          'Sassine',
-          'Monot',
-          'Gouraud',
-          'Sursock',
-          'Sassine Square',
-          'Monot Street',
-          'Gouraud Street'
+      'Beirut': {
+        'Beirut': [
+          'Beirut'
         ]
       },
-      'Beqaa Governorate (Zahlé)': {
-        'Rashaya (Rashaya)': [
-          'Rashaya Citadel',
-          'Rashaya Center',
-          'Rashaya Main Street',
-          'Rashaya Market',
-          'Rashaya Square',
-          'Rashaya Village',
-          'Rashaya Souk',
-          'Rashaya Valley',
-          'Rashaya Mountains',
-          'Rashaya Forest'
+      'Beqaa': {
+        'Rashaya': [
+          'Rashaya',
+          'Ain Ata',
+          'Yanta'
         ],
-        'Western Beqaa (Joub Jannine - winter / Saghbine - summer)': [
-          'Joub Jannine Center',
-          'Saghbine Center',
-          'Western Beqaa Valley',
-          'Joub Jannine Market',
-          'Saghbine Market',
-          'Western Beqaa Souk',
-          'Joub Jannine Main Street',
-          'Saghbine Main Street'
+        'Western Beqaa': [
+          'Joub Jannine',
+          'Kefraya',
+          'Machghara'
         ],
-        'Zahlé (Zahlé)': [
-          'Zahlé Center',
+        'Zahlé': [
+          'Zahlé',
           'Chtaura',
-          'Anjar',
-          'Zahlé Main Street',
-          'Chtaura Junction',
-          'Anjar Archaeological Site',
-          'Zahlé Market',
-          'Chtaura Square',
-          'Anjar Castle',
-          'Zahlé Souk',
-          'Chtaura Station',
-          'Anjar Village',
-          'Zahlé Valley',
-          'Chtaura Center',
-          'Anjar Main Street'
+          'Majdel Anjar',
+          'Talabaya',
+          'Saadnay\'el',
+          'Hazerta',
+          'Ferzol',
+          'Abilh'
         ]
       },
-      'Keserwan-Jbeil Governorate (Jounieh)': {
-        'Byblos (Byblos)': [
-          'Byblos Castle',
-          'Byblos Port',
-          'Old Souk',
-          'Wax Museum',
-          'St. John Church',
-          'Temple of Baalat Gebal',
-          'Byblos Archaeological Site',
-          'Byblos Marina',
-          'Byblos Beach',
-          'Byblos Main Street',
-          'Byblos Souk'
+      'Keserwan-Jbeil': {
+        'Byblos': [
+          'Byblos',
+          'Amshit',
+          'Halat',
+          'Nahr Ibrahim',
+          'Lassa',
+          'Al Aqoura'
         ],
-        'Keserwan (Jounieh)': [
-          'Jounieh Bay',
-          'Maameltein',
-          'Harissa',
+        'Keserwan': [
+          'Jounieh',
           'Zouk Mikael',
-          'Dbayeh',
+          'Ajaltoun',
+          'Blouneh',
           'Zouk Mosbeh',
-          'Nahr el-Kalb',
-          'Tabarja',
-          'Faitroun',
-          'Ghazir',
-          'Bikfaya',
-          'Bhamdoun el-Mhatta',
-          'Jounieh Port',
-          'Our Lady of Lebanon',
-          'Teleferique',
-          'Kaslik',
-          'Antelias',
-          'Dbayeh Marina',
-          'Zouk Mosbeh Beach',
-          'Nahr el-Kalb Bridge',
-          'Tabarja Beach',
-          'Faitroun Village',
-          'Ghazir Palace',
-          'Bikfaya Main Street'
+          'Safra',
+          'Tabarja'
         ]
       },
-      'Mount Lebanon Governorate (Baabda)': {
-        'Aley (Aley)': [
-          'Aley Main Street',
-          'Aley Center',
-          'Aley Market',
-          'Aley Square',
-          'Aley Souk',
-          'Aley Mountains',
-          'Aley Valley',
-          'Aley Forest'
+      'Mount Lebanon': {
+        'Aley': [
+          'Aley',
+          'Bhamdoun',
+          'Souk el Ghareb',
+          'Baysour',
+          'Kaifun',
+          'Chanehye',
+          'Sofar',
+          'Majdlaya'
         ],
-        'Baabda (Baabda)': [
-          'Baabda Main Street',
-          'Baabda Palace',
-          'Baabda Center',
-          'Baabda Market',
-          'Baabda Square',
-          'Baabda Souk'
-        ],
-        'Chouf (Beiteddine)': [
-          'Beiteddine Palace',
-          'Chouf Cedar Reserve',
-          'Deir el Qamar',
-          'Deir el Qamar Square',
-          'Moussa Castle',
-          'Ain Zhalta',
-          'Ain Zhalta Waterfall',
-          'Barouk',
-          'Barouk Mountain',
-          'Chouf Mountains'
-        ],
-        'Matn/Metn (Jdeideh)': [
-          'Jdeideh Center',
-          'Antelias',
-          'Bourj Hammoud',
-          'Sin el Fil',
-          'Hazmieh',
+        'Baabda': [
+          'Baabda',
           'Chiyah',
-          'Haret Hreik',
-          'Antelias Main Street',
-          'Bourj Hammoud Market',
-          'Sin el Fil Square',
-          'Hazmieh Palace',
-          'Chiyah Center',
-          'Haret Hreik Main Street',
-          'Antelias Port',
-          'Bourj Hammoud Bridge',
-          'Sin el Fil Station'
+          'Ghobeiry'
+        ],
+        'Chouf': [
+          'Beiteddine',
+          'Deir el Qamar',
+          'Baakline',
+          'Maasser El Chouf',
+          'Al Mukhtara',
+          'Btouma',
+          'Jiyeh'
+        ],
+        'Matn': [
+          'Jdeideh',
+          'Dekwaneh',
+          'Bikfaya',
+          'Fanar',
+          'Rabieh',
+          'Beit Chabab'
         ]
       },
-      'Nabatieh Governorate (Nabatieh)': {
-        'Bint Jbeil (Bint Jbeil)': [
-          'Bint Jbeil Center',
-          'Bint Jbeil Main Street',
-          'Bint Jbeil Market',
-          'Bint Jbeil Square',
-          'Bint Jbeil Souk'
+      'Nabatieh': {
+        'Bint Jbeil': [
+          'Bint Jbeil',
+          'Aita Al Jabal',
+          'Tebnine',
+          'Kafr Dounin',
+          'Yater'
         ],
-        'Hasbaya (Hasbaya)': [
-          'Hasbaya Palace',
-          'Hasbaya Center',
-          'Hasbaya Main Street',
-          'Hasbaya Market',
-          'Hasbaya Square',
-          'Hasbaya Souk'
+        'Hasbaya': [
+          'Hasbaya',
+          'Kfarchouba',
+          'Shebaa'
         ],
-        'Marjeyoun (Marjeyoun)': [
-          'Marjeyoun Castle',
-          'Marjeyoun Center',
-          'Marjeyoun Main Street',
-          'Marjeyoun Market',
-          'Marjeyoun Square',
-          'Marjeyoun Souk'
+        'Marjeyoun': [
+          'Marjeyoun',
+          'Khiam',
+          'Mimas'
         ],
-        'Nabatieh (Nabatieh)': [
-          'Nabatieh Center',
-          'Nabatieh Main Street',
-          'Nabatieh Market',
-          'Nabatieh Square',
-          'Nabatieh Souk'
+        'Nabatieh': [
+          'Nabatieh',
+          'Houmine Al-Fawqa',
+          'Houmine Al-Tahta',
+          'Jbaa'
         ]
       },
-      'North Governorate (Tripoli)': {
-        'Batroun (Batroun)': [
-          'Batroun Center',
-          'Batroun Port',
-          'Batroun Main Street',
-          'Batroun Market',
-          'Batroun Square',
-          'Batroun Souk',
-          'Batroun Beach'
+      'North': {
+        'Batroun': [
+          'Batroun',
+          'Douma',
+          'Hamat',
+          'Zan',
+          'Bqosta',
+          'Deir Bela',
+          'Salata'
         ],
-        'Bsharri (Bsharri)': [
-          'Bsharri Cedars',
-          'Bsharri Center',
-          'Bsharri Main Street',
-          'Bsharri Market',
-          'Bsharri Square',
-          'Bsharri Souk',
-          'Bsharri Cedar Reserve'
+        'Bsharri': [
+          'Bsharri',
+          'Tourza',
+          'Hasroun',
+          'Qannat',
+          'Bir Al Ayoan',
+          'Hassroun',
+          'Beqaa Kafra',
+          'Abdeen',
+          'Bazoun',
+          'Bkrkasha'
         ],
-        'Koura (Amioun)': [
+        'Koura': [
           'Amioun',
-          'Koura Center',
-          'Kfarhazir',
-          'Kfarhata',
-          'Kfarzina',
-          'Kfarhbab',
-          'Amioun Main Street',
-          'Koura Valley',
-          'Kfarhazir Village',
-          'Kfarhata Center',
-          'Kfarzina Street',
-          'Kfarhbab Area',
-          'Amioun Square',
-          'Koura Hills',
-          'Kfarhazir Market',
-          'Kfarhata Village'
+          'Anfeh',
+          'Kaftoun',
+          'Fiyeh',
+          'Dar Chmizzine',
+          'Btouratije'
         ],
-        'Miniyeh-Danniyeh District (Miniyeh)': [
-          'Miniyeh Center',
-          'Miniyeh Main Street',
-          'Miniyeh Market',
-          'Miniyeh Square',
-          'Miniyeh Souk'
+        'Miniyeh-Danniyeh': [
+          'Miniyeh',
+          'Bakhoun',
+          'Seer'
         ],
-        'Tripoli (Tripoli)': [
-          'Tripoli Port',
+        'Tripoli': [
+          'Tripoli',
           'Al Mina',
-          'El Tall',
-          'Abu Samra',
-          'Qalamoun',
-          'Al Qobbeh',
-          'Al Zahriyah',
-          'Al Mankoubin',
-          'Al Ghorba',
-          'Al Haddadin',
-          'Al Qalamoun',
-          'Al Mina Port',
-          'Tripoli Citadel',
-          'Al Mina Souk',
-          'El Tall Square',
-          'Abu Samra Market',
-          'Qalamoun Beach',
-          'Al Qobbeh Mosque',
-          'Al Zahriyah Street',
-          'Al Mankoubin Quarter',
-          'Al Ghorba Area',
-          'Al Haddadin Street',
-          'Tripoli Clock Tower',
-          'Al Mina Corniche'
+          'Al Badawi',
+          'Al Qalamoun'
         ],
-        'Zgharta (Zgharta)': [
-          'Zgharta Center',
+        'Zgharta': [
+          'Zgharta',
           'Ehden',
-          'Zgharta Main Street',
-          'Ehden Forest',
-          'Ehden Mountain'
+          'Majdalia',
+          'Rachiine',
+          'Kfarhata',
+          'Ayal'
         ]
       },
-      'South Governorate (Sidon)': {
-        'Sidon (Sidon)': [
-          'Sidon Port',
-          'Old City',
-          'Sidon Castle',
-          'Ain al-Hilweh',
-          'Mieh Mieh',
-          'Abu al-Aswad',
-          'Al Ghaziyah',
-          'Al Kafr',
-          'Al Kafr al-Jawzi',
-          'Al Kafr al-Miski',
-          'Al Kafr al-Sawda',
-          'Al Kafr al-Zayt',
-          'Sidon Souk',
-          'Sidon Sea Castle',
-          'Ain al-Hilweh Camp',
-          'Mieh Mieh Beach',
-          'Abu al-Aswad Quarter',
-          'Al Ghaziyah Street',
-          'Al Kafr Village',
-          'Sidon Corniche',
-          'Sidon Museum',
-          'Sidon Port Area'
+      'South': {
+        'Sidon': [
+          'Sidon',
+          'Anqoun',
+          'Maghdouché'
         ],
-        'Jezzine (Jezzine)': [
-          'Jezzine Center',
-          'Jezzine Waterfall',
-          'Jezzine Valley',
-          'Jezzine Main Street',
-          'Jezzine Market',
-          'Jezzine Square',
-          'Jezzine Forest',
-          'Jezzine Mountains',
-          'Jezzine Village',
-          'Jezzine Souk'
+        'Jezzine': [
+          'Jezzine',
+          'Bkassine',
+          'Roum'
         ],
-        'Tyre (Tyre)': [
-          'Tyre Port',
-          'Al Mina',
-          'Rashidieh',
-          'Qana',
-          'Al Qulaylah',
-          'Al Jibbayn',
-          'Al Mansouri',
-          'Tyre Archaeological Site',
-          'Tyre Hippodrome',
-          'Tyre Cathedral',
-          'Al Mina Beach',
-          'Rashidieh Camp',
-          'Qana Village',
-          'Al Qulaylah Quarter',
-          'Al Jibbayn Street',
-          'Al Mansouri Area',
-          'Tyre Souk',
-          'Tyre Corniche',
-          'Tyre Port Area'
+        'Tyre': [
+          'Tyre',
+          'Ain Baal',
+          'Jwaya'
         ]
       }
     },

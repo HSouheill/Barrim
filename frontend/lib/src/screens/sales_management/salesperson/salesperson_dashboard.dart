@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
-
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart'; 
 import 'package:flutter/services.dart'; 
@@ -14,7 +13,6 @@ import '../../../services/category_service.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../../services/wholesaler_category_service.dart';
 import '../../../services/service_provider_category_service.dart';
-
 import '../../../models/salesperson_model.dart';
 import '../../../models/withdrawal_model.dart';
 import '../../../models/category.dart' as category_model;
