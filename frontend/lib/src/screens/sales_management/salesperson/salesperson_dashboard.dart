@@ -447,6 +447,8 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
             print('Listing $index: $listing');
             print('Contact Person: ${listing['contactPerson']}');
             print('Contact Phone: ${listing['contactPhone']}');
+            print('Email: ${listing['email']}');
+            print('Business Name: ${listing['businessName']}');
             
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -458,6 +460,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
                 listing['planPrice'] ?? 0.0,
                 listing['logoUrl'],
                 listing['type'] ?? '',
+                listing['email'] ?? '',
               ),
             );
           },
@@ -487,6 +490,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
             'category': companyData['category'] ?? '',
             'contactPerson': companyData['contactPerson'] ?? '',
             'contactPhone': companyData['contactPhone'] ?? '',
+            'email': companyData['email'] ?? '',
             'logoURL': companyData['logoURL'] ?? '',
             'subscription': companyData['subscription'] ?? {
               'planTitle': '',
@@ -529,6 +533,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
             'category': wholesalerData['category'] ?? '',
             'contactPerson': wholesalerData['contactPerson'] ?? '',
             'contactPhone': wholesalerData['contactPhone'] ?? '',
+            'email': wholesalerData['email'] ?? '',
             'logoURL': wholesalerData['logoURL'] ?? '',
             'subscription': wholesalerData['subscription'] ?? {
               'planTitle': '',
@@ -633,6 +638,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
           'businessName': companyData['businessName'] ?? '',
           'contactPerson': companyData['contactPerson'] ?? 'N/A',
           'contactPhone': companyData['contactPhone'] ?? 'N/A',
+          'email': companyData['email'] ?? 'N/A',
           'category': companyData['category'] ?? '',
           'logoUrl': companyData['logoURL'] ?? '',
           'planTitle': planTitle,
@@ -676,6 +682,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
           'businessName': wholesalerData['businessName'] ?? '',
           'contactPerson': wholesalerData['contactPerson'] ?? 'N/A',
           'contactPhone': wholesalerData['contactPhone'] ?? 'N/A',
+          'email': wholesalerData['email'] ?? 'N/A',
           'category': wholesalerData['category'] ?? '',
           'logoUrl': wholesalerData['logoURL'] ?? '',
           'planTitle': planTitle,
@@ -719,6 +726,7 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
           'businessName': serviceProviderData['businessName'] ?? '',
           'contactPerson': serviceProviderData['contactPerson'] ?? 'N/A',
           'contactPhone': serviceProviderData['contactPhone'] ?? 'N/A',
+          'email': serviceProviderData['email'] ?? 'N/A',
           'category': serviceProviderData['category'] ?? '',
           'logoUrl': serviceProviderData['logoURL'] ?? '',
           'planTitle': planTitle,
@@ -1499,6 +1507,7 @@ _availableBalance.toStringAsFixed(2),
       double planPrice,
       String? logoUrl,
       String type,
+      String email,
       ) {
     // Construct the full image URL
     final fullImageUrl = logoUrl != null && logoUrl.isNotEmpty
@@ -1704,8 +1713,37 @@ _availableBalance.toStringAsFixed(2),
                         ),
                       ),
                     ],
-                  )
-                else if (contactPerson.isEmpty && contactPhone.isEmpty)
+                  ),
+
+                // Email
+                if (email.isNotEmpty && email != 'N/A')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.email_outlined,
+                          size: 14,
+                          color: Color(0xFF6B7280),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            email,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF6B7280),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Show "Contact information not available" only if all contact fields are empty
+                if (contactPerson.isEmpty && contactPhone.isEmpty && (email.isEmpty || email == 'N/A'))
                   Row(
                     children: [
                       const Icon(
@@ -1786,6 +1824,8 @@ class _AddNewDialogState extends State<AddNewDialog> {
   final TextEditingController _locationAddressController = TextEditingController();
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lngController = TextEditingController();
+  final TextEditingController _additionalPhoneController = TextEditingController();
+  final TextEditingController _additionalEmailController = TextEditingController();
 
   String _selectedType = 'Company';
   String _selectedIndustry = '';
@@ -1993,6 +2033,8 @@ class _AddNewDialogState extends State<AddNewDialog> {
     _locationAddressController.dispose();
     _latController.dispose();
     _lngController.dispose();
+    _additionalPhoneController.dispose();
+    _additionalEmailController.dispose();
     super.dispose();
   }
 
@@ -2042,40 +2084,40 @@ class _AddNewDialogState extends State<AddNewDialog> {
         if (country.toLowerCase().contains('lebanon') || country.isEmpty) {
           country = 'Lebanon';
           
-          // Map common administrative areas to Lebanese governorates
+          // Map common administrative areas to Lebanese governorates (using exact names from LocationService)
           final Map<String, String> lebanonMapping = {
-            'beirut': 'Beirut',
-            'mount lebanon': 'Mount Lebanon',
-            'north lebanon': 'North Lebanon',
-            'south lebanon': 'South Lebanon',
-            'nabatieh': 'South Lebanon',
-            'bekaa': 'Bekaa',
-            'baalbek-hermel': 'Bekaa',
-            'akkar': 'North Lebanon',
-            'baalbek': 'Bekaa',
-            'hermel': 'Bekaa',
-            'zahle': 'Bekaa',
-            'caza': 'Mount Lebanon', // Default for caza
-            'keserwan': 'Mount Lebanon',
-            'metn': 'Mount Lebanon',
-            'jounieh': 'Mount Lebanon',
-            'byblos': 'Mount Lebanon',
-            'jbeil': 'Mount Lebanon',
-            'tripoli': 'North Lebanon',
-            'zgharta': 'North Lebanon',
-            'koura': 'North Lebanon',
-            'sidon': 'South Lebanon',
-            'saida': 'South Lebanon',
-            'tyre': 'South Lebanon',
-            'sur': 'South Lebanon',
-            'jezzine': 'South Lebanon',
-            'marjayoun': 'South Lebanon',
-            'hasbaya': 'South Lebanon',
-            'rashaya': 'South Lebanon',
-            'chtaura': 'Bekaa',
-            'anjar': 'Bekaa',
-            'western bekaa': 'Bekaa',
-            'rachaya': 'Bekaa',
+            'beirut': 'Beirut Governorate (Beirut)',
+            'mount lebanon': 'Mount Lebanon Governorate (Baabda)',
+            'north lebanon': 'North Lebanon Governorate (Tripoli)',
+            'south lebanon': 'South Lebanon Governorate (Sidon)',
+            'nabatieh': 'Nabatieh Governorate (Nabatieh)',
+            'bekaa': 'Bekaa Governorate (Zahle)',
+            'baalbek-hermel': 'Baalbek-Hermel Governorate (Baalbek)',
+            'akkar': 'Akkar Governorate (Halba)',
+            'baalbek': 'Baalbek-Hermel Governorate (Baalbek)',
+            'hermel': 'Baalbek-Hermel Governorate (Baalbek)',
+            'zahle': 'Bekaa Governorate (Zahle)',
+            'caza': 'Mount Lebanon Governorate (Baabda)', // Default for caza
+            'keserwan': 'Keserwan-Jbeil Governorate (Jounieh)',
+            'metn': 'Mount Lebanon Governorate (Baabda)',
+            'jounieh': 'Keserwan-Jbeil Governorate (Jounieh)',
+            'byblos': 'Keserwan-Jbeil Governorate (Jounieh)',
+            'jbeil': 'Keserwan-Jbeil Governorate (Jounieh)',
+            'tripoli': 'North Lebanon Governorate (Tripoli)',
+            'zgharta': 'North Lebanon Governorate (Tripoli)',
+            'koura': 'North Lebanon Governorate (Tripoli)',
+            'sidon': 'South Lebanon Governorate (Sidon)',
+            'saida': 'South Lebanon Governorate (Sidon)',
+            'tyre': 'South Lebanon Governorate (Sidon)',
+            'sur': 'South Lebanon Governorate (Sidon)',
+            'jezzine': 'South Lebanon Governorate (Sidon)',
+            'marjayoun': 'South Lebanon Governorate (Sidon)',
+            'hasbaya': 'South Lebanon Governorate (Sidon)',
+            'rashaya': 'South Lebanon Governorate (Sidon)',
+            'chtaura': 'Bekaa Governorate (Zahle)',
+            'anjar': 'Bekaa Governorate (Zahle)',
+            'western bekaa': 'Bekaa Governorate (Zahle)',
+            'rachaya': 'Bekaa Governorate (Zahle)',
           };
           
           // Try to find a match in the mapping
@@ -2091,20 +2133,20 @@ class _AddNewDialogState extends State<AddNewDialog> {
           if (district == 'Beirut' || district.isEmpty) {
             if (lat >= 34.0 && lat <= 34.5) {
               if (lng >= 35.0 && lng <= 35.5) {
-                district = 'North Lebanon';
+                district = 'North Lebanon Governorate (Tripoli)';
               } else if (lng >= 35.5 && lng <= 36.0) {
-                district = 'Mount Lebanon';
+                district = 'Mount Lebanon Governorate (Baabda)';
               }
             } else if (lat >= 33.0 && lat <= 34.0) {
               if (lng >= 35.0 && lng <= 35.5) {
-                district = 'Beirut';
+                district = 'Beirut Governorate (Beirut)';
               } else if (lng >= 35.5 && lng <= 36.0) {
-                district = 'Mount Lebanon';
+                district = 'Mount Lebanon Governorate (Baabda)';
               } else if (lng >= 36.0 && lng <= 36.5) {
-                district = 'Bekaa';
+                district = 'Bekaa Governorate (Zahle)';
               }
             } else if (lat >= 33.0 && lat <= 33.5) {
-              district = 'South Lebanon';
+              district = 'South Lebanon Governorate (Sidon)';
             }
           }
         }
@@ -2122,8 +2164,44 @@ class _AddNewDialogState extends State<AddNewDialog> {
     // Fallback to default values if geocoding fails
     return {
       'country': 'Lebanon',
-      'district': 'Beirut',
-      'city': 'Beirut',
+      'district': 'Beirut Governorate (Beirut)',
+      'city': 'Beirut (Beirut)',
+    };
+  }
+
+  // Helper method to validate location values against available dropdown items
+  Map<String, String?> _validateLocationValues(String country, String district, String city) {
+    // Validate country
+    final availableCountries = LocationService.getCountries();
+    String? validatedCountry = availableCountries.contains(country) ? country : null;
+    if (validatedCountry == null && availableCountries.isNotEmpty) {
+      validatedCountry = availableCountries.first;
+    }
+
+    // Validate district/governorate
+    String? validatedDistrict;
+    if (validatedCountry != null) {
+      final availableDistricts = LocationService.getGovernorates(validatedCountry);
+      validatedDistrict = availableDistricts.contains(district) ? district : null;
+      if (validatedDistrict == null && availableDistricts.isNotEmpty) {
+        validatedDistrict = availableDistricts.first;
+      }
+    }
+
+    // Validate city
+    String? validatedCity;
+    if (validatedCountry != null && validatedDistrict != null) {
+      final availableCities = LocationService.getDistrictsByGovernorate(validatedCountry, validatedDistrict);
+      validatedCity = availableCities.contains(city) ? city : null;
+      if (validatedCity == null && availableCities.isNotEmpty) {
+        validatedCity = availableCities.first;
+      }
+    }
+
+    return {
+      'country': validatedCountry,
+      'district': validatedDistrict,
+      'city': validatedCity,
     };
   }
 
@@ -2169,10 +2247,17 @@ class _AddNewDialogState extends State<AddNewDialog> {
             // Auto-fill the location dropdowns based on coordinates
             final locationInfo = await _findNearestLocation(lat, lng);
             
+            // Validate and correct the location values to match available dropdown items
+            final validatedLocation = _validateLocationValues(
+              locationInfo['country'] ?? 'Lebanon',
+              locationInfo['district'] ?? 'Beirut Governorate (Beirut)',
+              locationInfo['city'] ?? 'Beirut (Beirut)',
+            );
+            
             setState(() {
-              _selectedCountry = locationInfo['country'];
-              _selectedDistrict = locationInfo['district'];
-              _selectedCity = locationInfo['city'];
+              _selectedCountry = validatedLocation['country'];
+              _selectedDistrict = validatedLocation['district'];
+              _selectedCity = validatedLocation['city'];
               _selectedGovernorate = null; // Reset street selection
             });
             
@@ -2393,15 +2478,35 @@ class _AddNewDialogState extends State<AddNewDialog> {
 
       switch (_selectedType) {
         case 'Company':
+          // Combine additional email with main email if provided
+          String combinedEmail = _emailController.text;
+          if (_hasAdditionalEmail && _additionalEmailController.text.isNotEmpty) {
+            if (combinedEmail.isNotEmpty) {
+              combinedEmail += ', ${_additionalEmailController.text}';
+            } else {
+              combinedEmail = _additionalEmailController.text;
+            }
+          }
+          
+          // Combine additional phone with contact phone if provided
+          String combinedContactPhone = _contactPhoneController.text;
+          if (_hasAdditionalPhone && _additionalPhoneController.text.isNotEmpty) {
+            if (combinedContactPhone.isNotEmpty) {
+              combinedContactPhone += ', $_selectedCountryCode${_additionalPhoneController.text}';
+            } else {
+              combinedContactPhone = '$_selectedCountryCode${_additionalPhoneController.text}';
+            }
+          }
+          
           await widget.salespersonService.createCompany(
             businessName: _businessNameController.text,
             category: _selectedIndustry,
             subcategory: _selectedSubcategory.isNotEmpty ? _selectedSubcategory : null,
-            email: _emailController.text.isNotEmpty ? _emailController.text : '',
+            email: combinedEmail,
             phone: '$_selectedCountryCode${_phoneController.text}',
             password: _passwordController.text,
             contactPerson: _contactPersonController.text,
-            contactPhone: _contactPhoneController.text,
+            contactPhone: combinedContactPhone,
             country: _selectedCountry!,
             district: _selectedDistrict!,
             city: _selectedCity!,
@@ -2412,15 +2517,35 @@ class _AddNewDialogState extends State<AddNewDialog> {
           );
           break;
         case 'Wholesaler':
+          // Combine additional email with main email if provided
+          String combinedEmail = _emailController.text;
+          if (_hasAdditionalEmail && _additionalEmailController.text.isNotEmpty) {
+            if (combinedEmail.isNotEmpty) {
+              combinedEmail += ', ${_additionalEmailController.text}';
+            } else {
+              combinedEmail = _additionalEmailController.text;
+            }
+          }
+          
+          // Combine additional phone with contact phone if provided
+          String combinedContactPhone = _contactPhoneController.text;
+          if (_hasAdditionalPhone && _additionalPhoneController.text.isNotEmpty) {
+            if (combinedContactPhone.isNotEmpty) {
+              combinedContactPhone += ', $_selectedCountryCode${_additionalPhoneController.text}';
+            } else {
+              combinedContactPhone = '$_selectedCountryCode${_additionalPhoneController.text}';
+            }
+          }
+          
           await widget.salespersonService.createWholesaler(
             businessName: _businessNameController.text,
             category: _selectedIndustry,
             subcategory: _selectedSubcategory.isNotEmpty ? _selectedSubcategory : null,
-            email: _emailController.text.isNotEmpty ? _emailController.text : '',
+            email: combinedEmail,
             phone: '$_selectedCountryCode${_phoneController.text}',
             password: _passwordController.text,
             contactPerson: _contactPersonController.text,
-            contactPhone: _contactPhoneController.text,
+            contactPhone: combinedContactPhone,
             country: _selectedCountry!,
             district: _selectedDistrict!,
             city: _selectedCity!,
@@ -2431,14 +2556,34 @@ class _AddNewDialogState extends State<AddNewDialog> {
           );
           break;
         case 'Service Provider':
+          // Combine additional email with main email if provided
+          String combinedEmail = _emailController.text;
+          if (_hasAdditionalEmail && _additionalEmailController.text.isNotEmpty) {
+            if (combinedEmail.isNotEmpty) {
+              combinedEmail += ', ${_additionalEmailController.text}';
+            } else {
+              combinedEmail = _additionalEmailController.text;
+            }
+          }
+          
+          // Combine additional phone with contact phone if provided
+          String combinedContactPhone = _contactPhoneController.text;
+          if (_hasAdditionalPhone && _additionalPhoneController.text.isNotEmpty) {
+            if (combinedContactPhone.isNotEmpty) {
+              combinedContactPhone += ', $_selectedCountryCode${_additionalPhoneController.text}';
+            } else {
+              combinedContactPhone = '$_selectedCountryCode${_additionalPhoneController.text}';
+            }
+          }
+          
           await widget.salespersonService.createServiceProvider(
             businessName: _businessNameController.text,
             category: _selectedIndustry,
-            email: _emailController.text.isNotEmpty ? _emailController.text : '',
+            email: combinedEmail,
             phone: '$_selectedCountryCode${_phoneController.text}',
             password: _passwordController.text,
             contactPerson: _contactPersonController.text,
-            contactPhone: _contactPhoneController.text,
+            contactPhone: combinedContactPhone,
             country: _selectedCountry!,
             district: _selectedDistrict!,
             city: _selectedCity!,
@@ -2947,6 +3092,78 @@ class _AddNewDialogState extends State<AddNewDialog> {
                   ),
 
                 const SizedBox(height: 20),
+
+                // Additional Phone Number Field
+                if (_hasAdditionalPhone) ...[
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 16),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: Colors.grey[300]!),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              _selectedCountryCode,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Colors.grey[600],
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _additionalPhoneController,
+                          decoration: InputDecoration(
+                            hintText: 'Additional Phone Number',
+                            hintStyle: TextStyle(color: Colors.grey[400]),
+                            border: UnderlineInputBorder(
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            focusedBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(color: Color(0xFF1E40AF)),
+                            ),
+                            enabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // Additional Email Field
+                if (_hasAdditionalEmail) ...[
+                  TextField(
+                    controller: _additionalEmailController,
+                    decoration: InputDecoration(
+                      hintText: 'Additional Email Address',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      border: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Color(0xFF1E40AF)),
+                      ),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
 
                 // Password Field
                 TextField(
