@@ -828,10 +828,22 @@ func (sc *SubscriptionController) GetTotalCommissionBalance(c echo.Context) erro
 
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salespersonID": userID}, // New format (uppercase ID)
+				{"salespersonId": userID}, // Legacy format (lowercase i)
+			},
+		}
 		sumField = "$salespersonCommission"
 	case "sales_manager":
-		match = bson.M{"salesManagerID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salesManagerID": userID}, // New format (uppercase ID)
+				{"salesManagerId": userID}, // Legacy format (lowercase i)
+			},
+		}
 		sumField = "$salesManagerCommission"
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
@@ -967,10 +979,22 @@ func (sc *SubscriptionController) RequestCommissionWithdrawal(c echo.Context) er
 	var sumField string
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salespersonID": userID}, // New format (uppercase ID)
+				{"salespersonId": userID}, // Legacy format (lowercase i)
+			},
+		}
 		sumField = "$salespersonCommission"
 	case "sales_manager":
-		match = bson.M{"salesManagerID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salesManagerID": userID}, // New format (uppercase ID)
+				{"salesManagerId": userID}, // Legacy format (lowercase i)
+			},
+		}
 		sumField = "$salesManagerCommission"
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
@@ -1234,13 +1258,25 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 	var sumField string
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salespersonID": userID}, // New format (uppercase ID)
+				{"salespersonId": userID}, // Legacy format (lowercase i)
+			},
+		}
 		sumField = "$salespersonCommission"
-		log.Printf("DEBUG: Looking for commissions with salespersonID: %s", userID.Hex())
+		log.Printf("DEBUG: Looking for commissions with salespersonID/salespersonId: %s", userID.Hex())
 	case "sales_manager":
-		match = bson.M{"salesManagerID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salesManagerID": userID}, // New format (uppercase ID)
+				{"salesManagerId": userID}, // Legacy format (lowercase i)
+			},
+		}
 		sumField = "$salesManagerCommission"
-		log.Printf("DEBUG: Looking for commissions with salesManagerID: %s", userID.Hex())
+		log.Printf("DEBUG: Looking for commissions with salesManagerID/salesManagerId: %s", userID.Hex())
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
@@ -1268,9 +1304,22 @@ func (sc *SubscriptionController) GetCommissionSummary(c echo.Context) error {
 	var sampleCommissions []bson.M
 	sampleCursor, err := sc.DB.Collection("commissions").Find(ctx, bson.M{}, options.Find().SetLimit(5))
 	if err == nil {
+		log.Printf("DEBUG: Error fetching sample commissions: %v", err)
+	} else {
 		defer sampleCursor.Close(ctx)
 		if err := sampleCursor.All(ctx, &sampleCommissions); err == nil {
 			log.Printf("DEBUG: Sample commissions in database: %+v", sampleCommissions)
+			// Log the salesperson IDs from existing commissions
+			for i, comm := range sampleCommissions {
+				if salespersonID, ok := comm["salespersonID"]; ok {
+					log.Printf("DEBUG: Commission %d - salespersonID (new format): %v", i, salespersonID)
+				}
+				if salespersonId, ok := comm["salespersonId"]; ok {
+					log.Printf("DEBUG: Commission %d - salespersonId (legacy format): %v", i, salespersonId)
+				}
+			}
+		} else {
+			log.Printf("DEBUG: Error decoding sample commissions: %v", err)
 		}
 	}
 	commissionPipeline := []bson.M{
@@ -2480,9 +2529,21 @@ func (sc *SubscriptionController) GetCommissions(c echo.Context) error {
 	var match bson.M
 	switch claims.UserType {
 	case "salesperson":
-		match = bson.M{"salespersonID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salespersonID": userID}, // New format (uppercase ID)
+				{"salespersonId": userID}, // Legacy format (lowercase i)
+			},
+		}
 	case "sales_manager":
-		match = bson.M{"salesManagerID": userID}
+		// Try both field name formats to handle legacy data
+		match = bson.M{
+			"$or": []bson.M{
+				{"salesManagerID": userID}, // New format (uppercase ID)
+				{"salesManagerId": userID}, // Legacy format (lowercase i)
+			},
+		}
 	}
 
 	// Aggregate pipeline to get commission details with subscription and company information
