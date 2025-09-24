@@ -555,9 +555,9 @@ func (sc *SubscriptionController) ApproveWholesalerSubscriptionRequest(c echo.Co
 			var salesperson models.Salesperson
 			err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": wholesaler.CreatedBy}).Decode(&salesperson)
 			if err == nil {
-				// Get sales manager
-				var salesManager models.SalesManager
-				err := sc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+				// Get admin who created the salesperson
+				var admin models.Admin
+				err := sc.DB.Collection("admins").FindOne(ctx, bson.M{"_id": salesperson.CreatedBy}).Decode(&admin)
 				if err == nil {
 					// Get plan details
 					var plan models.SubscriptionPlan
@@ -565,35 +565,42 @@ func (sc *SubscriptionController) ApproveWholesalerSubscriptionRequest(c echo.Co
 					if err == nil {
 						planPrice := plan.Price
 						salespersonPercent := salesperson.CommissionPercent
-						salesManagerPercent := salesManager.CommissionPercent
+
+						// Calculate admin commission (remaining percentage after salesperson commission)
+						adminPercent := 100.0 - salespersonPercent
+
 						// Calculate commissions correctly
 						// Salesperson gets their percentage directly from the plan price
 						salespersonCommission := planPrice * salespersonPercent / 100.0
-						// Sales manager gets their percentage directly from the plan price
-						salesManagerCommission := planPrice * salesManagerPercent / 100.0
+						// Admin gets the remaining percentage
+						adminCommission := planPrice * adminPercent / 100.0
+
 						// Insert commission documents
 						commissionCollection := sc.DB.Collection("commissions")
 						commissionDocs := []interface{}{
 							models.Commission{
-								ID:                            primitive.NewObjectID(),
-								SubscriptionID:                request.ID,
-								CompanyID:                     primitive.NilObjectID,
-								PlanID:                        plan.ID,
-								PlanPrice:                     planPrice,
-								SalespersonID:                 salesperson.ID,
-								SalespersonCommission:         salespersonCommission,
-								SalespersonCommissionPercent:  salespersonPercent,
-								SalesManagerID:                salesManager.ID,
-								SalesManagerCommission:        salesManagerCommission,
-								SalesManagerCommissionPercent: salesManagerPercent,
-								CreatedAt:                     time.Now(),
-								Paid:                          false,
-								PaidAt:                        nil,
+								ID:                           primitive.NewObjectID(),
+								SubscriptionID:               request.ID,
+								CompanyID:                    primitive.NilObjectID,
+								PlanID:                       plan.ID,
+								PlanPrice:                    planPrice,
+								AdminID:                      admin.ID,
+								AdminCommission:              adminCommission,
+								AdminCommissionPercent:       adminPercent,
+								SalespersonID:                salesperson.ID,
+								SalespersonCommission:        salespersonCommission,
+								SalespersonCommissionPercent: salespersonPercent,
+								CreatedAt:                    time.Now(),
+								Paid:                         false,
+								PaidAt:                       nil,
 							},
 						}
 						_, err := commissionCollection.InsertMany(ctx, commissionDocs)
 						if err != nil {
 							log.Printf("Failed to insert commission docs: %v", err)
+						} else {
+							log.Printf("Commission inserted successfully - Plan Price: $%.2f, Admin Commission: $%.2f (%.1f%%), Salesperson Commission: $%.2f (%.1f%%)\n",
+								planPrice, adminCommission, adminPercent, salespersonCommission, salespersonPercent)
 						}
 					}
 				}
@@ -746,9 +753,9 @@ func (sc *SubscriptionController) ApproveWholesalerSubscriptionRequestByManager(
 			var salesperson models.Salesperson
 			err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": wholesaler.CreatedBy}).Decode(&salesperson)
 			if err == nil {
-				// Get sales manager
-				var salesManager models.SalesManager
-				err := sc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+				// Get admin who created the salesperson
+				var admin models.Admin
+				err := sc.DB.Collection("admins").FindOne(ctx, bson.M{"_id": salesperson.CreatedBy}).Decode(&admin)
 				if err == nil {
 					// Get plan details
 					var plan models.SubscriptionPlan
@@ -756,35 +763,42 @@ func (sc *SubscriptionController) ApproveWholesalerSubscriptionRequestByManager(
 					if err == nil {
 						planPrice := plan.Price
 						salespersonPercent := salesperson.CommissionPercent
-						salesManagerPercent := salesManager.CommissionPercent
+
+						// Calculate admin commission (remaining percentage after salesperson commission)
+						adminPercent := 100.0 - salespersonPercent
+
 						// Calculate commissions correctly
 						// Salesperson gets their percentage directly from the plan price
 						salespersonCommission := planPrice * salespersonPercent / 100.0
-						// Sales manager gets their percentage directly from the plan price
-						salesManagerCommission := planPrice * salesManagerPercent / 100.0
+						// Admin gets the remaining percentage
+						adminCommission := planPrice * adminPercent / 100.0
+
 						// Insert commission documents
 						commissionCollection := sc.DB.Collection("commissions")
 						commissionDocs := []interface{}{
 							models.Commission{
-								ID:                            primitive.NewObjectID(),
-								SubscriptionID:                request.ID,
-								CompanyID:                     primitive.NilObjectID,
-								PlanID:                        plan.ID,
-								PlanPrice:                     planPrice,
-								SalespersonID:                 salesperson.ID,
-								SalespersonCommission:         salespersonCommission,
-								SalespersonCommissionPercent:  salespersonPercent,
-								SalesManagerID:                salesManager.ID,
-								SalesManagerCommission:        salesManagerCommission,
-								SalesManagerCommissionPercent: salesManagerPercent,
-								CreatedAt:                     time.Now(),
-								Paid:                          false,
-								PaidAt:                        nil,
+								ID:                           primitive.NewObjectID(),
+								SubscriptionID:               request.ID,
+								CompanyID:                    primitive.NilObjectID,
+								PlanID:                       plan.ID,
+								PlanPrice:                    planPrice,
+								AdminID:                      admin.ID,
+								AdminCommission:              adminCommission,
+								AdminCommissionPercent:       adminPercent,
+								SalespersonID:                salesperson.ID,
+								SalespersonCommission:        salespersonCommission,
+								SalespersonCommissionPercent: salespersonPercent,
+								CreatedAt:                    time.Now(),
+								Paid:                         false,
+								PaidAt:                       nil,
 							},
 						}
 						_, err := commissionCollection.InsertMany(ctx, commissionDocs)
 						if err != nil {
 							log.Printf("Failed to insert commission docs: %v", err)
+						} else {
+							log.Printf("Commission inserted successfully - Plan Price: $%.2f, Admin Commission: $%.2f (%.1f%%), Salesperson Commission: $%.2f (%.1f%%)\n",
+								planPrice, adminCommission, adminPercent, salespersonCommission, salespersonPercent)
 						}
 					}
 				}

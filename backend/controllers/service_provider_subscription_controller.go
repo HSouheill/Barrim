@@ -840,58 +840,55 @@ func (spc *ServiceProviderSubscriptionController) ProcessServiceProviderSubscrip
 			err := spc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": serviceProvider.CreatedBy}).Decode(&salesperson)
 			if err == nil {
 				log.Printf("DEBUG: Found salesperson: %s (ID: %v)", salesperson.FullName, salesperson.ID)
-				// Get sales manager - try both collection names due to inconsistency
-				var salesManager models.SalesManager
-				err := spc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
-				if err != nil {
-					// Try the alternative collection name
-					log.Printf("DEBUG: Sales manager not found in sales_managers collection, trying salesManagers collection")
-					err = spc.DB.Collection("salesManagers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
-				}
+				// Get admin who created the salesperson
+				var admin models.Admin
+				err := spc.DB.Collection("admins").FindOne(ctx, bson.M{"_id": salesperson.CreatedBy}).Decode(&admin)
 				if err == nil {
-					log.Printf("DEBUG: Found sales manager: %s (ID: %v)", salesManager.FullName, salesManager.ID)
+					log.Printf("DEBUG: Found admin: %s (ID: %v)", admin.Email, admin.ID)
 					planPrice := plan.Price
 					salespersonPercent := salesperson.CommissionPercent
-					salesManagerPercent := salesManager.CommissionPercent
 
-					log.Printf("DEBUG: Plan price: $%.2f, Salesperson commission percent: %.2f%%, Sales Manager commission percent: %.2f%%",
-						planPrice, salespersonPercent, salesManagerPercent)
+					// Calculate admin commission (remaining percentage after salesperson commission)
+					adminPercent := 100.0 - salespersonPercent
+
+					log.Printf("DEBUG: Plan price: $%.2f, Salesperson commission percent: %.2f%%, Admin commission percent: %.2f%%",
+						planPrice, salespersonPercent, adminPercent)
 
 					// Calculate commissions correctly
 					// Salesperson gets their percentage directly from the plan price
 					salespersonCommission := planPrice * salespersonPercent / 100.0
-					// Sales manager gets their percentage directly from the plan price
-					salesManagerCommission := planPrice * salesManagerPercent / 100.0
+					// Admin gets the remaining percentage
+					adminCommission := planPrice * adminPercent / 100.0
 
-					log.Printf("DEBUG: Calculated commissions - Sales Manager: $%.2f, Salesperson: $%.2f",
-						salesManagerCommission, salespersonCommission)
+					log.Printf("DEBUG: Calculated commissions - Admin: $%.2f, Salesperson: $%.2f",
+						adminCommission, salespersonCommission)
 
 					// Insert commission document using Commission model
 					commission := models.Commission{
-						ID:                            primitive.NewObjectID(),
-						SubscriptionID:                newSubscription.ID,
-						CompanyID:                     primitive.NilObjectID, // No company ID for service provider
-						PlanID:                        plan.ID,
-						PlanPrice:                     planPrice,
-						SalespersonID:                 salesperson.ID,
-						SalespersonCommission:         salespersonCommission,
-						SalespersonCommissionPercent:  salespersonPercent,
-						SalesManagerID:                salesManager.ID,
-						SalesManagerCommission:        salesManagerCommission,
-						SalesManagerCommissionPercent: salesManagerPercent,
-						CreatedAt:                     time.Now(),
-						Paid:                          false,
-						PaidAt:                        nil,
+						ID:                           primitive.NewObjectID(),
+						SubscriptionID:               newSubscription.ID,
+						CompanyID:                    primitive.NilObjectID, // No company ID for service provider
+						PlanID:                       plan.ID,
+						PlanPrice:                    planPrice,
+						AdminID:                      admin.ID,
+						AdminCommission:              adminCommission,
+						AdminCommissionPercent:       adminPercent,
+						SalespersonID:                salesperson.ID,
+						SalespersonCommission:        salespersonCommission,
+						SalespersonCommissionPercent: salespersonPercent,
+						CreatedAt:                    time.Now(),
+						Paid:                         false,
+						PaidAt:                       nil,
 					}
 					_, err := spc.DB.Collection("commissions").InsertOne(ctx, commission)
 					if err != nil {
 						log.Printf("Failed to insert commission: %v", err)
 					} else {
-						log.Printf("Commission inserted successfully for service provider subscription - Plan Price: $%.2f, Sales Manager Commission: $%.2f, Salesperson Commission: $%.2f",
-							planPrice, salesManagerCommission, salespersonCommission)
+						log.Printf("Commission inserted successfully for service provider subscription - Plan Price: $%.2f, Admin Commission: $%.2f (%.1f%%), Salesperson Commission: $%.2f (%.1f%%)",
+							planPrice, adminCommission, adminPercent, salespersonCommission, salespersonPercent)
 					}
 				} else {
-					log.Printf("DEBUG: Failed to find sales manager for ID: %v, Error: %v", salesperson.SalesManagerID, err)
+					log.Printf("DEBUG: Failed to find admin for ID: %v, Error: %v", salesperson.CreatedBy, err)
 				}
 			} else {
 				log.Printf("DEBUG: Failed to find salesperson for ID: %v, Error: %v", serviceProvider.CreatedBy, err)
