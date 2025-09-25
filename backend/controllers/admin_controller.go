@@ -3234,6 +3234,12 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, models.Response{Status: http.StatusInternalServerError, Message: "Failed to decode wholesalers"})
 	}
 
+	// Extract all branches from companies
+	var allBranches []models.Branch
+	for _, company := range companies {
+		allBranches = append(allBranches, company.Branches...)
+	}
+
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: "All entities retrieved successfully",
@@ -3242,6 +3248,7 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 			"companies":        companies,
 			"serviceProviders": serviceProviders,
 			"wholesalers":      wholesalers,
+			"branches":         allBranches,
 		},
 	})
 }
