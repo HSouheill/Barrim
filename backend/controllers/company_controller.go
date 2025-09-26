@@ -1037,6 +1037,8 @@ func (cc *CompanyController) UpdateBranch(c echo.Context) error {
 			}
 			return existingBranch.CostPerCustomer
 		}(),
+		Status:      getString(branchData, "status", existingBranch.Status), // Preserve or update status
+		Sponsorship: existingBranch.Sponsorship,                             // Preserve sponsorship status
 		SocialMedia: socialMedia,
 		CreatedAt:   existingBranch.CreatedAt, // Keep original creation time
 		UpdatedAt:   time.Now(),               // Update the update timestamp
