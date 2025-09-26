@@ -409,9 +409,6 @@ class SessionManager {
 
   // Clear session
   Future<void> _clearSession() async {
-    print('=== CLEARING SESSION ===');
-    print('Clearing token, refresh token, user info, and last activity');
-    
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userInfoKey);

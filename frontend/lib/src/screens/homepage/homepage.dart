@@ -34,6 +34,9 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Salesperson> _allSalespersons = [];
   List<Salesperson> _filteredSalespersons = [];
   
+  // Track expanded companies for branch display
+  Set<String> _expandedCompanies = <String>{};
+  
   bool _isLoading = true;
   String _errorMessage = '';
   String _selectedFilter = 'all';
@@ -336,12 +339,16 @@ class _DashboardPageState extends State<DashboardPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Force mobile view regardless of screen size
-        return Container(
-          width: 390, // Standard mobile width
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Scaffold(
+        return Center(
+          child: Container(
+            width: 390, // Standard mobile width
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width,
+            ),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Scaffold(
             key: _scaffoldKey, // Add scaffold key
             backgroundColor: Colors.grey.shade100,
             // Add the drawer with our Sidebar widget
@@ -411,6 +418,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ],
               ),
             ),
+          ),
           ),
         );
       },
@@ -1631,7 +1639,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -1651,6 +1661,36 @@ class _DashboardPageState extends State<DashboardPage> {
                                       ),
                                     ),
                                   ),
+                                  // Branch count indicator
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.location_on,
+                                          size: 12,
+                                          color: Colors.green.shade700,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${company.branches?.length ?? 0} branches',
+                                          style: TextStyle(
+                                            color: Colors.green.shade700,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ],
@@ -1662,6 +1702,12 @@ class _DashboardPageState extends State<DashboardPage> {
                     
                     // Company details section
                     _buildCompanyDetails(company),
+                    
+                    // Branches section (expandable)
+                    if (company.branches != null && company.branches!.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _buildBranchesSection(company),
+                    ],
                     
                     const SizedBox(height: 12),
                     
@@ -2602,6 +2648,185 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // Method to build expandable branches section for company cards
+  Widget _buildBranchesSection(company_model.Company company) {
+    final isExpanded = _expandedCompanies.contains(company.id);
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          // Branches header with expand/collapse button
+          InkWell(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedCompanies.remove(company.id);
+                } else {
+                  _expandedCompanies.add(company.id);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    size: 16,
+                    color: Colors.green.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Branches (${company.branches!.length})',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Color(0xFF0D1C4B),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.grey.shade600,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Branches list (shown when expanded)
+          if (isExpanded) ...[
+            const Divider(height: 1),
+            ...company.branches!.map((branch) => _buildBranchListItem(branch)).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Method to build individual branch item in the expandable list
+  Widget _buildBranchListItem(company_model.Branch branch) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade200, width: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.store,
+                size: 14,
+                color: Colors.green.shade600,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  branch.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Color(0xFF0D1C4B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${branch.location.street}, ${branch.location.city}',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Wrap(
+            spacing: 8,
+            children: [
+              Text(
+                branch.category,
+                style: TextStyle(
+                  color: Colors.blue.shade700,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (branch.subCategory != null && branch.subCategory!.isNotEmpty)
+                Text(
+                  '• ${branch.subCategory!}',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Method to build branch card for display in dialogs
+  Widget _buildBranchCard(company_model.Branch branch) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.location_on,
+                size: 16,
+                color: Colors.green.shade700,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  branch.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF0D1C4B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildDetailRow('Phone', branch.phone),
+          _buildDetailRow('Category', branch.category),
+          if (branch.subCategory != null && branch.subCategory!.isNotEmpty)
+            _buildDetailRow('Sub Category', branch.subCategory!),
+          if (branch.description != null && branch.description!.isNotEmpty)
+            _buildDetailRow('Description', branch.description!),
+          if (branch.costPerCustomer != null)
+            _buildDetailRow('Cost per Customer', '\$${branch.costPerCustomer!.toStringAsFixed(2)}'),
+          _buildDetailRow('Address', '${branch.location.street}, ${branch.location.city}, ${branch.location.district}'),
+          if (branch.images.isNotEmpty)
+            _buildDetailRow('Images', '${branch.images.length} image(s)'),
+          if (branch.videos != null && branch.videos!.isNotEmpty)
+            _buildDetailRow('Videos', '${branch.videos!.length} video(s)'),
+        ],
+      ),
+    );
+  }
 
   // Method to show company details dialog
   void _showCompanyDetailsDialog(company_model.Company company) {
@@ -2629,6 +2854,23 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildDetailRow('Balance', '\$${company.balance.toStringAsFixed(2)}'),
                 _buildDetailRow('Created', _formatDate(company.createdAt)),
                 _buildDetailRow('Updated', _formatDate(company.updatedAt)),
+                
+                // Branches section
+                if (company.branches != null && company.branches!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Branches (${company.branches!.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0D1C4B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...company.branches!.map((branch) => _buildBranchCard(branch)).toList(),
+                ],
               ],
             ),
           ),

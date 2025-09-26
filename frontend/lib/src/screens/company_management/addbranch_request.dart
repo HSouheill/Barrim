@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/business_management_service.dart';
 import '../../components/header.dart';
 import '../../components/sidebar.dart';
 import '../../services/manager_service.dart'; // Added import for ManagerService
-import '../../models/enriched_company.dart'; // Added import for EnrichedCompany
 import '../../services/api_services.dart'; // Added import for API services
 import '../../services/admin_service.dart'; // Added import for AdminService
 import '../../screens/homepage/homepage.dart';
@@ -40,6 +40,7 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
 
   // State for fetched data
   List<dynamic> _companies = [];
+  List<dynamic> _branches = []; // New list to store individual branches
   List<dynamic> _serviceProviders = [];
   List<dynamic> _wholesalers = [];
   List<dynamic> _users = [];
@@ -73,8 +74,41 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       final wholesalers = data['wholesalers'] ?? [];
       final users = data['users'] ?? [];
       
+      // Extract branches from companies
+      List<dynamic> branches = [];
+      for (var companyData in companies) {
+        if (companyData != null && companyData is Map<String, dynamic>) {
+          // Handle enriched company format
+          Map<String, dynamic>? company;
+          if (companyData['company'] != null && companyData['company'] is Map<String, dynamic>) {
+            company = companyData['company'] as Map<String, dynamic>;
+          } else {
+            company = companyData;
+          }
+          
+          if (company != null && company['branches'] != null && company['branches'] is List) {
+            final companyBranches = company['branches'] as List;
+            for (var branch in companyBranches) {
+              if (branch != null && branch is Map<String, dynamic>) {
+                // Add company info to each branch for context
+                branches.add({
+                  ...branch,
+                  'companyInfo': {
+                    'id': company['id'],
+                    'businessName': company['businessName'] ?? company['name'],
+                    'email': company['email'],
+                    'contactInfo': company['contactInfo'],
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+      
       print('Companies data: $companies'); // Debug log
       print('Companies length: ${companies.length}'); // Debug log
+      print('Branches extracted: ${branches.length}'); // Debug log
       print('ServiceProviders data: $serviceProviders'); // Debug log
       print('ServiceProviders length: ${serviceProviders.length}'); // Debug log
       print('Wholesalers data: $wholesalers'); // Debug log
@@ -85,6 +119,9 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       if (companies.isNotEmpty) {
         print('First company structure: ${companies.first}'); // Debug log
       }
+      if (branches.isNotEmpty) {
+        print('First branch structure: ${branches.first}'); // Debug log
+      }
       if (serviceProviders.isNotEmpty) {
         print('First serviceProvider structure: ${serviceProviders.first}'); // Debug log
       }
@@ -94,6 +131,7 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       
       setState(() {
         _companies = companies;
+        _branches = branches; // Store extracted branches
         _serviceProviders = serviceProviders;
         _wholesalers = wholesalers;
         _users = users;
@@ -202,8 +240,41 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       final wholesalers = data['wholesalers'] ?? [];
       final users = data['users'] ?? [];
       
+      // Extract branches from companies
+      List<dynamic> branches = [];
+      for (var companyData in companies) {
+        if (companyData != null && companyData is Map<String, dynamic>) {
+          // Handle enriched company format
+          Map<String, dynamic>? company;
+          if (companyData['company'] != null && companyData['company'] is Map<String, dynamic>) {
+            company = companyData['company'] as Map<String, dynamic>;
+          } else {
+            company = companyData;
+          }
+          
+          if (company != null && company['branches'] != null && company['branches'] is List) {
+            final companyBranches = company['branches'] as List;
+            for (var branch in companyBranches) {
+              if (branch != null && branch is Map<String, dynamic>) {
+                // Add company info to each branch for context
+                branches.add({
+                  ...branch,
+                  'companyInfo': {
+                    'id': company['id'],
+                    'businessName': company['businessName'] ?? company['name'],
+                    'email': company['email'],
+                    'contactInfo': company['contactInfo'],
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+      
       print('Companies data: $companies'); // Debug log
       print('Companies length: ${companies.length}'); // Debug log
+      print('Branches extracted: ${branches.length}'); // Debug log
       print('ServiceProviders data: $serviceProviders'); // Debug log
       print('ServiceProviders length: ${serviceProviders.length}'); // Debug log
       print('Wholesalers data: $wholesalers'); // Debug log
@@ -214,6 +285,9 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       if (companies.isNotEmpty) {
         print('First company structure: ${companies.first}'); // Debug log
       }
+      if (branches.isNotEmpty) {
+        print('First branch structure: ${branches.first}'); // Debug log
+      }
       if (serviceProviders.isNotEmpty) {
         print('First serviceProvider structure: ${serviceProviders.first}'); // Debug log
       }
@@ -223,6 +297,7 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       
       setState(() {
         _companies = companies;
+        _branches = branches; // Store extracted branches
         _serviceProviders = serviceProviders;
         _wholesalers = wholesalers;
         _users = users;
@@ -306,46 +381,83 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
     );
   }
 
-  List<dynamic> getFilteredCompanies() {
-    if (selectedTab == 'All') return _companies.where((c) => c != null).toList();
+  // Method to show delete confirmation dialog for branches
+  void _showDeleteBranchConfirmation(Map<String, dynamic> branchData, String branchName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Delete Branch'),
+          content: Text('Are you sure you want to delete the branch "$branchName"? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                _deleteBranch(branchData, branchName); // Proceed with branch deletion
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method to delete a branch
+  Future<void> _deleteBranch(Map<String, dynamic> branchData, String branchName) async {
+    print('Delete branch called: ${branchData['id']}'); // Debug log
+    try {
+      final companyInfo = branchData['companyInfo'];
+      
+      if (companyInfo == null || companyInfo['id'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Company information missing'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      
+      final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
+      final result = await adminService.deleteEntity(
+        'branch',
+        branchData['id'],
+      );
+      
+      if (result['success']) {
+        await _refreshDataSilently();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Branch deleted successfully'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete branch: ${result['message']}'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      print('Error in _deleteBranch: $e'); // Debug log
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  List<dynamic> getFilteredBranches() {
+    if (selectedTab == 'All') return _branches.where((b) => b != null).toList();
     
-    return _companies.where((c) {
-      if (c == null) return false;
+    return _branches.where((b) {
+      if (b == null) return false;
       
       try {
-        // Handle both enriched and non-enriched company data
-        String? status;
-        Map<String, dynamic>? companyData;
-        
-        // Check if this is an enriched company object
-        if (c is Map<String, dynamic>) {
-          if (c['company'] != null && c['company'] is Map<String, dynamic>) {
-            // This is an enriched company object
-            companyData = c['company'] as Map<String, dynamic>;
-          } else if (c['businessName'] != null || c['name'] != null) {
-            // This is a direct company object
-            companyData = c;
-          }
-          
-          // Get status from company data if available
-          if (companyData != null) {
-            // First check branches if they exist
-            if (companyData['branches'] != null && 
-                companyData['branches'] is List && 
-                (companyData['branches'] as List).isNotEmpty) {
-              // Get status from the first branch
-              final firstBranch = (companyData['branches'] as List).first;
-              if (firstBranch is Map<String, dynamic> && firstBranch['status'] != null) {
-                status = firstBranch['status'];
-              }
-            }
-            // Fall back to company status if no branch status
-            status ??= companyData['status'];
-          }
-        }
-        
-        // Default to 'active' if status is still null
-        status ??= 'active';
+        // Branches now have their own status
+        final status = b['status'] ?? 'active';
         
         // Apply filter based on selected tab
         if (selectedTab == 'Active') {
@@ -355,10 +467,16 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
         }
         return false;
       } catch (e) {
-        print('Error filtering company: $e');
+        print('Error filtering branch: $e');
         return false;
       }
     }).toList();
+  }
+
+  List<dynamic> getFilteredCompanies() {
+    // Keep this method for backward compatibility, but return empty list
+    // since we're now displaying branches instead of companies
+    return [];
   }
 
   List<dynamic> getFilteredServiceProviders() {
@@ -543,6 +661,47 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
     }
   }
 
+  // Method to toggle branch status
+  Future<bool> _toggleBranchStatus(Map<String, dynamic> branchData, String currentStatus) async {
+    print('Toggle branch status: branchId=${branchData['id']}, currentStatus=$currentStatus');
+    try {
+      final newStatus = currentStatus == 'active' ? 'inactive' : 'active';
+      final companyInfo = branchData['companyInfo'];
+      
+      if (companyInfo == null || companyInfo['id'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Company information missing'), backgroundColor: Colors.red),
+        );
+        return false;
+      }
+      
+      final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
+      final result = await adminService.toggleCompanyBranchStatus(
+        companyId: companyInfo['id'],
+        branchId: branchData['id'],
+        status: newStatus,
+      );
+      
+      if (result['success']) {
+        await _refreshDataSilently();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Branch status updated successfully'), backgroundColor: Colors.green),
+        );
+        return true;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update branch status: ${result['message']}'), backgroundColor: Colors.red),
+        );
+        return false;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+      );
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -589,7 +748,7 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                         ),
                         const SizedBox(width: 16),
                         const Text(
-                          'List of Companies',
+                          'List of Users',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -664,19 +823,19 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                       ? Center(child: Text(_usersError, style: const TextStyle(color: Colors.red)))
                                       : Builder(
                                           builder: (context) {
-                                            final filteredCompanies = getFilteredCompanies();
+                                            final filteredBranches = getFilteredBranches();
                                             final filteredServiceProviders = getFilteredServiceProviders();
                                             final filteredWholesalers = getFilteredWholesalers();
                                             final filteredUsers = getFilteredUsers();
                                             
-                                            print('Filtered companies length: ${filteredCompanies.length}'); // Debug log
+                                            print('Filtered branches length: ${filteredBranches.length}'); // Debug log
                                             print('Filtered service providers length: ${filteredServiceProviders.length}'); // Debug log
                                             print('Filtered wholesalers length: ${filteredWholesalers.length}'); // Debug log
                                             print('Filtered users length: ${filteredUsers.length}'); // Debug log
                                             print('Selected tab: $selectedTab'); // Debug log
                                             
                                             final allEntities = [
-                                              ...filteredCompanies.map((c) => {'type': 'company', 'data': c}),
+                                              ...filteredBranches.map((b) => {'type': 'branch', 'data': b}),
                                               ...filteredServiceProviders.map((sp) => {'type': 'serviceProvider', 'data': sp}),
                                               ...filteredWholesalers.map((w) => {'type': 'wholesaler', 'data': w}),
                                             ];
@@ -707,32 +866,23 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                                   String entityType = type;
                                                   String? branchId;
                                                   
-                                                  if (type == 'company') {
-                                                    // Companies now come in enriched format
-                                                    Map<String, dynamic>? companyData;
-                                                    if (data['company'] != null && data['company'] is Map<String, dynamic>) {
-                                                      companyData = data['company'];
-                                                    } else if (data['businessName'] != null) {
-                                                      companyData = data;
-                                                    }
-                                                    if (companyData != null && companyData['branches'] != null && companyData['branches'] is List && (companyData['branches'] as List).isNotEmpty) {
-                                                      final firstBranch = (companyData['branches'] as List).first;
-                                                      if (firstBranch is Map<String, dynamic>) {
-                                                        // Capture branch ID
-                                                        if (firstBranch['id'] != null) {
-                                                          branchId = firstBranch['id'];
-                                                        }
-                                                        // Prefer branch status if provided
-                                                        currentStatus = firstBranch['status'] ?? 'active';
+                                                  if (type == 'branch') {
+                                                    // Handle branch data with company context
+                                                    if (data is Map<String, dynamic>) {
+                                                      final companyInfo = data['companyInfo'];
+                                                      name = data['name'] ?? 'N/A';
+                                                      address = data['location']?['city'] ?? data['location']?['street'] ?? 'N/A';
+                                                      entityId = data['id'];
+                                                      branchId = data['id']; // Branch ID is the same as entity ID for branches
+                                                      currentStatus = data['status'] ?? 'active';
+                                                      entityType = 'branch';
+                                                      
+                                                      // Add company name to branch name for context
+                                                      if (companyInfo != null && companyInfo['businessName'] != null) {
+                                                        name = '${companyInfo['businessName']} - $name';
                                                       }
-                                                    }
-                                                    // Fallback to company level information where needed
-                                                    if (companyData != null) {
-                                                      name = companyData['businessName'] ?? companyData['name'] ?? 'N/A';
-                                                      address = companyData['contactInfo']?['address']?['city'] ?? 'N/A';
-                                                      entityId = companyData['id'];
-                                                      // If branch status not set, use company status
-                                                      currentStatus ??= companyData['status'] ?? 'active';
+                                                      
+                                                      print('  Branch - ID: $entityId, Name: $name, Status: $currentStatus'); // Debug log
                                                     }
                                                   } else if (type == 'serviceProvider') {
                                                     print('  Processing ServiceProvider data type: ${data.runtimeType}'); // Debug log
@@ -797,16 +947,19 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                                     name: name,
                                                     address: address,
                                                     isActive: isActive,
-                                                    logo: 'roadster', // Placeholder, adapt as needed
+                                                    logo: type, // Pass entity type as logo
                                                     hasInfo: true, // Placeholder, adapt as needed
-                                                    onStatusToggle: (type == 'company' && entityId != null && branchId != null && currentStatus != null)
-                                                        ? () => toggleCompanyStatusWithBranch(entityId!, branchId!, currentStatus!)
+                                                    userType: type, // Pass the entity type as userType
+                                                    onStatusToggle: (type == 'branch' && entityId != null && currentStatus != null)
+                                                        ? () => _toggleBranchStatus(data, currentStatus!)
                                                         : (entityId != null && currentStatus != null)
                                                             ? () => toggleEntityStatus(entityType, entityId!, currentStatus!)
                                                             : null,
-                                                    onDelete: entityId != null
-                                                        ? () => _showDeleteConfirmation(entityId!, name, entityType)
-                                                        : null,
+                                                    onDelete: (type == 'branch' && entityId != null)
+                                                        ? () => _showDeleteBranchConfirmation(data, name)
+                                                        : (entityId != null)
+                                                            ? () => _showDeleteConfirmation(entityId!, name, entityType)
+                                                            : null,
                                                   );
                                                 } catch (e) {
                                                   print('Error building entity card: $e');
@@ -916,6 +1069,7 @@ class RestaurantCard extends StatefulWidget {
   final bool isActive;
   final String logo;
   final bool hasInfo;
+  final String userType;
   final Future<bool> Function()? onStatusToggle;
   final VoidCallback? onDelete;
 
@@ -926,6 +1080,7 @@ class RestaurantCard extends StatefulWidget {
     required this.isActive,
     required this.logo,
     required this.hasInfo,
+    required this.userType,
     this.onStatusToggle,
     this.onDelete,
   }) : super(key: key);
@@ -1050,6 +1205,27 @@ class _RestaurantCardState extends State<RestaurantCard> {
                           maxLines: 2,
                         ),
                         SizedBox(height: isSmallScreen ? 2 : 4),
+                        // User Type Badge
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isSmallScreen ? 6 : 8,
+                            vertical: isSmallScreen ? 2 : 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _getUserTypeColor(),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withOpacity(0.3), width: 0.5),
+                          ),
+                          child: Text(
+                            _getUserTypeDisplayName(),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isSmallScreen ? 9 : 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: isSmallScreen ? 4 : 6),
                         Row(
                           children: [
                             Text(
@@ -1189,10 +1365,76 @@ class _RestaurantCardState extends State<RestaurantCard> {
     }
   }
 
+  Color _getUserTypeColor() {
+    switch (widget.userType.toLowerCase()) {
+      case 'company':
+        return const Color(0xFF1E40AF); // Blue
+      case 'branch':
+        return const Color(0xFF7C3AED); // Purple
+      case 'serviceprovider':
+        return const Color(0xFFDC2626); // Red
+      case 'wholesaler':
+        return const Color(0xFF059669); // Green
+      default:
+        return const Color(0xFF6B7280); // Gray
+    }
+  }
+
+  String _getUserTypeDisplayName() {
+    switch (widget.userType.toLowerCase()) {
+      case 'company':
+        return 'Company';
+      case 'branch':
+        return 'Branch';
+      case 'serviceprovider':
+        return 'Service Provider';
+      case 'wholesaler':
+        return 'Wholesaler';
+      default:
+        return 'Unknown';
+    }
+  }
+
   Widget _getLogo(String logo) {
-    // In a real app, you would use actual images
-    // For this example, we'll create placeholder colored containers with text
-    switch (logo) {
+    // Show appropriate icons based on entity type
+    switch (logo.toLowerCase()) {
+      case 'branch':
+        return Container(
+          color: Colors.white,
+          child: Center(
+            child: SvgPicture.asset(
+              'assets/logo/logo.svg',
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(
+                Colors.green.shade700,
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+        );
+      case 'serviceprovider':
+        return Container(
+          color: Colors.red.shade100,
+          child: Center(
+            child: Icon(
+              Icons.person,
+              color: Colors.red.shade700,
+              size: 20,
+            ),
+          ),
+        );
+      case 'wholesaler':
+        return Container(
+          color: Colors.blue.shade100,
+          child: Center(
+            child: Icon(
+              Icons.business,
+              color: Colors.blue.shade700,
+              size: 20,
+            ),
+          ),
+        );
       case 'roadster':
         return Container(
           color: Colors.white,
@@ -1249,11 +1491,12 @@ class _RestaurantCardState extends State<RestaurantCard> {
         );
       default:
         return Container(
-          color: Colors.grey,
-          child: const Center(
-            child: Text(
-              '?',
-              style: TextStyle(color: Colors.white),
+          color: Colors.grey.shade100,
+          child: Center(
+            child: Icon(
+              Icons.help_outline,
+              color: Colors.grey.shade600,
+              size: 20,
             ),
           ),
         );
