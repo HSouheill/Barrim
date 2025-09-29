@@ -4,10 +4,12 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image/png"
 	"io"
 	"log"
 	"math/rand"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -911,39 +913,105 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 		})
 	}
 
-	// Parse multipart form
-	form, err := ctx.MultipartForm()
-	if err != nil {
+	// Check content type to determine parsing method
+	contentType := ctx.Request().Header.Get("Content-Type")
+
+	// Parse multipart form or JSON based on content type
+	var form *multipart.Form
+	var jsonData map[string]interface{}
+
+	if strings.Contains(contentType, "multipart/form-data") {
+		// Parse multipart form
+		form, err = ctx.MultipartForm()
+		if err != nil {
+			return ctx.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid form data",
+			})
+		}
+	} else if strings.Contains(contentType, "application/json") {
+		// Parse JSON data
+		if err := ctx.Bind(&jsonData); err != nil {
+			return ctx.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid JSON data",
+			})
+		}
+	} else {
 		return ctx.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Invalid form data",
+			Message: "Unsupported content type. Use multipart/form-data or application/json",
 		})
 	}
 
+	// Helper function to get values from form or JSON
+	getValue := func(key string) []string {
+		if form != nil {
+			return form.Value[key]
+		}
+		if val, exists := jsonData[key]; exists {
+			if str, ok := val.(string); ok {
+				return []string{str}
+			}
+			if strArray, ok := val.([]interface{}); ok {
+				var result []string
+				for _, item := range strArray {
+					if str, ok := item.(string); ok {
+						result = append(result, str)
+					}
+				}
+				return result
+			}
+		}
+		return []string{}
+	}
+
+	getStringValue := func(key string) string {
+		values := getValue(key)
+		if len(values) > 0 {
+			return values[0]
+		}
+		return ""
+	}
+
 	// Get form values
-	fullName := form.Value["fullName"]
-	email := form.Value["email"]
-	password := form.Value["password"]
-	category := form.Value["category"]
-	yearsExperience := form.Value["yearsExperience"]
-	description := form.Value["description"]
-	serviceType := form.Value["serviceType"]
-	customServiceType := form.Value["customServiceType"]
+	fullName := getStringValue("fullName")
+	email := getStringValue("email")
+	password := getStringValue("password")
+	category := getStringValue("category")
+	yearsExperience := getStringValue("yearsExperience")
+	description := getStringValue("description")
+	serviceType := getStringValue("serviceType")
+	customServiceType := getStringValue("customServiceType")
 
 	// Location fields
-	country := form.Value["country"]
-	district := form.Value["district"]
-	city := form.Value["city"]
-	street := form.Value["street"]
-	postalCode := form.Value["postalCode"]
-	lat := form.Value["lat"]
-	lng := form.Value["lng"]
+	country := getStringValue("country")
+	district := getStringValue("district")
+	city := getStringValue("city")
+	street := getStringValue("street")
+	postalCode := getStringValue("postalCode")
+	lat := getStringValue("lat")
+	lng := getStringValue("lng")
 
 	// Availability fields
-	availableDays := form.Value["availableDays"]
-	availableHours := form.Value["availableHours"]
-	availableWeekdays := form.Value["availableWeekdays"]
-	applyToAllMonths := form.Value["applyToAllMonths"]
+	availableDays := getValue("availableDays")
+	availableHours := getValue("availableHours")
+	availableWeekdays := getValue("availableWeekdays")
+	applyToAllMonths := getStringValue("applyToAllMonths")
+
+	// Handle availability schedule from JSON
+	var availabilitySchedule []map[string]interface{}
+	if jsonData != nil {
+		if schedule, exists := jsonData["availabilitySchedule"]; exists {
+			if scheduleArray, ok := schedule.([]interface{}); ok {
+				for _, item := range scheduleArray {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						availabilitySchedule = append(availabilitySchedule, itemMap)
+					}
+				}
+			}
+		}
+	}
 
 	// Prepare update fields
 	updateFields := bson.M{
@@ -1054,8 +1122,8 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	// Prepare password hashing if needed
-	if len(password) > 0 && password[0] != "" {
-		hashedPassword, err = utils.HashPassword(password[0])
+	if password != "" {
+		hashedPassword, err = utils.HashPassword(password)
 		if err != nil {
 			return ctx.JSON(http.StatusInternalServerError, models.Response{
 				Status:  http.StatusInternalServerError,
@@ -1068,28 +1136,28 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	serviceProviderInfo := bson.M{}
 
 	// Update years of experience
-	if len(yearsExperience) > 0 && yearsExperience[0] != "" {
+	if yearsExperience != "" {
 		// Try to convert to int if it's a string
-		if years, err := strconv.Atoi(yearsExperience[0]); err == nil {
+		if years, err := strconv.Atoi(yearsExperience); err == nil {
 			serviceProviderInfo["yearsExperience"] = years
 		} else {
-			serviceProviderInfo["yearsExperience"] = yearsExperience[0]
+			serviceProviderInfo["yearsExperience"] = yearsExperience
 		}
 	}
 
 	// Update description
-	if len(description) > 0 && description[0] != "" {
-		serviceProviderInfo["description"] = description[0]
+	if description != "" {
+		serviceProviderInfo["description"] = description
 	}
 
 	// Update service type
-	if len(serviceType) > 0 && serviceType[0] != "" {
-		serviceProviderInfo["serviceType"] = serviceType[0]
+	if serviceType != "" {
+		serviceProviderInfo["serviceType"] = serviceType
 	}
 
 	// Update custom service type
-	if len(customServiceType) > 0 && customServiceType[0] != "" {
-		serviceProviderInfo["customServiceType"] = customServiceType[0]
+	if customServiceType != "" {
+		serviceProviderInfo["customServiceType"] = customServiceType
 	}
 
 	// Update certificate images
@@ -1113,49 +1181,159 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	// Update apply to all months
-	if len(applyToAllMonths) > 0 {
-		applyToAllMonthsBool := applyToAllMonths[0] == "true"
+	if applyToAllMonths != "" {
+		applyToAllMonthsBool := applyToAllMonths == "true"
 		serviceProviderInfo["applyToAllMonths"] = applyToAllMonthsBool
+	}
+
+	// Process availability schedule if provided
+	if len(availabilitySchedule) > 0 {
+		var processedDays []string
+		var processedHours []string
+		var processedWeekdays []string
+
+		for i, schedule := range availabilitySchedule {
+			// Validate and extract schedule data
+			date, dateOk := schedule["date"].(string)
+			isWeekday, weekdayOk := schedule["isWeekday"].(bool)
+			timeSlots, slotsOk := schedule["timeSlots"].([]interface{})
+			isAvailable, availableOk := schedule["isAvailable"].(bool)
+
+			if !dateOk || !weekdayOk || !slotsOk || !availableOk {
+				return ctx.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: fmt.Sprintf("Invalid availability schedule format at index %d", i),
+				})
+			}
+
+			// Skip if not available
+			if !isAvailable {
+				continue
+			}
+
+			// Validate date format
+			if isWeekday {
+				// Validate weekday name
+				validWeekdays := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+				isValidWeekday := false
+				for _, weekday := range validWeekdays {
+					if date == weekday {
+						isValidWeekday = true
+						break
+					}
+				}
+				if !isValidWeekday {
+					return ctx.JSON(http.StatusBadRequest, models.Response{
+						Status:  http.StatusBadRequest,
+						Message: fmt.Sprintf("Invalid weekday at index %d. Use: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday", i),
+					})
+				}
+				processedWeekdays = append(processedWeekdays, date)
+			} else {
+				// Validate specific date format (YYYY-MM-DD)
+				if _, err := time.Parse("2006-01-02", date); err != nil {
+					return ctx.JSON(http.StatusBadRequest, models.Response{
+						Status:  http.StatusBadRequest,
+						Message: fmt.Sprintf("Invalid date format at index %d. Use YYYY-MM-DD format for specific dates", i),
+					})
+				}
+				processedDays = append(processedDays, date)
+			}
+
+			// Process time slots
+			for j, slot := range timeSlots {
+				if slotStr, ok := slot.(string); ok && slotStr != "" {
+					// Validate time slot format
+					times := strings.Split(slotStr, "-")
+					if len(times) != 2 {
+						return ctx.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid time slot format at schedule %d, slot %d. Use HH:MM-HH:MM format (e.g., 09:00-17:00)", i, j),
+						})
+					}
+
+					startTime := strings.TrimSpace(times[0])
+					endTime := strings.TrimSpace(times[1])
+
+					// Validate time format
+					if _, err := time.Parse("15:04", startTime); err != nil {
+						return ctx.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid start time format at schedule %d, slot %d. Use HH:MM format (e.g., 09:00)", i, j),
+						})
+					}
+					if _, err := time.Parse("15:04", endTime); err != nil {
+						return ctx.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid end time format at schedule %d, slot %d. Use HH:MM format (e.g., 17:00)", i, j),
+						})
+					}
+
+					// Validate that start time is before end time
+					start, _ := time.Parse("15:04", startTime)
+					end, _ := time.Parse("15:04", endTime)
+					if !start.Before(end) {
+						return ctx.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Start time must be before end time at schedule %d, slot %d", i, j),
+						})
+					}
+
+					processedHours = append(processedHours, slotStr)
+				}
+			}
+		}
+
+		// Update the service provider info with processed data
+		if len(processedDays) > 0 {
+			serviceProviderInfo["availableDays"] = processedDays
+		}
+		if len(processedHours) > 0 {
+			serviceProviderInfo["availableHours"] = processedHours
+		}
+		if len(processedWeekdays) > 0 {
+			serviceProviderInfo["availableWeekdays"] = processedWeekdays
+		}
 	}
 
 	// Prepare location update
 	location := bson.M{}
 	locationUpdated := false
 
-	if len(country) > 0 && country[0] != "" {
-		location["country"] = country[0]
+	if country != "" {
+		location["country"] = country
 		locationUpdated = true
 	}
 
-	if len(district) > 0 && district[0] != "" {
-		location["district"] = district[0]
+	if district != "" {
+		location["district"] = district
 		locationUpdated = true
 	}
 
-	if len(city) > 0 && city[0] != "" {
-		location["city"] = city[0]
+	if city != "" {
+		location["city"] = city
 		locationUpdated = true
 	}
 
-	if len(street) > 0 && street[0] != "" {
-		location["street"] = street[0]
+	if street != "" {
+		location["street"] = street
 		locationUpdated = true
 	}
 
-	if len(postalCode) > 0 && postalCode[0] != "" {
-		location["postalCode"] = postalCode[0]
+	if postalCode != "" {
+		location["postalCode"] = postalCode
 		locationUpdated = true
 	}
 
-	if len(lat) > 0 && lat[0] != "" {
-		if latFloat, err := strconv.ParseFloat(lat[0], 64); err == nil {
+	if lat != "" {
+		if latFloat, err := strconv.ParseFloat(lat, 64); err == nil {
 			location["lat"] = latFloat
 			locationUpdated = true
 		}
 	}
 
-	if len(lng) > 0 && lng[0] != "" {
-		if lngFloat, err := strconv.ParseFloat(lng[0], 64); err == nil {
+	if lng != "" {
+		if lngFloat, err := strconv.ParseFloat(lng, 64); err == nil {
 			location["lng"] = lngFloat
 			locationUpdated = true
 		}
@@ -1178,13 +1356,13 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	// Add only basic user fields to user update (no service provider specific data)
-	if len(fullName) > 0 && fullName[0] != "" {
-		userUpdateFields["fullName"] = fullName[0]
+	if fullName != "" {
+		userUpdateFields["fullName"] = fullName
 	}
-	if len(email) > 0 && email[0] != "" {
-		userUpdateFields["email"] = email[0]
+	if email != "" {
+		userUpdateFields["email"] = email
 	}
-	if len(password) > 0 && password[0] != "" {
+	if password != "" {
 		userUpdateFields["password"] = hashedPassword
 	}
 	if len(logoFiles) > 0 {
@@ -1213,28 +1391,28 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	// Add category to service provider update (root level)
-	if len(category) > 0 && category[0] != "" {
-		serviceProviderUpdateFields["category"] = category[0]
+	if category != "" {
+		serviceProviderUpdateFields["category"] = category
 	}
 
 	// Note: phone, contactPerson, contactPhone are not available in this form
 	// They would need to be added to the form parsing section if needed
 
 	// Add location fields (root level)
-	if len(country) > 0 && country[0] != "" {
-		serviceProviderUpdateFields["country"] = country[0]
+	if country != "" {
+		serviceProviderUpdateFields["country"] = country
 	}
-	if len(district) > 0 && district[0] != "" {
-		serviceProviderUpdateFields["district"] = district[0]
+	if district != "" {
+		serviceProviderUpdateFields["district"] = district
 	}
-	if len(city) > 0 && city[0] != "" {
-		serviceProviderUpdateFields["city"] = city[0]
+	if city != "" {
+		serviceProviderUpdateFields["city"] = city
 	}
-	if len(street) > 0 && street[0] != "" {
-		serviceProviderUpdateFields["street"] = street[0]
+	if street != "" {
+		serviceProviderUpdateFields["street"] = street
 	}
-	if len(postalCode) > 0 && postalCode[0] != "" {
-		serviceProviderUpdateFields["postalCode"] = postalCode[0]
+	if postalCode != "" {
+		serviceProviderUpdateFields["postalCode"] = postalCode
 	}
 
 	// Add logo path
