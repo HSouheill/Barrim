@@ -97,6 +97,13 @@ func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database, serviceProv
 	})
 	log.Println("Registered /toggle-status/:id endpoint")
 
+	// Update description route - service providers can update their description
+	protected.PUT("/description", func(c echo.Context) error {
+		log.Printf("Received request to update service provider description from %s", c.Request().RemoteAddr)
+		return serviceProviderController.UpdateServiceProviderDescription(c)
+	})
+	log.Println("Registered /description endpoint")
+
 	// Public routes (no authentication required)
 	public := serviceProvider.Group("")
 
@@ -119,7 +126,7 @@ func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database, serviceProv
 	log.Println("Registered admin /toggle-status/:id endpoint")
 
 	// ============= Voucher Routes =============
-	
+
 	// Service provider voucher routes
 	protected.GET("/vouchers/available", func(c echo.Context) error {
 		log.Printf("Received request for available vouchers from %s", c.Request().RemoteAddr)

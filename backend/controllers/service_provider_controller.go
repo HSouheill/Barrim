@@ -22,9 +22,9 @@ type ServiceProviderController struct {
 
 // ServiceProviderFullData represents the complete service provider data including related entities
 type ServiceProviderFullData struct {
-	ServiceProvider    models.ServiceProvider               `json:"serviceProvider"`
-	Subscriptions      []models.ServiceProviderSubscription `json:"subscriptions,omitempty"`
-	SubscriptionReqs   []models.ServiceProviderSubscriptionRequest `json:"subscriptionRequests,omitempty"`
+	ServiceProvider  models.ServiceProvider                      `json:"serviceProvider"`
+	Subscriptions    []models.ServiceProviderSubscription        `json:"subscriptions,omitempty"`
+	SubscriptionReqs []models.ServiceProviderSubscriptionRequest `json:"subscriptionRequests,omitempty"`
 }
 
 func NewServiceProviderController(client *mongo.Client) *ServiceProviderController {
@@ -118,7 +118,7 @@ func (spc *ServiceProviderController) GetServiceProviderData(c echo.Context) err
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	claims := middleware.GetUserFromToken(c)
 	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
@@ -204,7 +204,7 @@ func (spc *ServiceProviderController) UploadLogo(c echo.Context) error {
 // ToggleEntityStatus allows service providers to toggle their own status or admins/managers to toggle any service provider status
 func (spc *ServiceProviderController) ToggleEntityStatus(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
-	
+
 	// Get the service provider ID from URL parameter
 	serviceProviderID := c.Param("id")
 	if serviceProviderID == "" {
@@ -261,7 +261,7 @@ func (spc *ServiceProviderController) ToggleEntityStatus(c echo.Context) error {
 				Message: "Failed to fetch manager",
 			})
 		}
-		
+
 		// Check if manager has business_management role
 		hasBusinessManagement := false
 		for _, role := range manager.RolesAccess {
@@ -270,7 +270,7 @@ func (spc *ServiceProviderController) ToggleEntityStatus(c echo.Context) error {
 				break
 			}
 		}
-		
+
 		if !hasBusinessManagement {
 			return c.JSON(http.StatusForbidden, models.Response{
 				Status:  http.StatusForbidden,
@@ -287,7 +287,7 @@ func (spc *ServiceProviderController) ToggleEntityStatus(c echo.Context) error {
 				Message: "Failed to fetch sales manager",
 			})
 		}
-		
+
 		// Check if sales manager has business_management role
 		hasBusinessManagement := false
 		for _, role := range salesManager.RolesAccess {
@@ -296,7 +296,7 @@ func (spc *ServiceProviderController) ToggleEntityStatus(c echo.Context) error {
 				break
 			}
 		}
-		
+
 		if !hasBusinessManagement {
 			return c.JSON(http.StatusForbidden, models.Response{
 				Status:  http.StatusForbidden,
@@ -352,11 +352,107 @@ func (spc *ServiceProviderController) ToggleEntityStatus(c echo.Context) error {
 	}
 
 	// Log the action
-	log.Printf("Service provider status updated: ID=%s, Status=%s, UpdatedBy=%s", 
+	log.Printf("Service provider status updated: ID=%s, Status=%s, UpdatedBy=%s",
 		serviceProviderID, req.Status, claims.UserID)
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
 		Message: fmt.Sprintf("Service provider status updated to '%s' successfully", req.Status),
+	})
+}
+
+// UpdateServiceProviderDescription allows service providers to update their description
+func (spc *ServiceProviderController) UpdateServiceProviderDescription(c echo.Context) error {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		Description string `json:"description"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate description length (optional validation)
+	if len(req.Description) > 1000 {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Description must be less than 1000 characters",
+		})
+	}
+
+	// Find the service provider first to ensure it exists
+	var serviceProvider models.ServiceProvider
+	err = spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&serviceProvider)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find service provider",
+		})
+	}
+
+	// Update the description in the serviceProviderInfo field
+	update := bson.M{
+		"$set": bson.M{
+			"serviceProviderInfo.description": req.Description,
+			"updatedAt":                       time.Now(),
+		},
+	}
+
+	result, err := spc.DB.Collection("serviceProviders").UpdateOne(
+		ctx,
+		bson.M{"_id": serviceProvider.ID},
+		update,
+	)
+
+	if err != nil {
+		log.Printf("Failed to update service provider description: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to update service provider description",
+		})
+	}
+
+	if result.MatchedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Service provider not found",
+		})
+	}
+
+	// Log the action
+	log.Printf("Service provider description updated: ID=%s, UpdatedBy=%s",
+		serviceProvider.ID.Hex(), claims.UserID)
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Service provider description updated successfully",
 	})
 }
