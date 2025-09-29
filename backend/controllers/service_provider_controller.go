@@ -164,13 +164,26 @@ func (spc *ServiceProviderController) UpdateServiceProviderData(c echo.Context) 
 		})
 	}
 
-	var updateData models.ServiceProvider
-	if err := c.Bind(&updateData); err != nil {
+	// Parse request body with enhanced availability structure
+	var requestBody struct {
+		models.ServiceProvider
+		// Enhanced availability structure for specific day-time mapping
+		AvailabilitySchedule []struct {
+			Date        string   `json:"date"`        // YYYY-MM-DD format for specific dates, or weekday name
+			IsWeekday   bool     `json:"isWeekday"`   // true if it's a recurring weekday, false if specific date
+			TimeSlots   []string `json:"timeSlots"`   // Array of time ranges like ["09:00-17:00", "19:00-21:00"]
+			IsAvailable bool     `json:"isAvailable"` // Whether available on this day
+		} `json:"availabilitySchedule,omitempty"`
+	}
+
+	if err := c.Bind(&requestBody); err != nil {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Invalid request data",
 		})
 	}
+
+	updateData := requestBody.ServiceProvider
 
 	// Validate availability data if provided
 	if updateData.ServiceProviderInfo != nil {
@@ -261,6 +274,104 @@ func (spc *ServiceProviderController) UpdateServiceProviderData(c echo.Context) 
 					})
 				}
 			}
+		}
+	}
+
+	// Validate and process availability schedule if provided
+	if requestBody.AvailabilitySchedule != nil {
+		// Process availability schedule into the standard format
+		var availableDays []string
+		var availableHours []string
+		var availableWeekdays []string
+
+		for i, schedule := range requestBody.AvailabilitySchedule {
+			// Validate date format
+			if schedule.IsWeekday {
+				// Validate weekday name
+				validWeekdays := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+				isValidWeekday := false
+				for _, weekday := range validWeekdays {
+					if schedule.Date == weekday {
+						isValidWeekday = true
+						break
+					}
+				}
+				if !isValidWeekday {
+					return c.JSON(http.StatusBadRequest, models.Response{
+						Status:  http.StatusBadRequest,
+						Message: fmt.Sprintf("Invalid weekday at index %d. Use: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday", i),
+					})
+				}
+				availableWeekdays = append(availableWeekdays, schedule.Date)
+			} else {
+				// Validate specific date format (YYYY-MM-DD)
+				if _, err := time.Parse("2006-01-02", schedule.Date); err != nil {
+					return c.JSON(http.StatusBadRequest, models.Response{
+						Status:  http.StatusBadRequest,
+						Message: fmt.Sprintf("Invalid date format at index %d. Use YYYY-MM-DD format for specific dates", i),
+					})
+				}
+				availableDays = append(availableDays, schedule.Date)
+			}
+
+			// Validate time slots
+			for j, timeSlot := range schedule.TimeSlots {
+				if timeSlot != "" {
+					// Split the range into start and end times
+					times := strings.Split(timeSlot, "-")
+					if len(times) != 2 {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid time slot format at schedule %d, slot %d. Use HH:MM-HH:MM format (e.g., 09:00-17:00)", i, j),
+						})
+					}
+
+					startTime := strings.TrimSpace(times[0])
+					endTime := strings.TrimSpace(times[1])
+
+					// Validate time format
+					if _, err := time.Parse("15:04", startTime); err != nil {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid start time format at schedule %d, slot %d. Use HH:MM format (e.g., 09:00)", i, j),
+						})
+					}
+					if _, err := time.Parse("15:04", endTime); err != nil {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid end time format at schedule %d, slot %d. Use HH:MM format (e.g., 17:00)", i, j),
+						})
+					}
+
+					// Validate that start time is before end time
+					start, _ := time.Parse("15:04", startTime)
+					end, _ := time.Parse("15:04", endTime)
+					if !start.Before(end) {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Start time must be before end time at schedule %d, slot %d", i, j),
+						})
+					}
+
+					// Add to available hours
+					availableHours = append(availableHours, timeSlot)
+				}
+			}
+		}
+
+		// Update the ServiceProviderInfo with processed availability data
+		if updateData.ServiceProviderInfo == nil {
+			updateData.ServiceProviderInfo = &models.ServiceProviderInfo{}
+		}
+
+		if len(availableDays) > 0 {
+			updateData.ServiceProviderInfo.AvailableDays = availableDays
+		}
+		if len(availableHours) > 0 {
+			updateData.ServiceProviderInfo.AvailableHours = availableHours
+		}
+		if len(availableWeekdays) > 0 {
+			updateData.ServiceProviderInfo.AvailableWeekdays = availableWeekdays
 		}
 	}
 
