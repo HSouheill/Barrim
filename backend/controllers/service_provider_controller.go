@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/middleware"
@@ -150,6 +151,10 @@ func (spc *ServiceProviderController) GetServiceProviderData(c echo.Context) err
 }
 
 func (spc *ServiceProviderController) UpdateServiceProviderData(c echo.Context) error {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	claims := middleware.GetUserFromToken(c)
 	userID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
@@ -167,13 +172,247 @@ func (spc *ServiceProviderController) UpdateServiceProviderData(c echo.Context) 
 		})
 	}
 
+	// Validate availability data if provided
+	if updateData.ServiceProviderInfo != nil {
+		// Validate available days format (should be YYYY-MM-DD for specific dates)
+		if updateData.ServiceProviderInfo.AvailableDays != nil {
+			for i, day := range updateData.ServiceProviderInfo.AvailableDays {
+				if day != "" {
+					// Check if it's a specific date (YYYY-MM-DD) or weekday
+					if _, err := time.Parse("2006-01-02", day); err != nil {
+						// If not a date, check if it's a valid weekday
+						validWeekdays := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+						isValidWeekday := false
+						for _, weekday := range validWeekdays {
+							if day == weekday {
+								isValidWeekday = true
+								break
+							}
+						}
+						if !isValidWeekday {
+							return c.JSON(http.StatusBadRequest, models.Response{
+								Status:  http.StatusBadRequest,
+								Message: fmt.Sprintf("Invalid day format at index %d. Use YYYY-MM-DD for specific dates or weekday names (Monday, Tuesday, etc.)", i),
+							})
+						}
+					}
+				}
+			}
+		}
+
+		// Validate available hours format (should be HH:MM-HH:MM)
+		if updateData.ServiceProviderInfo.AvailableHours != nil {
+			for i, hourRange := range updateData.ServiceProviderInfo.AvailableHours {
+				if hourRange != "" {
+					// Split the range into start and end times
+					times := strings.Split(hourRange, "-")
+					if len(times) != 2 {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid hour format at index %d. Use HH:MM-HH:MM format (e.g., 09:00-17:00)", i),
+						})
+					}
+
+					startTime := strings.TrimSpace(times[0])
+					endTime := strings.TrimSpace(times[1])
+
+					// Validate time format
+					if _, err := time.Parse("15:04", startTime); err != nil {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid start time format at index %d. Use HH:MM format (e.g., 09:00)", i),
+						})
+					}
+					if _, err := time.Parse("15:04", endTime); err != nil {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Invalid end time format at index %d. Use HH:MM format (e.g., 17:00)", i),
+						})
+					}
+
+					// Validate that start time is before end time
+					start, _ := time.Parse("15:04", startTime)
+					end, _ := time.Parse("15:04", endTime)
+					if !start.Before(end) {
+						return c.JSON(http.StatusBadRequest, models.Response{
+							Status:  http.StatusBadRequest,
+							Message: fmt.Sprintf("Start time must be before end time at index %d", i),
+						})
+					}
+				}
+			}
+		}
+
+		// Validate available weekdays
+		if updateData.ServiceProviderInfo.AvailableWeekdays != nil {
+			validWeekdays := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+			for i, weekday := range updateData.ServiceProviderInfo.AvailableWeekdays {
+				isValid := false
+				for _, validWeekday := range validWeekdays {
+					if weekday == validWeekday {
+						isValid = true
+						break
+					}
+				}
+				if !isValid {
+					return c.JSON(http.StatusBadRequest, models.Response{
+						Status:  http.StatusBadRequest,
+						Message: fmt.Sprintf("Invalid weekday at index %d. Use: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday", i),
+					})
+				}
+			}
+		}
+	}
+
+	// Set updated timestamp
 	updateData.UpdatedAt = time.Now()
-	result, err := spc.DB.Collection("serviceProviders").UpdateOne(
-		context.Background(),
-		bson.M{"userId": userID},
-		bson.M{"$set": updateData},
-	)
+
+	// Find the service provider first to ensure it exists and get current data
+	var existingServiceProvider models.ServiceProvider
+	err = spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&existingServiceProvider)
+
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find service provider",
+		})
+	}
+
+	// Prepare update operation
+	updateFields := bson.M{
+		"updatedAt": updateData.UpdatedAt,
+	}
+
+	// Handle ServiceProviderInfo updates with proper merging
+	if updateData.ServiceProviderInfo != nil {
+		// If existing service provider has no ServiceProviderInfo, create it
+		if existingServiceProvider.ServiceProviderInfo == nil {
+			updateFields["serviceProviderInfo"] = updateData.ServiceProviderInfo
+		} else {
+			// Merge with existing ServiceProviderInfo
+			existingInfo := existingServiceProvider.ServiceProviderInfo
+
+			// Update only the fields that are provided
+			if updateData.ServiceProviderInfo.ServiceType != "" {
+				existingInfo.ServiceType = updateData.ServiceProviderInfo.ServiceType
+			}
+			if updateData.ServiceProviderInfo.CustomServiceType != "" {
+				existingInfo.CustomServiceType = updateData.ServiceProviderInfo.CustomServiceType
+			}
+			if updateData.ServiceProviderInfo.Description != "" {
+				existingInfo.Description = updateData.ServiceProviderInfo.Description
+			}
+			if updateData.ServiceProviderInfo.YearsExperience != nil {
+				existingInfo.YearsExperience = updateData.ServiceProviderInfo.YearsExperience
+			}
+			if updateData.ServiceProviderInfo.ProfilePhoto != "" {
+				existingInfo.ProfilePhoto = updateData.ServiceProviderInfo.ProfilePhoto
+			}
+			if updateData.ServiceProviderInfo.CertificateImages != nil {
+				existingInfo.CertificateImages = updateData.ServiceProviderInfo.CertificateImages
+			}
+			if updateData.ServiceProviderInfo.AvailableHours != nil {
+				existingInfo.AvailableHours = updateData.ServiceProviderInfo.AvailableHours
+			}
+			if updateData.ServiceProviderInfo.AvailableDays != nil {
+				existingInfo.AvailableDays = updateData.ServiceProviderInfo.AvailableDays
+			}
+			if updateData.ServiceProviderInfo.AvailableWeekdays != nil {
+				existingInfo.AvailableWeekdays = updateData.ServiceProviderInfo.AvailableWeekdays
+			}
+			if updateData.ServiceProviderInfo.ApplyToAllMonths {
+				existingInfo.ApplyToAllMonths = updateData.ServiceProviderInfo.ApplyToAllMonths
+			}
+			if updateData.ServiceProviderInfo.Status != "" {
+				existingInfo.Status = updateData.ServiceProviderInfo.Status
+			}
+			if updateData.ServiceProviderInfo.SocialLinks != nil {
+				existingInfo.SocialLinks = updateData.ServiceProviderInfo.SocialLinks
+			}
+
+			updateFields["serviceProviderInfo"] = existingInfo
+		}
+	}
+
+	// Handle other fields
+	if updateData.BusinessName != "" {
+		updateFields["businessName"] = updateData.BusinessName
+	}
+	if updateData.Category != "" {
+		updateFields["category"] = updateData.Category
+	}
+	if updateData.Email != "" {
+		updateFields["email"] = updateData.Email
+	}
+	if updateData.Phone != "" {
+		updateFields["phone"] = updateData.Phone
+	}
+	if updateData.ContactPerson != "" {
+		updateFields["contactPerson"] = updateData.ContactPerson
+	}
+	if updateData.ContactPhone != "" {
+		updateFields["contactPhone"] = updateData.ContactPhone
+	}
+	if updateData.Country != "" {
+		updateFields["country"] = updateData.Country
+	}
+	if updateData.Governorate != "" {
+		updateFields["governorate"] = updateData.Governorate
+	}
+	if updateData.District != "" {
+		updateFields["district"] = updateData.District
+	}
+	if updateData.City != "" {
+		updateFields["city"] = updateData.City
+	}
+	if updateData.LogoURL != "" {
+		updateFields["logo"] = updateData.LogoURL
+	}
+	if updateData.ProfilePicURL != "" {
+		updateFields["profilePicUrl"] = updateData.ProfilePicURL
+	}
+	if updateData.AdditionalPhones != nil {
+		updateFields["additionalPhones"] = updateData.AdditionalPhones
+	}
+	if updateData.AdditionalEmails != nil {
+		updateFields["additionalEmails"] = updateData.AdditionalEmails
+	}
+	if updateData.ContactInfo.Phone != "" || updateData.ContactInfo.WhatsApp != "" || updateData.ContactInfo.Website != "" {
+		updateFields["contactInfo"] = updateData.ContactInfo
+	}
+	if updateData.ReferralCode != "" {
+		updateFields["referralCode"] = updateData.ReferralCode
+	}
+	if updateData.Points != 0 {
+		updateFields["points"] = updateData.Points
+	}
+	if updateData.CommissionPercent != 0 {
+		updateFields["commissionPercent"] = updateData.CommissionPercent
+	}
+	if updateData.Status != "" {
+		updateFields["status"] = updateData.Status
+	}
+
+	// Perform the update
+	result, err := spc.DB.Collection("serviceProviders").UpdateOne(
+		ctx,
+		bson.M{"_id": existingServiceProvider.ID},
+		bson.M{"$set": updateFields},
+	)
+
+	if err != nil {
+		log.Printf("Failed to update service provider data: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to update service provider data",
@@ -186,6 +425,10 @@ func (spc *ServiceProviderController) UpdateServiceProviderData(c echo.Context) 
 			Message: "Service provider not found",
 		})
 	}
+
+	// Log the action
+	log.Printf("Service provider data updated: ID=%s, UpdatedBy=%s",
+		existingServiceProvider.ID.Hex(), claims.UserID)
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
