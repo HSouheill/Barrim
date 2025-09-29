@@ -1023,7 +1023,10 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	var hashedPassword string
 
 	// Handle logo file if present
-	logoFiles := form.File["logo"]
+	var logoFiles []*multipart.FileHeader
+	if form != nil {
+		logoFiles = form.File["logo"]
+	}
 	if len(logoFiles) > 0 {
 		logoFile := logoFiles[0]
 
@@ -1072,7 +1075,10 @@ func (c *ServiceProviderReferralController) UpdateServiceProviderData(ctx echo.C
 	}
 
 	// Handle certificate files if present
-	certificateFiles := form.File["certificates"]
+	var certificateFiles []*multipart.FileHeader
+	if form != nil {
+		certificateFiles = form.File["certificates"]
+	}
 	var certificatePaths []string
 	if len(certificateFiles) > 0 {
 		// Ensure directory exists
