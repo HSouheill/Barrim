@@ -113,6 +113,32 @@ func saveCompanyLogo(logoFile *multipart.FileHeader) (string, error) {
 	return filepath.Join("uploads", "logo", filename), nil
 }
 
+// Helper functions for extracting data from interface{}
+func getStringFromInterface(data map[string]interface{}, key string) string {
+	if val, ok := data[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+func getFloatFromInterface(data map[string]interface{}, key string) float64 {
+	if val, ok := data[key]; ok {
+		switch v := val.(type) {
+		case float64:
+			return v
+		case int:
+			return float64(v)
+		case string:
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				return f
+			}
+		}
+	}
+	return 0
+}
+
 // RandomStringGenerator generates a random string of specified length with given charset
 func RandomStringGenerator(length int, charsetType string) string {
 	rand.Seed(time.Now().UnixNano())
@@ -513,6 +539,68 @@ func (ac *AuthController) SignupWholesalerWithLogo(c echo.Context) error {
 			Status:  http.StatusBadRequest,
 			Message: "Invalid JSON format in userData: " + err.Error(),
 		})
+	}
+
+	// Handle address mapping for wholesaler signup
+	// The frontend sends address data at the root level, but we need to map it to WholesalerData.Address
+	if signupRequest.WholesalerData == nil {
+		signupRequest.WholesalerData = &models.WholesalerSignupData{}
+	}
+
+	// Map wholesaler data from frontend format to WholesalerData
+	// The frontend sends data in the root level, so we need to parse it manually
+	var rawData map[string]interface{}
+	if err := json.Unmarshal([]byte(userData), &rawData); err == nil {
+		// Map basic wholesaler fields
+		signupRequest.WholesalerData.BusinessName = getStringFromInterface(rawData, "business_name")
+		signupRequest.WholesalerData.Category = getStringFromInterface(rawData, "category")
+		signupRequest.WholesalerData.SubCategory = getStringFromInterface(rawData, "sub_category")
+		signupRequest.WholesalerData.ReferralCode = getStringFromInterface(rawData, "referralCode")
+
+		// Map additional phones and emails
+		if additionalPhones, ok := rawData["additionalPhones"].([]interface{}); ok {
+			for _, phone := range additionalPhones {
+				if phoneStr, ok := phone.(string); ok {
+					signupRequest.WholesalerData.Phones = append(signupRequest.WholesalerData.Phones, phoneStr)
+				}
+			}
+		}
+
+		if additionalEmails, ok := rawData["additionalEmails"].([]interface{}); ok {
+			for _, email := range additionalEmails {
+				if emailStr, ok := email.(string); ok {
+					signupRequest.WholesalerData.Emails = append(signupRequest.WholesalerData.Emails, emailStr)
+				}
+			}
+		}
+
+		// Map address data
+		if addressData, ok := rawData["address"].(map[string]interface{}); ok {
+			signupRequest.WholesalerData.Address = models.Address{
+				Country:     getStringFromInterface(addressData, "country"),
+				Governorate: getStringFromInterface(addressData, "governorate"),
+				District:    getStringFromInterface(addressData, "district"),
+				City:        getStringFromInterface(addressData, "city"),
+				Lat:         getFloatFromInterface(addressData, "lat"),
+				Lng:         getFloatFromInterface(addressData, "lng"),
+			}
+		}
+
+		// Map contact info
+		if contactInfoData, ok := rawData["contactInfo"].(map[string]interface{}); ok {
+			signupRequest.WholesalerData.ContactInfo = &models.ContactInfo{
+				WhatsApp: getStringFromInterface(contactInfoData, "whatsapp"),
+				Website:  getStringFromInterface(contactInfoData, "website"),
+			}
+		}
+
+		// Map social media
+		if socialMediaData, ok := rawData["socialMedia"].(map[string]interface{}); ok {
+			signupRequest.WholesalerData.SocialMedia = &models.SocialMedia{
+				Facebook:  getStringFromInterface(socialMediaData, "facebook"),
+				Instagram: getStringFromInterface(socialMediaData, "instagram"),
+			}
+		}
 	}
 
 	// Validate wholesaler specific data
