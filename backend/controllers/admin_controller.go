@@ -3795,6 +3795,419 @@ func (ac *AdminController) ToggleWholesalerBranchStatus(c echo.Context) error {
 	})
 }
 
+// DeleteCompanyBranch allows admin to delete a specific branch of a company
+func (ac *AdminController) DeleteCompanyBranch(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins can delete company branches",
+		})
+	}
+
+	companyID := c.Param("companyId")
+	branchID := c.Param("branchId")
+	if companyID == "" || branchID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Company ID and Branch ID are required",
+		})
+	}
+
+	companyObjID, err := primitive.ObjectIDFromHex(companyID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid company ID format",
+		})
+	}
+
+	branchObjID, err := primitive.ObjectIDFromHex(branchID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid branch ID format",
+		})
+	}
+
+	// Find company and get branch data for file deletion
+	companyCollection := ac.DB.Collection("companies")
+	var company models.Company
+	err = companyCollection.FindOne(ctx, bson.M{"_id": companyObjID}).Decode(&company)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find company",
+		})
+	}
+
+	// Find the branch to get images and videos for deletion
+	var imagesToDelete []string
+	var videosToDelete []string
+	branchFound := false
+	for _, branch := range company.Branches {
+		if branch.ID == branchObjID {
+			imagesToDelete = branch.Images
+			videosToDelete = branch.Videos
+			branchFound = true
+			break
+		}
+	}
+
+	if !branchFound {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Branch not found in company",
+		})
+	}
+
+	// Delete the branch from the company
+	update := bson.M{
+		"$pull": bson.M{
+			"branches": bson.M{"_id": branchObjID},
+		},
+	}
+
+	result, err := companyCollection.UpdateByID(ctx, companyObjID, update)
+	if err != nil {
+		log.Printf("Error deleting branch: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to delete branch: " + err.Error(),
+		})
+	}
+
+	if result.ModifiedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Branch not found or already deleted",
+		})
+	}
+
+	// Delete image files from filesystem
+	var deletionErrors []string
+	for _, imagePath := range imagesToDelete {
+		if err := os.Remove(imagePath); err != nil {
+			log.Printf("Error deleting image file %s: %v", imagePath, err)
+			deletionErrors = append(deletionErrors, imagePath)
+		} else {
+			log.Printf("Successfully deleted image file: %s", imagePath)
+		}
+	}
+
+	// Delete video files from filesystem
+	for _, videoPath := range videosToDelete {
+		if err := os.Remove(videoPath); err != nil {
+			log.Printf("Error deleting video file %s: %v", videoPath, err)
+			deletionErrors = append(deletionErrors, videoPath)
+		} else {
+			log.Printf("Successfully deleted video file: %s", videoPath)
+		}
+	}
+
+	// Log deletion errors but don't fail the request
+	if len(deletionErrors) > 0 {
+		log.Printf("Some media files could not be deleted: %v", deletionErrors)
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branch deleted successfully",
+	})
+}
+
+// GetWholesalerBranches allows admin to get all branches for a specific wholesaler
+func (ac *AdminController) GetWholesalerBranches(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins can access wholesaler branches",
+		})
+	}
+
+	// Get wholesaler ID from URL parameter
+	wholesalerID := c.Param("wholesalerId")
+	if wholesalerID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Wholesaler ID is required",
+		})
+	}
+
+	// Convert string ID to ObjectID
+	wholesalerObjID, err := primitive.ObjectIDFromHex(wholesalerID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid wholesaler ID format",
+		})
+	}
+
+	// Find the wholesaler
+	wholesalerCollection := ac.DB.Collection("wholesalers")
+	var wholesaler models.Wholesaler
+	err = wholesalerCollection.FindOne(ctx, bson.M{"_id": wholesalerObjID}).Decode(&wholesaler)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Wholesaler not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find wholesaler",
+		})
+	}
+
+	// Check if wholesaler has branches
+	if len(wholesaler.Branches) == 0 {
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "No branches found for this wholesaler",
+			Data: map[string]interface{}{
+				"wholesalerId": wholesaler.ID,
+				"businessName": wholesaler.BusinessName,
+				"branches":     []models.Branch{},
+				"branchCount":  0,
+			},
+		})
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Wholesaler branches retrieved successfully",
+		Data: map[string]interface{}{
+			"wholesalerId": wholesaler.ID,
+			"businessName": wholesaler.BusinessName,
+			"branches":     wholesaler.Branches,
+			"branchCount":  len(wholesaler.Branches),
+		},
+	})
+}
+
+// GetAllWholesalerBranches allows admin to get all branches from all wholesalers
+func (ac *AdminController) GetAllWholesalerBranches(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins can access all wholesaler branches",
+		})
+	}
+
+	// Find all wholesalers with branches
+	wholesalerCollection := ac.DB.Collection("wholesalers")
+	cursor, err := wholesalerCollection.Find(ctx, bson.M{"branches": bson.M{"$exists": true, "$ne": []interface{}{}}})
+	if err != nil {
+		log.Printf("Error finding wholesalers with branches: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve wholesalers with branches",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	var wholesalers []models.Wholesaler
+	if err = cursor.All(ctx, &wholesalers); err != nil {
+		log.Printf("Error decoding wholesalers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode wholesalers",
+		})
+	}
+
+	// Prepare response data - flatten all branches with wholesaler reference
+	var allBranches []map[string]interface{}
+	totalBranches := 0
+
+	for _, wholesaler := range wholesalers {
+		for _, branch := range wholesaler.Branches {
+			branchData := map[string]interface{}{
+				"branchId":        branch.ID,
+				"branchName":      branch.Name,
+				"location":        branch.Location,
+				"phone":           branch.Phone,
+				"category":        branch.Category,
+				"subCategory":     branch.SubCategory,
+				"description":     branch.Description,
+				"images":          branch.Images,
+				"videos":          branch.Videos,
+				"status":          branch.Status,
+				"sponsorship":     branch.Sponsorship,
+				"socialMedia":     branch.SocialMedia,
+				"createdAt":       branch.CreatedAt,
+				"updatedAt":       branch.UpdatedAt,
+				"wholesalerId":    wholesaler.ID,
+				"wholesalerName":  wholesaler.BusinessName,
+				"wholesalerPhone": wholesaler.Phone,
+			}
+			allBranches = append(allBranches, branchData)
+			totalBranches++
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "All wholesaler branches retrieved successfully",
+		Data: map[string]interface{}{
+			"branches":                     allBranches,
+			"totalBranches":                totalBranches,
+			"totalWholesalersWithBranches": len(wholesalers),
+		},
+	})
+}
+
+// DeleteWholesalerBranch allows admin to delete a specific branch of a wholesaler
+func (ac *AdminController) DeleteWholesalerBranch(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims.UserType != "admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins can delete wholesaler branches",
+		})
+	}
+
+	wholesalerID := c.Param("wholesalerId")
+	branchID := c.Param("branchId")
+	if wholesalerID == "" || branchID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Wholesaler ID and Branch ID are required",
+		})
+	}
+
+	wholesalerObjID, err := primitive.ObjectIDFromHex(wholesalerID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid wholesaler ID format",
+		})
+	}
+
+	branchObjID, err := primitive.ObjectIDFromHex(branchID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid branch ID format",
+		})
+	}
+
+	// Find wholesaler and get branch data for file deletion
+	wholesalerCollection := ac.DB.Collection("wholesalers")
+	var wholesaler models.Wholesaler
+	err = wholesalerCollection.FindOne(ctx, bson.M{"_id": wholesalerObjID}).Decode(&wholesaler)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Wholesaler not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find wholesaler",
+		})
+	}
+
+	// Find the branch to get images and videos for deletion
+	var imagesToDelete []string
+	var videosToDelete []string
+	branchFound := false
+	for _, branch := range wholesaler.Branches {
+		if branch.ID == branchObjID {
+			imagesToDelete = branch.Images
+			videosToDelete = branch.Videos
+			branchFound = true
+			break
+		}
+	}
+
+	if !branchFound {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Branch not found in wholesaler",
+		})
+	}
+
+	// Delete the branch from the wholesaler
+	update := bson.M{
+		"$pull": bson.M{
+			"branches": bson.M{"_id": branchObjID},
+		},
+	}
+
+	result, err := wholesalerCollection.UpdateByID(ctx, wholesalerObjID, update)
+	if err != nil {
+		log.Printf("Error deleting branch: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to delete branch: " + err.Error(),
+		})
+	}
+
+	if result.ModifiedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Branch not found or already deleted",
+		})
+	}
+
+	// Delete image files from filesystem
+	var deletionErrors []string
+	for _, imagePath := range imagesToDelete {
+		if err := os.Remove(imagePath); err != nil {
+			log.Printf("Error deleting image file %s: %v", imagePath, err)
+			deletionErrors = append(deletionErrors, imagePath)
+		} else {
+			log.Printf("Successfully deleted image file: %s", imagePath)
+		}
+	}
+
+	// Delete video files from filesystem
+	for _, videoPath := range videosToDelete {
+		if err := os.Remove(videoPath); err != nil {
+			log.Printf("Error deleting video file %s: %v", videoPath, err)
+			deletionErrors = append(deletionErrors, videoPath)
+		} else {
+			log.Printf("Successfully deleted video file: %s", videoPath)
+		}
+	}
+
+	// Log deletion errors but don't fail the request
+	if len(deletionErrors) > 0 {
+		log.Printf("Some media files could not be deleted: %v", deletionErrors)
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branch deleted successfully",
+	})
+}
+
 // GetAdminWallet retrieves the admin wallet information including total income from subscriptions
 // and total commissions paid to salespersons and sales managers
 func (ac *AdminController) GetAdminWallet(c echo.Context) error {

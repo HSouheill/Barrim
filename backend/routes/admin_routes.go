@@ -172,6 +172,14 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	protected.PUT("/toggle-status/company/:companyId/branch/:branchId", adminController.ToggleCompanyBranchStatus)
 	protected.PUT("/toggle-status/wholesaler/:wholesalerId/branch/:branchId", adminController.ToggleWholesalerBranchStatus)
 
+	// Branch management routes
+	protected.GET("/wholesaler/:wholesalerId/branches", adminController.GetWholesalerBranches)
+	protected.GET("/wholesalers/branches", adminController.GetAllWholesalerBranches)
+
+	// Delete branch routes
+	protected.DELETE("/company/:companyId/branch/:branchId", adminController.DeleteCompanyBranch)
+	protected.DELETE("/wholesaler/:wholesalerId/branch/:branchId", adminController.DeleteWholesalerBranch)
+
 	// Booking management routes
 	bookingController := controllers.NewBookingController(client, hub)
 	protected.GET("/bookings", bookingController.GetAllBookingsForAdmin)
