@@ -40,9 +40,9 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
 
   // State for fetched data
   List<dynamic> _companies = [];
-  List<dynamic> _branches = []; // New list to store individual branches
+  List<dynamic> _branches = []; // New list to store individual branches (company branches)
   List<dynamic> _serviceProviders = [];
-  List<dynamic> _wholesalers = [];
+  List<dynamic> _wholesalerBranches = []; // New list to store wholesaler branches
   List<dynamic> _users = [];
   bool _isLoadingUsers = false;
   String _usersError = '';
@@ -71,7 +71,6 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       
       final companies = data['companies'] ?? [];
       final serviceProviders = data['serviceProviders'] ?? [];
-      final wholesalers = data['wholesalers'] ?? [];
       final users = data['users'] ?? [];
       
       // Extract branches from companies
@@ -106,13 +105,51 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
         }
       }
       
+      // Fetch wholesaler branches separately
+      List<dynamic> wholesalerBranches = [];
+      try {
+        final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
+        final wholesalerBranchesResult = await adminService.getAllWholesalerBranches();
+        
+        if (wholesalerBranchesResult['success'] && wholesalerBranchesResult['data'] != null) {
+          final branchesData = wholesalerBranchesResult['data']['branches'] ?? [];
+          for (var branch in branchesData) {
+            if (branch != null && branch is Map<String, dynamic>) {
+              // Add wholesaler info to each branch for context
+              wholesalerBranches.add({
+                'id': branch['branchId'],
+                'name': branch['branchName'],
+                'location': branch['location'],
+                'phone': branch['phone'],
+                'category': branch['category'],
+                'subCategory': branch['subCategory'],
+                'description': branch['description'],
+                'images': branch['images'],
+                'videos': branch['videos'],
+                'status': branch['status'],
+                'sponsorship': branch['sponsorship'],
+                'socialMedia': branch['socialMedia'],
+                'createdAt': branch['createdAt'],
+                'updatedAt': branch['updatedAt'],
+                'wholesalerInfo': {
+                  'id': branch['wholesalerId'],
+                  'businessName': branch['wholesalerName'],
+                  'phone': branch['wholesalerPhone'],
+                }
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error fetching wholesaler branches: $e'); // Debug log
+      }
+      
       print('Companies data: $companies'); // Debug log
       print('Companies length: ${companies.length}'); // Debug log
       print('Branches extracted: ${branches.length}'); // Debug log
       print('ServiceProviders data: $serviceProviders'); // Debug log
       print('ServiceProviders length: ${serviceProviders.length}'); // Debug log
-      print('Wholesalers data: $wholesalers'); // Debug log
-      print('Wholesalers length: ${wholesalers.length}'); // Debug log
+      print('Wholesaler branches extracted: ${wholesalerBranches.length}'); // Debug log
       print('Users data: $users'); // Debug log
       print('Users length: ${users.length}'); // Debug log
       
@@ -125,15 +162,15 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       if (serviceProviders.isNotEmpty) {
         print('First serviceProvider structure: ${serviceProviders.first}'); // Debug log
       }
-      if (wholesalers.isNotEmpty) {
-        print('First wholesaler structure: ${wholesalers.first}'); // Debug log
+      if (wholesalerBranches.isNotEmpty) {
+        print('First wholesaler branch structure: ${wholesalerBranches.first}'); // Debug log
       }
       
       setState(() {
         _companies = companies;
-        _branches = branches; // Store extracted branches
+        _branches = branches; // Store extracted company branches
         _serviceProviders = serviceProviders;
-        _wholesalers = wholesalers;
+        _wholesalerBranches = wholesalerBranches; // Store extracted wholesaler branches
         _users = users;
         _isLoadingUsers = false;
       });
@@ -237,7 +274,6 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       
       final companies = data['companies'] ?? [];
       final serviceProviders = data['serviceProviders'] ?? [];
-      final wholesalers = data['wholesalers'] ?? [];
       final users = data['users'] ?? [];
       
       // Extract branches from companies
@@ -272,13 +308,51 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
         }
       }
       
+      // Fetch wholesaler branches separately
+      List<dynamic> wholesalerBranches = [];
+      try {
+        final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
+        final wholesalerBranchesResult = await adminService.getAllWholesalerBranches();
+        
+        if (wholesalerBranchesResult['success'] && wholesalerBranchesResult['data'] != null) {
+          final branchesData = wholesalerBranchesResult['data']['branches'] ?? [];
+          for (var branch in branchesData) {
+            if (branch != null && branch is Map<String, dynamic>) {
+              // Add wholesaler info to each branch for context
+              wholesalerBranches.add({
+                'id': branch['branchId'],
+                'name': branch['branchName'],
+                'location': branch['location'],
+                'phone': branch['phone'],
+                'category': branch['category'],
+                'subCategory': branch['subCategory'],
+                'description': branch['description'],
+                'images': branch['images'],
+                'videos': branch['videos'],
+                'status': branch['status'],
+                'sponsorship': branch['sponsorship'],
+                'socialMedia': branch['socialMedia'],
+                'createdAt': branch['createdAt'],
+                'updatedAt': branch['updatedAt'],
+                'wholesalerInfo': {
+                  'id': branch['wholesalerId'],
+                  'businessName': branch['wholesalerName'],
+                  'phone': branch['wholesalerPhone'],
+                }
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error fetching wholesaler branches: $e'); // Debug log
+      }
+      
       print('Companies data: $companies'); // Debug log
       print('Companies length: ${companies.length}'); // Debug log
       print('Branches extracted: ${branches.length}'); // Debug log
       print('ServiceProviders data: $serviceProviders'); // Debug log
       print('ServiceProviders length: ${serviceProviders.length}'); // Debug log
-      print('Wholesalers data: $wholesalers'); // Debug log
-      print('Wholesalers length: ${wholesalers.length}'); // Debug log
+      print('Wholesaler branches extracted: ${wholesalerBranches.length}'); // Debug log
       print('Users data: $users'); // Debug log
       print('Users length: ${users.length}'); // Debug log
       
@@ -291,15 +365,15 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       if (serviceProviders.isNotEmpty) {
         print('First serviceProvider structure: ${serviceProviders.first}'); // Debug log
       }
-      if (wholesalers.isNotEmpty) {
-        print('First wholesaler structure: ${wholesalers.first}'); // Debug log
+      if (wholesalerBranches.isNotEmpty) {
+        print('First wholesaler branch structure: ${wholesalerBranches.first}'); // Debug log
       }
       
       setState(() {
         _companies = companies;
-        _branches = branches; // Store extracted branches
+        _branches = branches; // Store extracted company branches
         _serviceProviders = serviceProviders;
-        _wholesalers = wholesalers;
+        _wholesalerBranches = wholesalerBranches; // Store extracted wholesaler branches
         _users = users;
       });
     } catch (e) {
@@ -412,6 +486,37 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
     );
   }
 
+  // Method to show delete confirmation dialog for wholesaler branches
+  void _showDeleteWholesalerBranchConfirmation(Map<String, dynamic> branchData, String branchName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Delete Wholesaler Branch'),
+          content: Text('Are you sure you want to delete the wholesaler branch "$branchName"? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                _deleteWholesalerBranch(branchData, branchName); // Proceed with wholesaler branch deletion
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // Method to delete a branch
   Future<void> _deleteBranch(Map<String, dynamic> branchData, String branchName) async {
     print('Delete branch called: ${branchData['id']}'); // Debug log
@@ -425,10 +530,17 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
         return;
       }
       
+      if (branchData['id'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Branch ID is missing'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      
       final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
-      final result = await adminService.deleteEntity(
-        'branch',
-        branchData['id'],
+      final result = await adminService.deleteCompanyBranch(
+        companyId: companyInfo['id'],
+        branchId: branchData['id'],
       );
       
       if (result['success']) {
@@ -443,6 +555,50 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
       }
     } catch (e) {
       print('Error in _deleteBranch: $e'); // Debug log
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // Method to delete a wholesaler branch
+  Future<void> _deleteWholesalerBranch(Map<String, dynamic> branchData, String branchName) async {
+    print('Delete wholesaler branch called: ${branchData['id']}'); // Debug log
+    try {
+      final wholesalerInfo = branchData['wholesalerInfo'];
+      
+      if (wholesalerInfo == null || wholesalerInfo['id'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Wholesaler information missing'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      
+      if (branchData['id'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Branch ID is missing'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      
+      final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
+      final result = await adminService.deleteWholesalerBranch(
+        wholesalerId: wholesalerInfo['id'],
+        branchId: branchData['id'],
+      );
+      
+      if (result['success']) {
+        await _refreshDataSilently();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Wholesaler branch deleted successfully'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete wholesaler branch: ${result['message']}'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      print('Error in _deleteWholesalerBranch: $e'); // Debug log
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
       );
@@ -510,24 +666,17 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
     }).toList();
   }
 
-  List<dynamic> getFilteredWholesalers() {
-    if (selectedTab == 'All') return _wholesalers.where((w) => w != null).toList();
+  List<dynamic> getFilteredWholesalerBranches() {
+    if (selectedTab == 'All') return _wholesalerBranches.where((b) => b != null).toList();
     
-    return _wholesalers.where((w) {
-      if (w == null) return false;
+    return _wholesalerBranches.where((b) {
+      if (b == null) return false;
       
       try {
-        // Wholesalers now come in enriched format
-        String? status;
-        if (w is Map<String, dynamic>) {
-          if (w['wholesaler'] != null && w['wholesaler'] is Map<String, dynamic>) {
-            status = w['wholesaler']['status'];
-          } else if (w['status'] != null) {
-            status = w['status'];
-          }
-        }
-        status ??= 'active';
+        // Wholesaler branches have their own status
+        final status = b['status'] ?? 'active';
         
+        // Apply filter based on selected tab
         if (selectedTab == 'Active') {
           return status == 'active';
         } else if (selectedTab == 'Inactive') {
@@ -535,7 +684,7 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
         }
         return false;
       } catch (e) {
-        print('Error filtering wholesaler: $e');
+        print('Error filtering wholesaler branch: $e');
         return false;
       }
     }).toList();
@@ -748,7 +897,7 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                         ),
                         const SizedBox(width: 16),
                         const Text(
-                          'List of Users',
+                          'Business Management',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -825,19 +974,19 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                           builder: (context) {
                                             final filteredBranches = getFilteredBranches();
                                             final filteredServiceProviders = getFilteredServiceProviders();
-                                            final filteredWholesalers = getFilteredWholesalers();
+                                            final filteredWholesalerBranches = getFilteredWholesalerBranches();
                                             final filteredUsers = getFilteredUsers();
                                             
-                                            print('Filtered branches length: ${filteredBranches.length}'); // Debug log
+                                            print('Filtered company branches length: ${filteredBranches.length}'); // Debug log
                                             print('Filtered service providers length: ${filteredServiceProviders.length}'); // Debug log
-                                            print('Filtered wholesalers length: ${filteredWholesalers.length}'); // Debug log
+                                            print('Filtered wholesaler branches length: ${filteredWholesalerBranches.length}'); // Debug log
                                             print('Filtered users length: ${filteredUsers.length}'); // Debug log
                                             print('Selected tab: $selectedTab'); // Debug log
                                             
                                             final allEntities = [
                                               ...filteredBranches.map((b) => {'type': 'branch', 'data': b}),
                                               ...filteredServiceProviders.map((sp) => {'type': 'serviceProvider', 'data': sp}),
-                                              ...filteredWholesalers.map((w) => {'type': 'wholesaler', 'data': w}),
+                                              ...filteredWholesalerBranches.map((wb) => {'type': 'wholesalerBranch', 'data': wb}),
                                             ];
                                             
                                             if (allEntities.isEmpty) {
@@ -906,22 +1055,22 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                                         print('  ServiceProvider from Map - ID: $entityId, Name: $name, Status: $currentStatus'); // Debug log
                                                       }
                                                     }
-                                                  } else if (type == 'wholesaler') {
-                                                    // Wholesalers now come in enriched format
+                                                  } else if (type == 'wholesalerBranch') {
+                                                    // Handle wholesaler branch data with wholesaler context
                                                     if (data is Map<String, dynamic>) {
-                                                      Map<String, dynamic>? wholesalerData;
-                                                      if (data['wholesaler'] != null && data['wholesaler'] is Map<String, dynamic>) {
-                                                        wholesalerData = data['wholesaler'];
-                                                      } else if (data['businessName'] != null) {
-                                                        wholesalerData = data;
+                                                      final wholesalerInfo = data['wholesalerInfo'];
+                                                      name = data['name'] ?? 'N/A';
+                                                      address = data['location']?['city'] ?? data['location']?['street'] ?? 'N/A';
+                                                      entityId = data['id'];
+                                                      currentStatus = data['status'] ?? 'active';
+                                                      entityType = 'wholesalerBranch';
+                                                      
+                                                      // Add wholesaler name to branch name for context
+                                                      if (wholesalerInfo != null && wholesalerInfo['businessName'] != null) {
+                                                        name = '${wholesalerInfo['businessName']} - $name';
                                                       }
                                                       
-                                                      if (wholesalerData != null) {
-                                                        name = wholesalerData['businessName'] ?? wholesalerData['name'] ?? 'N/A';
-                                                        address = wholesalerData['contactInfo']?['address']?['city'] ?? 'N/A';
-                                                        entityId = wholesalerData['id'];
-                                                        currentStatus = wholesalerData['status'] ?? 'active';
-                                                      }
+                                                      print('  Wholesaler Branch - ID: $entityId, Name: $name, Status: $currentStatus'); // Debug log
                                                     }
                                                   } else if (type == 'user') {
                                                     // Users come as raw User objects
@@ -957,9 +1106,11 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                                             : null,
                                                     onDelete: (type == 'branch' && entityId != null)
                                                         ? () => _showDeleteBranchConfirmation(data, name)
-                                                        : (entityId != null)
-                                                            ? () => _showDeleteConfirmation(entityId!, name, entityType)
-                                                            : null,
+                                                        : (type == 'wholesalerBranch' && entityId != null)
+                                                            ? () => _showDeleteWholesalerBranchConfirmation(data, name)
+                                                            : (entityId != null)
+                                                                ? () => _showDeleteConfirmation(entityId!, name, entityType)
+                                                                : null,
                                                   );
                                                 } catch (e) {
                                                   print('Error building entity card: $e');
@@ -1373,7 +1524,7 @@ class _RestaurantCardState extends State<RestaurantCard> {
         return const Color(0xFF7C3AED); // Purple
       case 'serviceprovider':
         return const Color(0xFFDC2626); // Red
-      case 'wholesaler':
+      case 'wholesalerbranch':
         return const Color(0xFF059669); // Green
       default:
         return const Color(0xFF6B7280); // Gray
@@ -1388,8 +1539,8 @@ class _RestaurantCardState extends State<RestaurantCard> {
         return 'Branch';
       case 'serviceprovider':
         return 'Service Provider';
-      case 'wholesaler':
-        return 'Wholesaler';
+      case 'wholesalerbranch':
+        return 'Wholesaler Branch';
       default:
         return 'Unknown';
     }
@@ -1407,7 +1558,7 @@ class _RestaurantCardState extends State<RestaurantCard> {
               width: 24,
               height: 24,
               colorFilter: ColorFilter.mode(
-                Colors.green.shade700,
+                Colors.purple.shade700,
                 BlendMode.srcIn,
               ),
             ),
@@ -1424,13 +1575,13 @@ class _RestaurantCardState extends State<RestaurantCard> {
             ),
           ),
         );
-      case 'wholesaler':
+      case 'wholesalerbranch':
         return Container(
-          color: Colors.blue.shade100,
+          color: Colors.green.shade100,
           child: Center(
             child: Icon(
-              Icons.business,
-              color: Colors.blue.shade700,
+              Icons.store,
+              color: Colors.green.shade700,
               size: 20,
             ),
           ),

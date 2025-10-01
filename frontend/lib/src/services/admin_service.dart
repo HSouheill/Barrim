@@ -474,4 +474,72 @@ class AdminService {
       };
     }
   }
+
+  // Delete Company Branch
+  Future<Map<String, dynamic>> deleteCompanyBranch({
+    required String companyId,
+    required String branchId,
+  }) async {
+    final url = '$secureBaseUrl/api/admin/company/$companyId/branch/$branchId';
+
+    final response = await _makeRequest(
+      'delete',
+      url,
+      headers: await _getHeaders(),
+    );
+
+    final responseData = jsonDecode(response.body);
+
+    return {
+      'success': response.statusCode == 200,
+      'message': responseData['message'] ?? 'Failed to delete branch',
+      'statusCode': response.statusCode,
+    };
+  }
+
+  // Get All Wholesaler Branches
+  Future<Map<String, dynamic>> getAllWholesalerBranches() async {
+    final response = await _makeRequest(
+      'get',
+      '$secureBaseUrl/api/admin/wholesalers/branches',
+      headers: await _getHeaders(),
+    );
+
+    final responseData = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return {
+        'success': true,
+        'message': responseData['message'],
+        'data': responseData['data'],
+      };
+    } else {
+      return {
+        'success': false,
+        'message': responseData['message'] ?? 'Failed to fetch wholesaler branches',
+      };
+    }
+  }
+
+  // Delete Wholesaler Branch
+  Future<Map<String, dynamic>> deleteWholesalerBranch({
+    required String wholesalerId,
+    required String branchId,
+  }) async {
+    final url = '$secureBaseUrl/api/admin/wholesaler/$wholesalerId/branch/$branchId';
+
+    final response = await _makeRequest(
+      'delete',
+      url,
+      headers: await _getHeaders(),
+    );
+
+    final responseData = jsonDecode(response.body);
+
+    return {
+      'success': response.statusCode == 200,
+      'message': responseData['message'] ?? 'Failed to delete wholesaler branch',
+      'statusCode': response.statusCode,
+    };
+  }
 }
