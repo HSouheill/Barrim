@@ -851,6 +851,47 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
     }
   }
 
+  // Method to toggle wholesaler branch status
+  Future<bool> _toggleWholesalerBranchStatus(Map<String, dynamic> branchData, String currentStatus) async {
+    print('Toggle wholesaler branch status: branchId=${branchData['id']}, currentStatus=$currentStatus');
+    try {
+      final newStatus = currentStatus == 'active' ? 'inactive' : 'active';
+      final wholesalerInfo = branchData['wholesalerInfo'];
+      
+      if (wholesalerInfo == null || wholesalerInfo['id'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Wholesaler information missing'), backgroundColor: Colors.red),
+        );
+        return false;
+      }
+      
+      final adminService = AdminService(baseUrl: ApiService.secureBaseUrl);
+      final result = await adminService.toggleWholesalerBranchStatus(
+        wholesalerId: wholesalerInfo['id'],
+        branchId: branchData['id'],
+        status: newStatus,
+      );
+      
+      if (result['success']) {
+        await _refreshDataSilently();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Wholesaler branch status updated successfully'), backgroundColor: Colors.green),
+        );
+        return true;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update wholesaler branch status: ${result['message']}'), backgroundColor: Colors.red),
+        );
+        return false;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+      );
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -1101,9 +1142,11 @@ class _RestaurantListScreenState extends State<RestaurantListScreen> {
                                                     userType: type, // Pass the entity type as userType
                                                     onStatusToggle: (type == 'branch' && entityId != null && currentStatus != null)
                                                         ? () => _toggleBranchStatus(data, currentStatus!)
-                                                        : (entityId != null && currentStatus != null)
-                                                            ? () => toggleEntityStatus(entityType, entityId!, currentStatus!)
-                                                            : null,
+                                                        : (type == 'wholesalerBranch' && entityId != null && currentStatus != null)
+                                                            ? () => _toggleWholesalerBranchStatus(data, currentStatus!)
+                                                            : (entityId != null && currentStatus != null)
+                                                                ? () => toggleEntityStatus(entityType, entityId!, currentStatus!)
+                                                                : null,
                                                     onDelete: (type == 'branch' && entityId != null)
                                                         ? () => _showDeleteBranchConfirmation(data, name)
                                                         : (type == 'wholesalerBranch' && entityId != null)

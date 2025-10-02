@@ -348,6 +348,49 @@ class SessionManager {
     return await _attemptTokenRefresh();
   }
 
+  // Enhanced retry method with better error handling
+  Future<bool> retrySessionRefresh({int maxRetries = 3}) async {
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('Session refresh attempt $attempt/$maxRetries');
+        
+        // Check if we have a refresh token
+        final refreshToken = await _storage.read(key: _refreshTokenKey);
+        if (refreshToken == null) {
+          print('No refresh token available for retry');
+          return false;
+        }
+        
+        // Attempt refresh
+        final success = await _attemptTokenRefresh();
+        
+        if (success) {
+          print('Session refresh successful on attempt $attempt');
+          return true;
+        }
+        
+        // If not the last attempt, wait before retrying
+        if (attempt < maxRetries) {
+          final delay = Duration(seconds: attempt * 2); // Exponential backoff
+          print('Refresh failed, retrying in ${delay.inSeconds} seconds...');
+          await Future.delayed(delay);
+        }
+      } catch (e) {
+        print('Error during retry attempt $attempt: $e');
+        if (attempt == maxRetries) {
+          // Last attempt failed
+          if (!_sessionErrorController.isClosed) {
+            _sessionErrorController.add('Session refresh failed after $maxRetries attempts. Please login again.');
+          }
+          return false;
+        }
+      }
+    }
+    
+    print('All retry attempts failed');
+    return false;
+  }
+
   // Check if session is valid
   Future<bool> isSessionValid() async {
     try {

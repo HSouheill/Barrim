@@ -21,6 +21,7 @@ class _SessionWrapperState extends State<SessionWrapper> {
   final SessionManager _sessionManager = SessionManager();
   bool _isSessionValid = true;
   String? _sessionError;
+  bool _isRetrying = false;
 
   @override
   void initState() {
@@ -137,6 +138,21 @@ class _SessionWrapperState extends State<SessionWrapper> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
+                _attemptSessionRefresh();
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Retry'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
                 _navigateToLogin();
               },
               style: TextButton.styleFrom(
@@ -162,6 +178,68 @@ class _SessionWrapperState extends State<SessionWrapper> {
       _isSessionValid = false;
       _sessionError = null;
     });
+  }
+
+  Future<void> _attemptSessionRefresh() async {
+    try {
+      // Show loading state
+      setState(() {
+        _sessionError = 'Attempting to refresh session...';
+      });
+
+      // Use the enhanced retry method with multiple attempts
+      final refreshSuccess = await _sessionManager.retrySessionRefresh(maxRetries: 3);
+      
+      if (refreshSuccess) {
+        // Check if session is now valid
+        final isValid = await _sessionManager.isSessionValid();
+        
+        if (isValid) {
+          setState(() {
+            _isSessionValid = true;
+            _sessionError = null;
+          });
+          
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Session refreshed successfully!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          setState(() {
+            _isSessionValid = false;
+            _sessionError = 'Session refresh failed. Please login again.';
+          });
+        }
+      } else {
+        setState(() {
+          _isSessionValid = false;
+          _sessionError = 'Unable to refresh session after multiple attempts. Please login again.';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error during session refresh: $e');
+      setState(() {
+        _isSessionValid = false;
+        _sessionError = 'Session refresh failed: ${e.toString()}';
+      });
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to refresh session: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -198,37 +276,68 @@ class _SessionWrapperState extends State<SessionWrapper> {
   Widget _buildSessionExpiredScreen() {
     return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Session Expired',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Colors.red,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _sessionError ?? 'Please log in again to continue.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
+              const SizedBox(height: 16),
+              const Text(
+                'Session Expired',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _navigateToLogin,
-              child: const Text('Go to Login'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                _sessionError ?? 'Your session has expired. Please try to refresh or log in again.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _attemptSessionRefresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2079C2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  OutlinedButton.icon(
+                    onPressed: _navigateToLogin,
+                    icon: const Icon(Icons.login),
+                    label: const Text('Login Again'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2079C2),
+                      side: const BorderSide(color: Color(0xFF2079C2)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

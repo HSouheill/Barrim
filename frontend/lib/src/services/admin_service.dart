@@ -542,4 +542,28 @@ class AdminService {
       'statusCode': response.statusCode,
     };
   }
+
+  // Toggle Wholesaler Branch Status
+  Future<Map<String, dynamic>> toggleWholesalerBranchStatus({
+    required String wholesalerId,
+    required String branchId,
+    required String status,
+  }) async {
+    final url = '$secureBaseUrl/api/admin/toggle-status/wholesaler/$wholesalerId/branch/$branchId';
+
+    final response = await _makeRequest(
+      'put',
+      url,
+      headers: await _getHeaders(),
+      body: jsonEncode({'status': status}),
+    );
+
+    final responseData = jsonDecode(response.body);
+
+    return {
+      'success': response.statusCode == 200,
+      'message': responseData['message'] ?? 'Failed to update wholesaler branch status',
+      'statusCode': response.statusCode,
+    };
+  }
 }
