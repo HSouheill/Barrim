@@ -1,15 +1,17 @@
 class AdminWallet {
-  final double totalIncome;
-  final double totalCommissions;
-  final double netProfit;
+  final double? totalIncome;
+  final double? totalAdminWallet;
+  final double? totalCommissions;
+  final double? netProfit;
   final Map<String, dynamic> incomeBreakdown;
   final Map<String, dynamic> commissionBreakdown;
   final DateTime lastUpdated;
 
   AdminWallet({
-    required this.totalIncome,
-    required this.totalCommissions,
-    required this.netProfit,
+    this.totalIncome,
+    this.totalAdminWallet,
+    this.totalCommissions,
+    this.netProfit,
     required this.incomeBreakdown,
     required this.commissionBreakdown,
     required this.lastUpdated,
@@ -17,9 +19,10 @@ class AdminWallet {
 
   factory AdminWallet.fromJson(Map<String, dynamic> json) {
     return AdminWallet(
-      totalIncome: (json['totalIncome'] ?? 0).toDouble(),
-      totalCommissions: (json['totalCommissions'] ?? 0).toDouble(),
-      netProfit: (json['netProfit'] ?? 0).toDouble(),
+      totalIncome: _safeDouble(json['totalIncome']),
+      totalAdminWallet: _safeDouble(json['totalAdminWallet']),
+      totalCommissions: _safeDouble(json['totalCommissions']),
+      netProfit: _safeDouble(json['netProfit']),
       incomeBreakdown: json['incomeBreakdown'] ?? {},
       commissionBreakdown: json['commissionBreakdown'] ?? {},
       lastUpdated: json['lastUpdated'] != null
@@ -28,9 +31,18 @@ class AdminWallet {
     );
   }
 
+  static double? _safeDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'totalIncome': totalIncome,
+      'totalAdminWallet': totalAdminWallet,
       'totalCommissions': totalCommissions,
       'netProfit': netProfit,
       'incomeBreakdown': incomeBreakdown,

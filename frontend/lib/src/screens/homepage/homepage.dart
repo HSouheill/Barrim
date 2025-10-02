@@ -852,13 +852,16 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildTabs() {
+    // Count only regular users (userType == "user")
+    final regularUsersCount = _allUsers.where((user) => user.userType.toLowerCase() == 'user').length;
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _buildTab('Users', 0, _allUsers.length.toString()),
+            _buildTab('Users', 0, regularUsersCount.toString()),
             const SizedBox(width: 12),
             _buildTab('Companies', 1, _allCompanies.length.toString()),
             const SizedBox(width: 12),

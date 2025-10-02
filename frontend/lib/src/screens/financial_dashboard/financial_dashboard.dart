@@ -1802,7 +1802,7 @@ class _RequireApprovalPageState extends State<RequireApprovalPage> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: Text(
-                            'Require Approval',
+                            'Subsriptions Requests',
                             style: TextStyle(
                               fontSize: isSmallScreen ? 18 : 22, 
                               fontWeight: FontWeight.bold,

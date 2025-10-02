@@ -168,7 +168,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
   Widget _buildSummaryCards() {
     return Column(
       children: [
-        // Total Income Card
+        // Total Admin Wallet Card
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
@@ -200,7 +200,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
-                      Icons.trending_up,
+                      Icons.account_balance_wallet,
                       color: Colors.white,
                       size: 24,
                     ),
@@ -208,7 +208,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
                   const SizedBox(width: 16),
                   const Expanded(
                     child: Text(
-                      'Total Income',
+                      'Total Admin Wallet',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -220,7 +220,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                '\$${NumberFormat('#,##0.00').format(_walletData!.totalIncome)}',
+                '\$${NumberFormat('#,##0.00').format(_walletData!.totalAdminWallet ?? 0)}',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 32,
@@ -364,6 +364,121 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 16),
+        
+        // Admin Wallet Breakdown Card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Admin Wallet Breakdown',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0D1C4B),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildWalletBreakdownItem(
+                'Total Income',
+                _walletData!.totalIncome ?? 0,
+                const Color(0xFF4CAF50),
+                Icons.trending_up,
+              ),
+              const SizedBox(height: 12),
+              _buildWalletBreakdownItem(
+                'Admin Wallet Income',
+                (_walletData!.totalAdminWallet ?? 0) - (_walletData!.totalIncome ?? 0),
+                const Color(0xFF2196F3),
+                Icons.account_balance,
+              ),
+              const SizedBox(height: 12),
+              _buildWalletBreakdownItem(
+                'Total Commissions',
+                -(_walletData!.totalCommissions ?? 0),
+                const Color(0xFFFF9800),
+                Icons.payments,
+                isNegative: true,
+              ),
+              const SizedBox(height: 16),
+              Divider(color: Colors.grey.shade300),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total Admin Wallet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0D1C4B),
+                    ),
+                  ),
+                  Text(
+                    '\$${NumberFormat('#,##0.00').format(_walletData!.totalAdminWallet ?? 0)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF4CAF50),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWalletBreakdownItem(String title, double amount, Color color, IconData icon, {bool isNegative = false}) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: color,
+            size: 16,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF0D1C4B),
+            ),
+          ),
+        ),
+        Text(
+          '${isNegative ? '' : '+'}\$${NumberFormat('#,##0.00').format(amount.abs())}',
+          style: TextStyle(
+            fontSize: 14,
+            color: isNegative ? Colors.red.shade600 : color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -633,7 +748,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: _walletData!.totalCommissions > 0 ? _walletData!.totalCommissions * 1.2 : 100,
+        maxY: (_walletData!.totalCommissions ?? 0) > 0 ? (_walletData!.totalCommissions ?? 0) * 1.2 : 100,
         barTouchData: BarTouchData(enabled: false),
         titlesData: FlTitlesData(
           show: true,
@@ -700,7 +815,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
         ],
         gridData: FlGridData(
           show: true,
-          horizontalInterval: _walletData!.totalCommissions > 0 ? _walletData!.totalCommissions / 4 : 25,
+          horizontalInterval: (_walletData!.totalCommissions ?? 0) > 0 ? (_walletData!.totalCommissions ?? 0) / 4 : 25,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: Colors.grey.shade200,
