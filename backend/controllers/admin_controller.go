@@ -4260,24 +4260,30 @@ func (ac *AdminController) GetAdminWallet(c echo.Context) error {
 		// Continue without breakdown rather than failing completely
 	}
 
-	// Get withdrawal income from admin wallet collection
+	// Get income from admin wallet collection transactions
+	var adminWalletIncome float64
 	var withdrawalIncome float64
-	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{"type": "withdrawal_income"})
+	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{})
 	if err == nil {
 		defer cursor.Close(ctx)
 		for cursor.Next(ctx) {
 			var transaction models.AdminWallet
 			if err := cursor.Decode(&transaction); err == nil {
-				withdrawalIncome += transaction.Amount
+				if transaction.Type == "subscription_income" {
+					adminWalletIncome += transaction.Amount
+				} else if transaction.Type == "withdrawal_income" {
+					withdrawalIncome += transaction.Amount
+				}
 			}
 		}
 	}
 
-	// Calculate total admin wallet balance including withdrawal income
-	totalAdminWallet := totalIncome + withdrawalIncome - totalCommissions
+	// Calculate total admin wallet balance including admin wallet transactions and withdrawal income
+	totalAdminWallet := totalIncome + adminWalletIncome + withdrawalIncome - totalCommissions
 
 	walletData := map[string]interface{}{
 		"totalIncome":         totalIncome,
+		"adminWalletIncome":   adminWalletIncome,
 		"totalCommissions":    totalCommissions,
 		"withdrawalIncome":    withdrawalIncome,
 		"totalAdminWallet":    totalAdminWallet,
