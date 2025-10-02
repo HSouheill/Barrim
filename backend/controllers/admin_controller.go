@@ -4263,12 +4263,17 @@ func (ac *AdminController) GetAdminWallet(c echo.Context) error {
 	// Get income from admin wallet collection transactions
 	var adminWalletIncome float64
 	var withdrawalIncome float64
+	var allAdminWalletIncome float64 // Total income from all admin wallet transactions
 	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{})
 	if err == nil {
 		defer cursor.Close(ctx)
 		for cursor.Next(ctx) {
 			var transaction models.AdminWallet
 			if err := cursor.Decode(&transaction); err == nil {
+				// Add all income types to total
+				allAdminWalletIncome += transaction.Amount
+
+				// Categorize by type
 				if transaction.Type == "subscription_income" {
 					adminWalletIncome += transaction.Amount
 				} else if transaction.Type == "withdrawal_income" {
@@ -4282,15 +4287,16 @@ func (ac *AdminController) GetAdminWallet(c echo.Context) error {
 	totalAdminWallet := totalIncome + adminWalletIncome + withdrawalIncome - totalCommissions
 
 	walletData := map[string]interface{}{
-		"totalIncome":         totalIncome,
-		"adminWalletIncome":   adminWalletIncome,
-		"totalCommissions":    totalCommissions,
-		"withdrawalIncome":    withdrawalIncome,
-		"totalAdminWallet":    totalAdminWallet,
-		"netProfit":           netProfit,
-		"incomeBreakdown":     incomeBreakdown,
-		"commissionBreakdown": commissionBreakdown,
-		"lastUpdated":         time.Now(),
+		"totalIncome":          totalIncome,
+		"adminWalletIncome":    adminWalletIncome,
+		"allAdminWalletIncome": allAdminWalletIncome,
+		"totalCommissions":     totalCommissions,
+		"withdrawalIncome":     withdrawalIncome,
+		"totalAdminWallet":     totalAdminWallet,
+		"netProfit":            netProfit,
+		"incomeBreakdown":      incomeBreakdown,
+		"commissionBreakdown":  commissionBreakdown,
+		"lastUpdated":          time.Now(),
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
@@ -4577,7 +4583,7 @@ func (ac *AdminController) getIncomeBreakdownByType(ctx context.Context) (map[st
 		}
 	}
 
-	// Service provider subscriptions
+	// Service provider subscriptions (main service provider subscriptions)
 	serviceProviderIncome, err := ac.getServiceProviderSubscriptionIncome(ctx)
 	if err != nil {
 		breakdown["serviceProvider"] = map[string]interface{}{
@@ -4588,6 +4594,19 @@ func (ac *AdminController) getIncomeBreakdownByType(ctx context.Context) (map[st
 		breakdown["serviceProvider"] = map[string]interface{}{
 			"income": serviceProviderIncome,
 			"error":  nil,
+		}
+	}
+
+	// Add service provider branch subscription income from admin_wallet
+	serviceProviderBranchIncome, err := ac.getServiceProviderBranchSubscriptionIncome(ctx)
+	if err != nil {
+		log.Printf("Error getting service provider branch subscription income: %v", err)
+	} else {
+		// Add branch income to service provider income
+		if currentServiceProvider, ok := breakdown["serviceProvider"].(map[string]interface{}); ok {
+			if currentIncome, ok := currentServiceProvider["income"].(float64); ok {
+				currentServiceProvider["income"] = currentIncome + serviceProviderBranchIncome
+			}
 		}
 	}
 
@@ -6223,6 +6242,29 @@ func (ac *AdminController) getWholesalerBranchSubscriptionIncome(ctx context.Con
 	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{
 		"type":       "subscription_income",
 		"entityType": "wholesaler_branch_subscription",
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var transaction models.AdminWallet
+		if err := cursor.Decode(&transaction); err != nil {
+			continue
+		}
+		totalIncome += transaction.Amount
+	}
+
+	return totalIncome, nil
+}
+
+// getServiceProviderBranchSubscriptionIncome gets income from service provider branch subscriptions in admin_wallet
+func (ac *AdminController) getServiceProviderBranchSubscriptionIncome(ctx context.Context) (float64, error) {
+	var totalIncome float64
+	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{
+		"type":       "subscription_income",
+		"entityType": "service_provider_branch_subscription",
 	})
 	if err != nil {
 		return 0, err
