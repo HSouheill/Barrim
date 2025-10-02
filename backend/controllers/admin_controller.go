@@ -4523,7 +4523,7 @@ func (ac *AdminController) calculateTotalCommissions(ctx context.Context) (float
 func (ac *AdminController) getIncomeBreakdownByType(ctx context.Context) (map[string]interface{}, error) {
 	breakdown := make(map[string]interface{})
 
-	// Company subscriptions
+	// Company subscriptions (main company subscriptions)
 	companyIncome, err := ac.getCompanySubscriptionIncome(ctx)
 	if err != nil {
 		breakdown["company"] = map[string]interface{}{
@@ -4537,7 +4537,20 @@ func (ac *AdminController) getIncomeBreakdownByType(ctx context.Context) (map[st
 		}
 	}
 
-	// Wholesaler subscriptions
+	// Add company branch subscription income from admin_wallet
+	companyBranchIncome, err := ac.getCompanyBranchSubscriptionIncome(ctx)
+	if err != nil {
+		log.Printf("Error getting company branch subscription income: %v", err)
+	} else {
+		// Add branch income to company income
+		if currentCompany, ok := breakdown["company"].(map[string]interface{}); ok {
+			if currentIncome, ok := currentCompany["income"].(float64); ok {
+				currentCompany["income"] = currentIncome + companyBranchIncome
+			}
+		}
+	}
+
+	// Wholesaler subscriptions (main wholesaler subscriptions)
 	wholesalerIncome, err := ac.getWholesalerSubscriptionIncome(ctx)
 	if err != nil {
 		breakdown["wholesaler"] = map[string]interface{}{
@@ -4548,6 +4561,19 @@ func (ac *AdminController) getIncomeBreakdownByType(ctx context.Context) (map[st
 		breakdown["wholesaler"] = map[string]interface{}{
 			"income": wholesalerIncome,
 			"error":  nil,
+		}
+	}
+
+	// Add wholesaler branch subscription income from admin_wallet
+	wholesalerBranchIncome, err := ac.getWholesalerBranchSubscriptionIncome(ctx)
+	if err != nil {
+		log.Printf("Error getting wholesaler branch subscription income: %v", err)
+	} else {
+		// Add branch income to wholesaler income
+		if currentWholesaler, ok := breakdown["wholesaler"].(map[string]interface{}); ok {
+			if currentIncome, ok := currentWholesaler["income"].(float64); ok {
+				currentWholesaler["income"] = currentIncome + wholesalerBranchIncome
+			}
 		}
 	}
 
@@ -6167,3 +6193,49 @@ func (ac *AdminController) GetAdminWalletTransactions(c echo.Context) error {
 //     }
 
 // as you see creating a wholesaler branch is creating social links but when i update branch the social links removed, and get branch is not retrieving the social links
+
+// getCompanyBranchSubscriptionIncome gets income from company branch subscriptions in admin_wallet
+func (ac *AdminController) getCompanyBranchSubscriptionIncome(ctx context.Context) (float64, error) {
+	var totalIncome float64
+	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{
+		"type":       "subscription_income",
+		"entityType": "branch_subscription",
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var transaction models.AdminWallet
+		if err := cursor.Decode(&transaction); err != nil {
+			continue
+		}
+		totalIncome += transaction.Amount
+	}
+
+	return totalIncome, nil
+}
+
+// getWholesalerBranchSubscriptionIncome gets income from wholesaler branch subscriptions in admin_wallet
+func (ac *AdminController) getWholesalerBranchSubscriptionIncome(ctx context.Context) (float64, error) {
+	var totalIncome float64
+	cursor, err := ac.DB.Collection("admin_wallet").Find(ctx, bson.M{
+		"type":       "subscription_income",
+		"entityType": "wholesaler_branch_subscription",
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var transaction models.AdminWallet
+		if err := cursor.Decode(&transaction); err != nil {
+			continue
+		}
+		totalIncome += transaction.Amount
+	}
+
+	return totalIncome, nil
+}
