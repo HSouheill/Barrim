@@ -2247,8 +2247,13 @@ func (sc *SubscriptionController) ProcessBranchSubscriptionRequest(c echo.Contex
 		if company.CreatedBy == company.UserID {
 			log.Printf("DEBUG: Company was created by user signup, adding subscription price to admin wallet")
 			// Add subscription price directly to admin wallet (no commission calculation needed)
-			log.Printf("Subscription income added to admin wallet: $%.2f from company '%s' (ID: %s) - User signup subscription",
-				plan.Price, company.BusinessName, company.ID.Hex())
+			err := sc.addSubscriptionIncomeToAdminWallet(ctx, plan.Price, newSubscription.ID, "branch_subscription", company.BusinessName, branch.Name)
+			if err != nil {
+				log.Printf("Failed to add subscription income to admin wallet: %v", err)
+			} else {
+				log.Printf("Subscription income added to admin wallet: $%.2f from company '%s' (ID: %s) - User signup subscription",
+					plan.Price, company.BusinessName, company.ID.Hex())
+			}
 		} else if !company.CreatedBy.IsZero() {
 			log.Printf("DEBUG: Company was created by salesperson, proceeding with commission calculation")
 			// Get salesperson
@@ -2837,4 +2842,67 @@ func (sc *BranchSubscriptionController) GetBranchSubscriptionRemainingTime(c ech
 			},
 		},
 	})
+}
+
+// addSubscriptionIncomeToAdminWallet adds subscription income to the admin wallet
+func (sc *SubscriptionController) addSubscriptionIncomeToAdminWallet(ctx context.Context, amount float64, entityID primitive.ObjectID, entityType, companyName, branchName string) error {
+	// Create admin wallet transaction
+	adminWalletTransaction := models.AdminWallet{
+		ID:          primitive.NewObjectID(),
+		Type:        "subscription_income",
+		Amount:      amount,
+		Description: fmt.Sprintf("Subscription income from %s - %s (%s)", companyName, branchName, entityType),
+		EntityID:    entityID,
+		EntityType:  entityType,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Insert the transaction
+	_, err := sc.DB.Collection("admin_wallet").InsertOne(ctx, adminWalletTransaction)
+	if err != nil {
+		return fmt.Errorf("failed to insert admin wallet transaction: %w", err)
+	}
+
+	// Update or create admin wallet balance
+	balanceCollection := sc.DB.Collection("admin_wallet_balance")
+
+	// Try to find existing balance record
+	var balance models.AdminWalletBalance
+	err = balanceCollection.FindOne(ctx, bson.M{}).Decode(&balance)
+
+	if err == mongo.ErrNoDocuments {
+		// Create new balance record
+		balance = models.AdminWalletBalance{
+			ID:                    primitive.NewObjectID(),
+			TotalIncome:           amount,
+			TotalWithdrawalIncome: 0,
+			TotalCommissionsPaid:  0,
+			NetBalance:            amount,
+			LastUpdated:           time.Now(),
+		}
+		_, err = balanceCollection.InsertOne(ctx, balance)
+		if err != nil {
+			return fmt.Errorf("failed to create admin wallet balance: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to find admin wallet balance: %w", err)
+	} else {
+		// Update existing balance record
+		update := bson.M{
+			"$inc": bson.M{
+				"totalIncome": amount,
+				"netBalance":  amount,
+			},
+			"$set": bson.M{
+				"lastUpdated": time.Now(),
+			},
+		}
+		_, err = balanceCollection.UpdateOne(ctx, bson.M{"_id": balance.ID}, update)
+		if err != nil {
+			return fmt.Errorf("failed to update admin wallet balance: %w", err)
+		}
+	}
+
+	return nil
 }

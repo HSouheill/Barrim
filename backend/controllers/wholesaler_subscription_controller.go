@@ -1841,6 +1841,89 @@ func (sc *WholesalerBranchSubscriptionController) ProcessWholesalerBranchSubscri
 
 		subscription = &newSubscription
 
+		// --- Commission logic start ---
+		// Check if wholesaler was created by a salesperson or by itself (user signup)
+		log.Printf("DEBUG: Wholesaler CreatedBy field: %v (IsZero: %v)", wholesaler.CreatedBy, wholesaler.CreatedBy.IsZero())
+
+		// Check if wholesaler was created by itself (user signup) - CreatedBy equals UserID
+		if wholesaler.CreatedBy == wholesaler.UserID {
+			log.Printf("DEBUG: Wholesaler was created by user signup, adding subscription price to admin wallet")
+			// Add subscription price directly to admin wallet (no commission calculation needed)
+			err := sc.addSubscriptionIncomeToAdminWallet(ctx, plan.Price, newSubscription.ID, "wholesaler_branch_subscription", wholesaler.BusinessName, branch.Name)
+			if err != nil {
+				log.Printf("Failed to add subscription income to admin wallet: %v", err)
+			} else {
+				log.Printf("Subscription income added to admin wallet: $%.2f from wholesaler '%s' (ID: %s) - User signup subscription",
+					plan.Price, wholesaler.BusinessName, wholesaler.ID.Hex())
+			}
+		} else if !wholesaler.CreatedBy.IsZero() {
+			log.Printf("DEBUG: Wholesaler was created by salesperson, proceeding with commission calculation")
+			// Get salesperson
+			var salesperson models.Salesperson
+			err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": wholesaler.CreatedBy}).Decode(&salesperson)
+			if err == nil {
+				log.Printf("DEBUG: Found salesperson: %s (ID: %v)", salesperson.FullName, salesperson.ID)
+				// Get sales manager - try both collection names due to inconsistency
+				var salesManager models.SalesManager
+				err := sc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+				if err != nil {
+					// Try the alternative collection name
+					log.Printf("DEBUG: Sales manager not found in sales_managers collection, trying salesManagers collection")
+					err = sc.DB.Collection("salesManagers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+				}
+				if err == nil {
+					log.Printf("DEBUG: Found sales manager: %s (ID: %v)", salesManager.FullName, salesManager.ID)
+					planPrice := plan.Price
+					salespersonPercent := salesperson.CommissionPercent
+					salesManagerPercent := salesManager.CommissionPercent
+
+					log.Printf("DEBUG: Plan price: $%.2f, Salesperson commission percent: %.2f%%, Sales Manager commission percent: %.2f%%",
+						planPrice, salespersonPercent, salesManagerPercent)
+
+					// Calculate commissions correctly
+					// Salesperson gets their percentage directly from the plan price
+					salespersonCommission := planPrice * salespersonPercent / 100.0
+					// Sales manager gets their percentage directly from the plan price
+					salesManagerCommission := planPrice * salesManagerPercent / 100.0
+
+					log.Printf("DEBUG: Calculated commissions - Sales Manager: $%.2f, Salesperson: $%.2f",
+						salesManagerCommission, salespersonCommission)
+
+					// Insert commission document using Commission model
+					commission := models.Commission{
+						ID:                            primitive.NewObjectID(),
+						SubscriptionID:                newSubscription.ID,
+						CompanyID:                     wholesaler.ID, // Using wholesaler ID as the entity ID
+						PlanID:                        plan.ID,
+						PlanPrice:                     planPrice,
+						SalespersonID:                 salesperson.ID,
+						SalespersonCommission:         salespersonCommission,
+						SalespersonCommissionPercent:  salespersonPercent,
+						SalesManagerID:                salesManager.ID,
+						SalesManagerCommission:        salesManagerCommission,
+						SalesManagerCommissionPercent: salesManagerPercent,
+						CreatedAt:                     time.Now(),
+						Paid:                          false,
+						PaidAt:                        nil,
+					}
+					_, err := sc.DB.Collection("commissions").InsertOne(ctx, commission)
+					if err != nil {
+						log.Printf("Failed to insert commission: %v", err)
+					} else {
+						log.Printf("Commission inserted successfully for wholesaler branch subscription - Plan Price: $%.2f, Sales Manager Commission: $%.2f, Salesperson Commission: $%.2f",
+							planPrice, salesManagerCommission, salespersonCommission)
+					}
+				} else {
+					log.Printf("DEBUG: Failed to find sales manager for ID: %v, Error: %v", salesperson.SalesManagerID, err)
+				}
+			} else {
+				log.Printf("DEBUG: Failed to find salesperson for ID: %v, Error: %v", wholesaler.CreatedBy, err)
+			}
+		} else {
+			log.Printf("DEBUG: Wholesaler was not created by a salesperson (CreatedBy is zero or not set)")
+		}
+		// --- Commission logic end ---
+
 		// Send approval notification to wholesaler
 		if err := sc.sendWholesalerNotificationEmail(
 			wholesaler.Phone,
@@ -2138,4 +2221,67 @@ func (sc *WholesalerBranchSubscriptionController) CreateWholesalerBranchSponsors
 			"adminNote":   subscriptionRequest.AdminNote,
 		},
 	})
+}
+
+// addSubscriptionIncomeToAdminWallet adds subscription income to the admin wallet
+func (sc *WholesalerBranchSubscriptionController) addSubscriptionIncomeToAdminWallet(ctx context.Context, amount float64, entityID primitive.ObjectID, entityType, wholesalerName, branchName string) error {
+	// Create admin wallet transaction
+	adminWalletTransaction := models.AdminWallet{
+		ID:          primitive.NewObjectID(),
+		Type:        "subscription_income",
+		Amount:      amount,
+		Description: fmt.Sprintf("Subscription income from %s - %s (%s)", wholesalerName, branchName, entityType),
+		EntityID:    entityID,
+		EntityType:  entityType,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Insert the transaction
+	_, err := sc.DB.Collection("admin_wallet").InsertOne(ctx, adminWalletTransaction)
+	if err != nil {
+		return fmt.Errorf("failed to insert admin wallet transaction: %w", err)
+	}
+
+	// Update or create admin wallet balance
+	balanceCollection := sc.DB.Collection("admin_wallet_balance")
+
+	// Try to find existing balance record
+	var balance models.AdminWalletBalance
+	err = balanceCollection.FindOne(ctx, bson.M{}).Decode(&balance)
+
+	if err == mongo.ErrNoDocuments {
+		// Create new balance record
+		balance = models.AdminWalletBalance{
+			ID:                    primitive.NewObjectID(),
+			TotalIncome:           amount,
+			TotalWithdrawalIncome: 0,
+			TotalCommissionsPaid:  0,
+			NetBalance:            amount,
+			LastUpdated:           time.Now(),
+		}
+		_, err = balanceCollection.InsertOne(ctx, balance)
+		if err != nil {
+			return fmt.Errorf("failed to create admin wallet balance: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to find admin wallet balance: %w", err)
+	} else {
+		// Update existing balance record
+		update := bson.M{
+			"$inc": bson.M{
+				"totalIncome": amount,
+				"netBalance":  amount,
+			},
+			"$set": bson.M{
+				"lastUpdated": time.Now(),
+			},
+		}
+		_, err = balanceCollection.UpdateOne(ctx, bson.M{"_id": balance.ID}, update)
+		if err != nil {
+			return fmt.Errorf("failed to update admin wallet balance: %w", err)
+		}
+	}
+
+	return nil
 }
