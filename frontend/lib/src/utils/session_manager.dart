@@ -399,7 +399,7 @@ class SessionManager {
 
       if (JwtDecoder.isExpired(token)) {
         return await _attemptTokenRefresh().timeout(
-          const Duration(seconds: 5),
+          const Duration(seconds: 10), // Increased timeout for better reliability
           onTimeout: () {
             debugPrint('Token refresh timeout');
             return false;
@@ -418,6 +418,49 @@ class SessionManager {
         }
       }
       return false;
+    }
+  }
+
+  // Enhanced session validation with better error handling
+  Future<Map<String, dynamic>> validateSessionWithDetails() async {
+    try {
+      final token = await _storage.read(key: _tokenKey);
+      if (token == null) {
+        return {
+          'isValid': false,
+          'reason': 'No token found',
+          'canRetry': false,
+        };
+      }
+
+      if (JwtDecoder.isExpired(token)) {
+        final refreshSuccess = await _attemptTokenRefresh().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            debugPrint('Token refresh timeout');
+            return false;
+          },
+        );
+        
+        return {
+          'isValid': refreshSuccess,
+          'reason': refreshSuccess ? 'Token refreshed' : 'Token refresh failed',
+          'canRetry': !refreshSuccess,
+        };
+      }
+
+      return {
+        'isValid': true,
+        'reason': 'Token is valid',
+        'canRetry': false,
+      };
+    } catch (e) {
+      debugPrint('Error validating session: $e');
+      return {
+        'isValid': false,
+        'reason': 'Validation error: ${e.toString()}',
+        'canRetry': true,
+      };
     }
   }
 

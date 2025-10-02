@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/session_manager.dart';
 import '../services/api_services.dart';
-import '../screens/forget_password/forgot_password.dart';
 
 class SessionWrapper extends StatefulWidget {
   final Widget child;
@@ -136,7 +135,7 @@ class _SessionWrapperState extends State<SessionWrapper> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: _isRetrying ? null : () {
                 Navigator.of(context).pop();
                 _attemptSessionRefresh();
               },
@@ -148,7 +147,16 @@ class _SessionWrapperState extends State<SessionWrapper> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text('Retry'),
+              child: _isRetrying 
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Retry'),
             ),
             TextButton(
               onPressed: () {
@@ -185,16 +193,17 @@ class _SessionWrapperState extends State<SessionWrapper> {
       // Show loading state
       setState(() {
         _sessionError = 'Attempting to refresh session...';
+        _isRetrying = true;
       });
 
       // Use the enhanced retry method with multiple attempts
       final refreshSuccess = await _sessionManager.retrySessionRefresh(maxRetries: 3);
       
       if (refreshSuccess) {
-        // Check if session is now valid
-        final isValid = await _sessionManager.isSessionValid();
+        // Use enhanced validation to get detailed results
+        final validationResult = await _sessionManager.validateSessionWithDetails();
         
-        if (isValid) {
+        if (validationResult['isValid']) {
           setState(() {
             _isSessionValid = true;
             _sessionError = null;
@@ -213,7 +222,7 @@ class _SessionWrapperState extends State<SessionWrapper> {
         } else {
           setState(() {
             _isSessionValid = false;
-            _sessionError = 'Session refresh failed. Please login again.';
+            _sessionError = validationResult['reason'] ?? 'Session refresh failed. Please login again.';
           });
         }
       } else {
@@ -227,6 +236,7 @@ class _SessionWrapperState extends State<SessionWrapper> {
       setState(() {
         _isSessionValid = false;
         _sessionError = 'Session refresh failed: ${e.toString()}';
+        _isRetrying = false;
       });
       
       // Show error message
@@ -238,6 +248,13 @@ class _SessionWrapperState extends State<SessionWrapper> {
             duration: const Duration(seconds: 3),
           ),
         );
+      }
+    } finally {
+      // Ensure loading state is always reset
+      if (mounted) {
+        setState(() {
+          _isRetrying = false;
+        });
       }
     }
   }
@@ -308,9 +325,18 @@ class _SessionWrapperState extends State<SessionWrapper> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: _attemptSessionRefresh,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
+                    onPressed: _isRetrying ? null : _attemptSessionRefresh,
+                    icon: _isRetrying 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.refresh),
+                    label: Text(_isRetrying ? 'Retrying...' : 'Retry'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2079C2),
                       foregroundColor: Colors.white,
