@@ -62,16 +62,17 @@ type ServiceProvider struct {
 	AdditionalPhones []string `json:"additionalPhones,omitempty" bson:"additionalPhones,omitempty"`
 	AdditionalEmails []string `json:"additionalEmails,omitempty" bson:"additionalEmails,omitempty"`
 	// Nested fields for backward compatibility
-	ContactInfo       ContactInfo        `json:"contactInfo,omitempty" bson:"contactInfo,omitempty"`
-	ReferralCode      string             `json:"referralCode,omitempty" bson:"referralCode,omitempty"`
-	Points            int                `json:"points" bson:"points"`
-	CommissionPercent float64            `bson:"commissionPercent,omitempty" json:"commissionPercent,omitempty"`
-	Sponsorship       bool               `json:"sponsorship,omitempty" bson:"sponsorship,omitempty"` // Whether the service provider has active sponsorship
-	CreatedBy         primitive.ObjectID `json:"createdBy,omitempty" bson:"createdBy,omitempty"`
-	CreatedAt         time.Time          `json:"createdAt,omitempty" bson:"createdAt,omitempty"`
-	UpdatedAt         time.Time          `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
-	Status            string             `json:"status,omitempty" bson:"status,omitempty"`
-	CreationRequest   string             `json:"CreationRequest,omitempty" bson:"CreationRequest,omitempty"` // "approved", "rejected", or ""
+	ContactInfo       ContactInfo          `json:"contactInfo,omitempty" bson:"contactInfo,omitempty"`
+	ReferralCode      string               `json:"referralCode,omitempty" bson:"referralCode,omitempty"`
+	Referrals         []primitive.ObjectID `json:"referrals,omitempty" bson:"referrals,omitempty"` // List of referred entities
+	Points            int                  `json:"points" bson:"points"`
+	CommissionPercent float64              `bson:"commissionPercent,omitempty" json:"commissionPercent,omitempty"`
+	Sponsorship       bool                 `json:"sponsorship,omitempty" bson:"sponsorship,omitempty"` // Whether the service provider has active sponsorship
+	CreatedBy         primitive.ObjectID   `json:"createdBy,omitempty" bson:"createdBy,omitempty"`
+	CreatedAt         time.Time            `json:"createdAt,omitempty" bson:"createdAt,omitempty"`
+	UpdatedAt         time.Time            `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
+	Status            string               `json:"status,omitempty" bson:"status,omitempty"`
+	CreationRequest   string               `json:"CreationRequest,omitempty" bson:"CreationRequest,omitempty"` // "approved", "rejected", or ""
 	// Service provider specific information
 	ServiceProviderInfo *ServiceProviderInfo `json:"serviceProviderInfo,omitempty" bson:"serviceProviderInfo,omitempty"`
 }

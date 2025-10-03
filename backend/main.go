@@ -123,6 +123,9 @@ func main() {
 	// Register service provider routes
 	routes.RegisterServiceProviderRoutes(e, barrimDB, serviceProviderVoucherController)
 
+	// Register unified referral routes (handles all user types)
+	routes.RegisterUnifiedReferralRoutes(e, client)
+
 	// Add public WebSocket endpoint (no authentication required for initial connection)
 	e.GET("/api/ws", func(c echo.Context) error {
 		// Handle WebSocket upgrade without authentication

@@ -10,6 +10,7 @@ import (
 type ReferralType string
 
 const (
+	UserType            ReferralType = "USR"
 	CompanyType         ReferralType = "COM"
 	ServiceProviderType ReferralType = "SP"
 	WholesalerType      ReferralType = "WS"
@@ -63,6 +64,11 @@ func GenerateServiceProviderReferralCode() (string, error) {
 // GenerateWholesalerReferralCode generates a referral code for a wholesaler
 func GenerateWholesalerReferralCode() (string, error) {
 	return GenerateReferralCode(WholesalerType)
+}
+
+// GenerateUserReferralCode generates a referral code for a regular user
+func GenerateUserReferralCode() (string, error) {
+	return GenerateReferralCode(UserType)
 }
 
 // GenerateSalespersonReferralCode generates a referral code for a salesperson

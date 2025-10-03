@@ -1628,8 +1628,29 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 	// Create user first
 	userID := primitive.NewObjectID()
 
-	// Generate referral code for all types
-	referralCode := generateReferralCode()
+	// Generate referral code based on user type
+	var referralCode string
+	var referralErr error
+
+	switch signupData.UserType {
+	case "user":
+		referralCode, referralErr = utils.GenerateUserReferralCode()
+	case "company":
+		referralCode, referralErr = utils.GenerateCompanyReferralCode()
+	case "wholesaler":
+		referralCode, referralErr = utils.GenerateWholesalerReferralCode()
+	case "serviceProvider":
+		referralCode, referralErr = utils.GenerateServiceProviderReferralCode()
+	default:
+		referralCode, referralErr = utils.GenerateUserReferralCode()
+	}
+
+	if referralErr != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to generate referral code",
+		})
+	}
 
 	// If a referral code was provided, use it instead of generating a new one
 	if signupData.ReferralCode != "" {
