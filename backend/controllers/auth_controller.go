@@ -1905,7 +1905,7 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 				if err == nil && referrerCompany.ID != company.ID {
 					// Increment points for the referring company
 					update := bson.M{
-						"$inc": bson.M{"points": 10}, // or whatever amount of points is appropriate
+						"$inc": bson.M{"points": 5}, // All referrals award 5 points
 						"$push": bson.M{
 							"referrals": company.ID,
 						},
@@ -2220,7 +2220,7 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 			err := usersCollection.FindOne(ctx, bson.M{"referralCode": signupData.ReferralCode, "userType": "serviceProvider"}).Decode(&referrer)
 			if err == nil && referrer.ID != userID {
 				// Increment points for the referring service provider (prevent self-referral)
-				_, _ = usersCollection.UpdateOne(ctx, bson.M{"_id": referrer.ID}, bson.M{"$inc": bson.M{"points": 10}})
+				_, _ = usersCollection.UpdateOne(ctx, bson.M{"_id": referrer.ID}, bson.M{"$inc": bson.M{"points": 5}})
 			}
 		}
 	}

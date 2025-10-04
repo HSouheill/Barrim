@@ -140,7 +140,7 @@ func (rc *CompanyReferralController) handleCompanyReferral(c echo.Context, ctx c
 	}
 
 	// Update the referrer company - add points and add to referrals list
-	const pointsToAdd = 1
+	const pointsToAdd = 5
 	update := bson.M{
 		"$inc":  bson.M{"points": pointsToAdd},
 		"$push": bson.M{"referrals": currentCompany.ID},
@@ -221,7 +221,7 @@ func (rc *CompanyReferralController) handleUserReferral(c echo.Context, ctx cont
 	}
 
 	// Update the referrer - add points and add to referrals list
-	const pointsToAdd = 10
+	const pointsToAdd = 5
 	update := bson.M{
 		"$inc":  bson.M{"points": pointsToAdd},
 		"$push": bson.M{"referrals": currentUser.ID},

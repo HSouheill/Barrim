@@ -143,7 +143,7 @@ func (rc *ReferralController) HandleReferral(c echo.Context) error {
 
 	// Update the referrer's points and referrals
 	update := bson.M{
-		"$inc":  bson.M{"points": 10}, // Add 10 points
+		"$inc":  bson.M{"points": 5}, // Add  points
 		"$push": bson.M{"referrals": objID},
 	}
 
@@ -392,13 +392,8 @@ func (rc *ReferralController) HandleCompanyReferral(c echo.Context) error {
 	// Generate a new referral code for the new company
 	newReferralCode := generateUniqueReferralCode()
 
-	// Set points based on referrer type
-	pointsToAdd := 10 // Default for user-to-company referral
-
-	// If a company is referring another company, award 5 points instead of 10
-	if isCompanyReferrer {
-		pointsToAdd = 5
-	}
+	// All referrals award 5 points regardless of referrer type
+	pointsToAdd := 5
 
 	if isCompanyReferrer {
 		// Update referring company with 5 points
@@ -408,7 +403,7 @@ func (rc *ReferralController) HandleCompanyReferral(c echo.Context) error {
 		})
 		log.Printf("Updated company referrer: %v, error: %v", result, err)
 	} else {
-		// Update referring user with 10 points
+		// Update referring user with 5 points
 		result, err := usersCollection.UpdateByID(ctx, referrerUser.ID, bson.M{
 			"$inc":  bson.M{"points": pointsToAdd},
 			"$push": bson.M{"referrals": company.ID},
@@ -424,7 +419,7 @@ func (rc *ReferralController) HandleCompanyReferral(c echo.Context) error {
 			"$push": bson.M{"referrals": company.ID},
 		})
 	} else {
-		// Update referring user with 10 points
+		// Update referring user with 5 points
 		_, err = usersCollection.UpdateByID(ctx, referrerUser.ID, bson.M{
 			"$inc":  bson.M{"points": pointsToAdd},
 			"$push": bson.M{"referrals": company.ID},
