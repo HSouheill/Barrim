@@ -436,6 +436,131 @@ func generateReferralCode() string {
 	return string(result)
 }
 
+// processSignupReferral processes a referral during user signup
+func (ac *AuthController) processSignupReferral(ctx context.Context, referralCode string, newUserID primitive.ObjectID, userType string) error {
+	ac.logger.Printf("Processing signup referral - Code: %s, New User ID: %s, User Type: %s", referralCode, newUserID.Hex(), userType)
+
+	// Find the referrer by referral code across all collections
+	referrerEntity, err := ac.findReferrerByCode(ctx, referralCode)
+	if err != nil {
+		ac.logger.Printf("Failed to find referrer by code %s: %v", referralCode, err)
+		return err
+	}
+
+	ac.logger.Printf("Found referrer - Type: %s, ID: %s", referrerEntity.Type, referrerEntity.ID.Hex())
+
+	// Award 5 points to the referrer
+	err = ac.updateReferrerPoints(ctx, referrerEntity, newUserID, 5)
+	if err != nil {
+		ac.logger.Printf("Failed to update referrer points: %v", err)
+		return err
+	}
+
+	ac.logger.Printf("Successfully processed referral - Referrer %s (%s) awarded 5 points", referrerEntity.ID.Hex(), referrerEntity.Type)
+	return nil
+}
+
+// findReferrerByCode finds a referrer by their referral code across all collections
+func (ac *AuthController) findReferrerByCode(ctx context.Context, referralCode string) (*ReferralEntity, error) {
+	// Search in users collection
+	usersCollection := ac.DB.Database("barrim").Collection("users")
+	var user models.User
+	err := usersCollection.FindOne(ctx, bson.M{"referralCode": referralCode}).Decode(&user)
+	if err == nil {
+		return &ReferralEntity{
+			ID:        user.ID,
+			Type:      "user",
+			Points:    user.Points,
+			Referrals: user.Referrals,
+		}, nil
+	}
+
+	// Search in companies collection
+	companiesCollection := ac.DB.Database("barrim").Collection("companies")
+	var company models.Company
+	err = companiesCollection.FindOne(ctx, bson.M{"referralCode": referralCode}).Decode(&company)
+	if err == nil {
+		return &ReferralEntity{
+			ID:        company.ID,
+			Type:      "company",
+			Points:    company.Points,
+			Referrals: company.Referrals,
+		}, nil
+	}
+
+	// Search in wholesalers collection
+	wholesalersCollection := ac.DB.Database("barrim").Collection("wholesalers")
+	var wholesaler models.Wholesaler
+	err = wholesalersCollection.FindOne(ctx, bson.M{"referralCode": referralCode}).Decode(&wholesaler)
+	if err == nil {
+		return &ReferralEntity{
+			ID:        wholesaler.ID,
+			Type:      "wholesaler",
+			Points:    wholesaler.Points,
+			Referrals: wholesaler.Referrals,
+		}, nil
+	}
+
+	// Search in serviceProviders collection
+	serviceProvidersCollection := ac.DB.Database("barrim").Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	err = serviceProvidersCollection.FindOne(ctx, bson.M{"referralCode": referralCode}).Decode(&serviceProvider)
+	if err == nil {
+		return &ReferralEntity{
+			ID:        serviceProvider.ID,
+			Type:      "serviceProvider",
+			Points:    serviceProvider.Points,
+			Referrals: serviceProvider.Referrals,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("referral code not found")
+}
+
+// updateReferrerPoints updates the referrer's points and adds the new user to their referrals list
+func (ac *AuthController) updateReferrerPoints(ctx context.Context, referrerEntity *ReferralEntity, newUserID primitive.ObjectID, pointsToAdd int) error {
+	switch referrerEntity.Type {
+	case "user":
+		usersCollection := ac.DB.Database("barrim").Collection("users")
+		_, err := usersCollection.UpdateByID(ctx, referrerEntity.ID, bson.M{
+			"$inc":  bson.M{"points": pointsToAdd},
+			"$push": bson.M{"referrals": newUserID},
+			"$set":  bson.M{"updatedAt": time.Now()},
+		})
+		return err
+
+	case "company":
+		companiesCollection := ac.DB.Database("barrim").Collection("companies")
+		_, err := companiesCollection.UpdateByID(ctx, referrerEntity.ID, bson.M{
+			"$inc":  bson.M{"points": pointsToAdd},
+			"$push": bson.M{"referrals": newUserID},
+			"$set":  bson.M{"updatedAt": time.Now()},
+		})
+		return err
+
+	case "wholesaler":
+		wholesalersCollection := ac.DB.Database("barrim").Collection("wholesalers")
+		_, err := wholesalersCollection.UpdateByID(ctx, referrerEntity.ID, bson.M{
+			"$inc":  bson.M{"points": pointsToAdd},
+			"$push": bson.M{"referrals": newUserID},
+			"$set":  bson.M{"updatedAt": time.Now()},
+		})
+		return err
+
+	case "serviceProvider":
+		serviceProvidersCollection := ac.DB.Database("barrim").Collection("serviceProviders")
+		_, err := serviceProvidersCollection.UpdateByID(ctx, referrerEntity.ID, bson.M{
+			"$inc":  bson.M{"points": pointsToAdd},
+			"$push": bson.M{"referrals": newUserID},
+			"$set":  bson.M{"updatedAt": time.Now()},
+		})
+		return err
+
+	default:
+		return fmt.Errorf("unknown referrer type: %s", referrerEntity.Type)
+	}
+}
+
 func (ac *AuthController) SignupWithLogo(c echo.Context) error {
 	// Parse multipart form
 	if err := c.Request().ParseMultipartForm(10 << 20); err != nil { // 10MB max
@@ -1628,7 +1753,7 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 	// Create user first
 	userID := primitive.NewObjectID()
 
-	// Generate referral code based on user type
+	// Generate referral code based on user type for the new user
 	var referralCode string
 	var referralErr error
 
@@ -1652,9 +1777,16 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 		})
 	}
 
-	// If a referral code was provided, use it instead of generating a new one
+	// Process referral if a referral code was provided during signup
 	if signupData.ReferralCode != "" {
-		referralCode = signupData.ReferralCode
+		ac.logger.Printf("Processing referral during signup for user type: %s with referral code: %s", signupData.UserType, signupData.ReferralCode)
+
+		// Process the referral using the unified referral system
+		err := ac.processSignupReferral(ctx, signupData.ReferralCode, userID, signupData.UserType)
+		if err != nil {
+			ac.logger.Printf("Failed to process referral during signup: %v", err)
+			// Don't fail the signup if referral processing fails, just log the error
+		}
 	}
 
 	user := models.User{
