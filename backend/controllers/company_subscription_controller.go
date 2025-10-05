@@ -539,18 +539,18 @@ func (sc *SubscriptionController) ApproveCompanySubscriptionRequest(c echo.Conte
 				var salesperson models.Salesperson
 				err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": company.CreatedBy}).Decode(&salesperson)
 				if err == nil {
-					// Get admin who created the salesperson
-					var admin models.Admin
-					err := sc.DB.Collection("admins").FindOne(ctx, bson.M{"_id": salesperson.CreatedBy}).Decode(&admin)
+					// Get plan details
+					var plan models.SubscriptionPlan
+					err := sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": request.PlanID}).Decode(&plan)
 					if err == nil {
-						// Get plan details
-						var plan models.SubscriptionPlan
-						err := sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": request.PlanID}).Decode(&plan)
-						if err == nil {
-							planPrice := plan.Price
-							salespersonPercent := salesperson.CommissionPercent
+						planPrice := plan.Price
+						salespersonPercent := salesperson.CommissionPercent
 
-							// Calculate admin commission (remaining percentage after salesperson commission)
+						// Check if salesperson was created by admin (admin-created salesperson)
+						var admin models.Admin
+						err := sc.DB.Collection("admins").FindOne(ctx, bson.M{"_id": salesperson.CreatedBy}).Decode(&admin)
+						if err == nil {
+							// Admin-created salesperson: Admin gets remaining percentage after salesperson commission
 							adminPercent := 100.0 - salespersonPercent
 
 							// Calculate commissions correctly
@@ -582,8 +582,105 @@ func (sc *SubscriptionController) ApproveCompanySubscriptionRequest(c echo.Conte
 							} else {
 								log.Printf("Commission inserted successfully - Plan Price: $%.2f, Admin Commission: $%.2f (%.1f%%), Salesperson Commission: $%.2f (%.1f%%)",
 									planPrice, adminCommission, adminPercent, salespersonCommission, salespersonPercent)
+
+								// Add salesperson commission to their wallet
+								err = sc.addCommissionToSalespersonWallet(ctx, salesperson.ID, salespersonCommission, request.ID, "company_subscription", company.BusinessName)
+								if err != nil {
+									log.Printf("Failed to add commission to salesperson wallet: %v", err)
+								}
+
+								// Add admin commission to admin wallet
+								err = sc.addSubscriptionIncomeToAdminWallet(ctx, adminCommission, request.ID, "company_subscription_admin_commission", company.BusinessName, "")
+								if err != nil {
+									log.Printf("Failed to add admin commission to admin wallet: %v", err)
+								}
+							}
+						} else {
+							// Salesperson was created by sales manager: Handle sales manager commission
+							var salesManager models.SalesManager
+							err := sc.DB.Collection("sales_managers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+							if err != nil {
+								// Try alternative collection name
+								err = sc.DB.Collection("salesManagers").FindOne(ctx, bson.M{"_id": salesperson.SalesManagerID}).Decode(&salesManager)
+							}
+							if err == nil {
+								// Sales manager-created salesperson: Both get their percentages
+								salesManagerPercent := salesManager.CommissionPercent
+
+								// Calculate commissions correctly
+								salespersonCommission := planPrice * salespersonPercent / 100.0
+								salesManagerCommission := planPrice * salesManagerPercent / 100.0
+
+								// Calculate remaining amount for admin
+								totalCommissions := salespersonCommission + salesManagerCommission
+								adminCommission := planPrice - totalCommissions
+
+								// Insert commission document using Commission model
+								commission := models.Commission{
+									ID:                            primitive.NewObjectID(),
+									SubscriptionID:                request.ID,
+									CompanyID:                     request.CompanyID,
+									PlanID:                        plan.ID,
+									PlanPrice:                     planPrice,
+									SalespersonID:                 salesperson.ID,
+									SalespersonCommission:         salespersonCommission,
+									SalespersonCommissionPercent:  salespersonPercent,
+									SalesManagerID:                salesManager.ID,
+									SalesManagerCommission:        salesManagerCommission,
+									SalesManagerCommissionPercent: salesManagerPercent,
+									CreatedAt:                     time.Now(),
+									Paid:                          false,
+									PaidAt:                        nil,
+								}
+								_, err := sc.DB.Collection("commissions").InsertOne(ctx, commission)
+								if err != nil {
+									log.Printf("Failed to insert commission: %v", err)
+								} else {
+									log.Printf("Commission inserted successfully - Plan Price: $%.2f, Sales Manager Commission: $%.2f (%.1f%%), Salesperson Commission: $%.2f (%.1f%%), Admin Commission: $%.2f",
+										planPrice, salesManagerCommission, salesManagerPercent, salespersonCommission, salespersonPercent, adminCommission)
+
+									// Add salesperson commission to their wallet
+									err = sc.addCommissionToSalespersonWallet(ctx, salesperson.ID, salespersonCommission, request.ID, "company_subscription", company.BusinessName)
+									if err != nil {
+										log.Printf("Failed to add commission to salesperson wallet: %v", err)
+									}
+
+									// Add sales manager commission to their wallet
+									err = sc.addCommissionToSalesManagerWallet(ctx, salesManager.ID, salesManagerCommission, request.ID, "company_subscription", company.BusinessName)
+									if err != nil {
+										log.Printf("Failed to add commission to sales manager wallet: %v", err)
+									}
+
+									// Add remaining amount to admin wallet
+									if adminCommission > 0 {
+										err = sc.addSubscriptionIncomeToAdminWallet(ctx, adminCommission, request.ID, "company_subscription_remaining", company.BusinessName, "")
+										if err != nil {
+											log.Printf("Failed to add remaining amount to admin wallet: %v", err)
+										}
+									}
+								}
+							} else {
+								log.Printf("Failed to find sales manager for salesperson: %v", err)
+								// Fallback: Give all to admin if sales manager not found
+								err = sc.addSubscriptionIncomeToAdminWallet(ctx, planPrice, request.ID, "company_subscription_fallback", company.BusinessName, "")
+								if err != nil {
+									log.Printf("Failed to add fallback amount to admin wallet: %v", err)
+								}
 							}
 						}
+					}
+				}
+			} else {
+				// Company was created by user signup (not by salesperson)
+				// Add full subscription price to admin wallet
+				var plan models.SubscriptionPlan
+				err := sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": request.PlanID}).Decode(&plan)
+				if err == nil {
+					err = sc.addSubscriptionIncomeToAdminWallet(ctx, plan.Price, request.ID, "company_subscription_user_signup", company.BusinessName, "")
+					if err != nil {
+						log.Printf("Failed to add user signup subscription to admin wallet: %v", err)
+					} else {
+						log.Printf("User signup subscription added to admin wallet: $%.2f from company '%s'", plan.Price, company.BusinessName)
 					}
 				}
 			}
@@ -2917,5 +3014,79 @@ func (sc *SubscriptionController) addSubscriptionIncomeToAdminWallet(ctx context
 		}
 	}
 
+	return nil
+}
+
+// addCommissionToSalespersonWallet adds commission amount to salesperson's wallet
+func (sc *SubscriptionController) addCommissionToSalespersonWallet(ctx context.Context, salespersonID primitive.ObjectID, amount float64, subscriptionID primitive.ObjectID, entityType, companyName string) error {
+	// Create commission record for salesperson wallet
+	commissionRecord := models.CommissionRecord{
+		ID:             primitive.NewObjectID(),
+		SubscriptionID: subscriptionID,
+		SalespersonID:  salespersonID,
+		Amount:         amount,
+		Role:           "salesperson",
+		Status:         "pending", // Will be marked as paid when processed
+		CreatedAt:      time.Now(),
+	}
+
+	// Insert the commission record
+	_, err := sc.DB.Collection("commission_records").InsertOne(ctx, commissionRecord)
+	if err != nil {
+		return fmt.Errorf("failed to insert salesperson commission record: %w", err)
+	}
+
+	// Update salesperson's commission balance
+	_, err = sc.DB.Collection("salespersons").UpdateOne(
+		ctx,
+		bson.M{"_id": salespersonID},
+		bson.M{
+			"$inc": bson.M{"commissionBalance": amount},
+			"$set": bson.M{"updatedAt": time.Now()},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update salesperson commission balance: %w", err)
+	}
+
+	log.Printf("Commission $%.2f added to salesperson wallet (ID: %s) from %s - %s",
+		amount, salespersonID.Hex(), entityType, companyName)
+	return nil
+}
+
+// addCommissionToSalesManagerWallet adds commission amount to sales manager's wallet
+func (sc *SubscriptionController) addCommissionToSalesManagerWallet(ctx context.Context, salesManagerID primitive.ObjectID, amount float64, subscriptionID primitive.ObjectID, entityType, companyName string) error {
+	// Create commission record for sales manager wallet
+	commissionRecord := models.CommissionRecord{
+		ID:             primitive.NewObjectID(),
+		SubscriptionID: subscriptionID,
+		SalesManagerID: salesManagerID,
+		Amount:         amount,
+		Role:           "sales_manager",
+		Status:         "pending", // Will be marked as paid when processed
+		CreatedAt:      time.Now(),
+	}
+
+	// Insert the commission record
+	_, err := sc.DB.Collection("commission_records").InsertOne(ctx, commissionRecord)
+	if err != nil {
+		return fmt.Errorf("failed to insert sales manager commission record: %w", err)
+	}
+
+	// Update sales manager's commission balance
+	_, err = sc.DB.Collection("sales_managers").UpdateOne(
+		ctx,
+		bson.M{"_id": salesManagerID},
+		bson.M{
+			"$inc": bson.M{"commissionBalance": amount},
+			"$set": bson.M{"updatedAt": time.Now()},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update sales manager commission balance: %w", err)
+	}
+
+	log.Printf("Commission $%.2f added to sales manager wallet (ID: %s) from %s - %s",
+		amount, salesManagerID.Hex(), entityType, companyName)
 	return nil
 }

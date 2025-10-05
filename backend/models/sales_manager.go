@@ -17,6 +17,7 @@ type SalesManager struct {
 	Salespersons      []primitive.ObjectID `json:"salespersons" bson:"salespersons"`
 	RolesAccess       []string             `json:"rolesAccess" bson:"rolesAccess"`
 	CommissionPercent float64              `json:"commissionPercent" bson:"commissionPercent"`
+	CommissionBalance float64              `json:"commissionBalance" bson:"commissionBalance"`
 	CreatedAt         time.Time            `json:"createdAt" bson:"createdAt"`
 	UpdatedAt         time.Time            `json:"updatedAt" bson:"updatedAt"`
 }
