@@ -179,7 +179,7 @@ func (smc *SalesManagerController) GetAllSalespersons(c echo.Context) error {
 	var salespersons []models.Salesperson
 	cursor, err := smc.db.Collection("salespersons").Find(
 		context.Background(),
-		bson.M{"salesManagerID": salesManagerID},
+		bson.M{"salesManagerId": salesManagerID},
 	)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -226,7 +226,7 @@ func (smc *SalesManagerController) GetSalesperson(c echo.Context) error {
 		context.Background(),
 		bson.M{
 			"_id":            salespersonID,
-			"salesManagerID": salesManagerID,
+			"salesManagerId": salesManagerID,
 		},
 	).Decode(&salesperson)
 
@@ -283,7 +283,7 @@ func (smc *SalesManagerController) UpdateSalesperson(c echo.Context) error {
 		context.Background(),
 		bson.M{
 			"_id":            salespersonID,
-			"salesManagerID": salesManagerID,
+			"salesManagerId": salesManagerID,
 		},
 	).Decode(&existingSalesperson)
 
@@ -401,7 +401,7 @@ func (smc *SalesManagerController) UpdateSalesperson(c echo.Context) error {
 		context.Background(),
 		bson.M{
 			"_id":            salespersonID,
-			"salesManagerID": salesManagerID,
+			"salesManagerId": salesManagerID,
 		},
 		bson.M{"$set": updateData},
 	)
@@ -476,7 +476,7 @@ func (smc *SalesManagerController) DeleteSalesperson(c echo.Context) error {
 		context.Background(),
 		bson.M{
 			"_id":            salespersonID,
-			"salesManagerID": salesManagerID,
+			"salesManagerId": salesManagerID,
 		},
 	).Decode(&salesperson)
 
@@ -498,7 +498,7 @@ func (smc *SalesManagerController) DeleteSalesperson(c echo.Context) error {
 		context.Background(),
 		bson.M{
 			"_id":            salespersonID,
-			"salesManagerID": salesManagerID,
+			"salesManagerId": salesManagerID,
 		},
 	)
 	if err != nil {
@@ -854,7 +854,7 @@ func (smc *SalesManagerController) GetPendingCompanyCreations(c echo.Context) er
 
 	// Use aggregation to join with salesperson collection to get name and email
 	pipeline := []bson.M{
-		{"$match": bson.M{"salesManagerID": salesManagerID}},
+		{"$match": bson.M{"salesManagerId": salesManagerID}},
 		{"$lookup": bson.M{
 			"from":         "salespersons",
 			"localField":   "salesPersonId",
@@ -905,7 +905,7 @@ func (smc *SalesManagerController) GetCreatedCompanies(c echo.Context) error {
 	// Get all salespersons under this sales manager
 	var salespersons []models.Salesperson
 	salespersonColl := smc.db.Collection("salespersons")
-	cursor, err := salespersonColl.Find(c.Request().Context(), bson.M{"salesManagerID": salesManagerID})
+	cursor, err := salespersonColl.Find(c.Request().Context(), bson.M{"salesManagerId": salesManagerID})
 	if err != nil {
 		return c.JSON(500, map[string]string{"message": "Failed to fetch salespersons"})
 	}
@@ -1071,7 +1071,7 @@ func (smc *SalesManagerController) GetPendingWholesalerCreations(c echo.Context)
 
 	// Use aggregation to join with salesperson collection to get name and email
 	pipeline := []bson.M{
-		{"$match": bson.M{"salesManagerID": salesManagerID}},
+		{"$match": bson.M{"salesManagerId": salesManagerID}},
 		{"$lookup": bson.M{
 			"from":         "salespersons",
 			"localField":   "salesPersonId",
@@ -1240,7 +1240,7 @@ func (smc *SalesManagerController) GetPendingServiceProviderCreations(c echo.Con
 
 	// Use aggregation to join with salesperson collection to get name and email
 	pipeline := []bson.M{
-		{"$match": bson.M{"salesManagerID": salesManagerID}},
+		{"$match": bson.M{"salesManagerId": salesManagerID}},
 		{"$lookup": bson.M{
 			"from":         "salespersons",
 			"localField":   "salesPersonId",

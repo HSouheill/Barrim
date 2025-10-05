@@ -1192,7 +1192,7 @@ func (ac *AdminController) GetSalesManager(c echo.Context) error {
 	var salespersons []models.Salesperson
 	cursor, err := ac.DB.Collection("salespersons").Find(
 		context.Background(),
-		bson.M{"salesManagerID": id},
+		bson.M{"salesManagerId": id},
 		&options.FindOptions{
 			Sort: bson.M{"createdAt": -1}, // Sort by creation date, newest first
 		},
