@@ -2310,6 +2310,19 @@ func (sc *SubscriptionController) ProcessBranchSubscriptionRequest(c echo.Contex
 					} else {
 						log.Printf("Commission inserted successfully for branch subscription - Plan Price: $%.2f, Sales Manager Commission: $%.2f, Salesperson Commission: $%.2f",
 							planPrice, salesManagerCommission, salespersonCommission)
+
+						// Calculate remaining amount for admin wallet
+						totalCommissions := salesManagerCommission + salespersonCommission
+						adminWalletAmount := planPrice - totalCommissions
+
+						// Add remaining amount to admin wallet
+						err := sc.addSubscriptionIncomeToAdminWallet(ctx, adminWalletAmount, newSubscription.ID, "branch_subscription_remaining", company.BusinessName, branch.Name)
+						if err != nil {
+							log.Printf("Failed to add remaining subscription income to admin wallet: %v", err)
+						} else {
+							log.Printf("Remaining subscription income added to admin wallet: $%.2f (Plan: $%.2f - Commissions: $%.2f) from company '%s'",
+								adminWalletAmount, planPrice, totalCommissions, company.BusinessName)
+						}
 					}
 				} else {
 					log.Printf("DEBUG: Failed to find sales manager for ID: %v, Error: %v", salesperson.SalesManagerID, err)

@@ -1694,7 +1694,13 @@ func (smc *SalesManagerController) GetCommissionAndWithdrawalHistory(c echo.Cont
 	}
 
 	// Fetch commission records for sales manager
-	commissionFilter := bson.M{"salesManagerID": userID}
+	// Try both field name formats to handle legacy data
+	commissionFilter := bson.M{
+		"$or": []bson.M{
+			{"salesManagerID": userID}, // New format (uppercase ID)
+			{"salesManagerId": userID}, // Legacy format (lowercase i)
+		},
+	}
 	commissionCursor, err := smc.db.Collection("commissions").Find(
 		context.Background(),
 		commissionFilter,

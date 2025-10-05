@@ -1069,6 +1069,16 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 			Message: "Failed to hash password",
 		})
 	}
+
+	// Get admin ID from token
+	adminID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid admin ID in token",
+		})
+	}
+
 	salesManager := models.SalesManager{
 		ID:                primitive.NewObjectID(),
 		FullName:          req.FullName,
@@ -1076,7 +1086,7 @@ func (ac *AdminController) CreateSalesManager(c echo.Context) error {
 		Password:          string(hashedPassword),
 		PhoneNumber:       req.PhoneNumber,
 		CommissionPercent: req.CommissionPercent,
-		CreatedBy:         primitive.ObjectID{}, // You might want to parse this from a valid ObjectID
+		CreatedBy:         adminID, // Set to the admin who created this sales manager
 		Salespersons:      []primitive.ObjectID{},
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),

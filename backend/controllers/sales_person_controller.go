@@ -2871,9 +2871,21 @@ func (spc *SalesPersonController) GetCommissionAndWithdrawalHistory(c echo.Conte
 	var commissionFilter bson.M
 	switch claims.UserType {
 	case "salesperson":
-		commissionFilter = bson.M{"salespersonID": userID}
+		// Try both field name formats to handle legacy data
+		commissionFilter = bson.M{
+			"$or": []bson.M{
+				{"salespersonID": userID}, // New format (uppercase ID)
+				{"salespersonId": userID}, // Legacy format (lowercase i)
+			},
+		}
 	case "sales_manager":
-		commissionFilter = bson.M{"salesManagerID": userID}
+		// Try both field name formats to handle legacy data
+		commissionFilter = bson.M{
+			"$or": []bson.M{
+				{"salesManagerID": userID}, // New format (uppercase ID)
+				{"salesManagerId": userID}, // Legacy format (lowercase i)
+			},
+		}
 	default:
 		return c.JSON(http.StatusForbidden, models.Response{
 			Status:  http.StatusForbidden,
