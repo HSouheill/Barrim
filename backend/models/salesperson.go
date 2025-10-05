@@ -24,7 +24,6 @@ type Salesperson struct {
 	CompanyID         primitive.ObjectID   `json:"companyId" bson:"companyId"`
 	Commissions       []Commission         `json:"commissions,omitempty" bson:"commissions,omitempty"`
 	CommissionPercent float64              `json:"commissionPercent" bson:"commissionPercent"`
-	CommissionBalance float64              `json:"commissionBalance" bson:"commissionBalance"`
 }
 
 // type Commission struct {
