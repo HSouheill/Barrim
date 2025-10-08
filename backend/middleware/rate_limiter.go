@@ -38,13 +38,14 @@ func NewRateLimiter() *RateLimiter {
 	}
 
 	// Set specific limits for different endpoints
-	// limiter.endpointLimits["/api/auth/login"] = struct {
-	// 	limit rate.Limit
-	// 	burst int
-	// }{
-	// 	limit: rate.Every(1 * time.Second), // 1 request per second
-	// 	burst: 5,                           // Lower the burst limit for login attempts
-	// }
+	// Login endpoint - strict rate limiting to prevent brute force attacks
+	limiter.endpointLimits["/api/admin/login"] = struct {
+		limit rate.Limit
+		burst int
+	}{
+		limit: rate.Every(2 * time.Second), // 0.5 requests per second (1 every 2 seconds)
+		burst: 5,                           // Allow burst of 5 attempts
+	}
 
 	limiter.endpointLimits["/api/auth/signup"] = struct {
 		limit rate.Limit
