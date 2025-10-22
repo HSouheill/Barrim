@@ -47,6 +47,7 @@ type User struct {
 	ServiceProviderID        *primitive.ObjectID  `json:"serviceProviderId,omitempty" bson:"serviceProviderId,omitempty"`
 	FirebaseUID              string               `json:"firebaseUID,omitempty" bson:"firebaseUID,omitempty"`
 	AppleUserID              string               `bson:"appleUserID,omitempty" json:"appleUserID,omitempty"`
+	FCMToken                 string               `json:"fcmToken,omitempty" bson:"fcmToken,omitempty"`
 }
 
 type ReferralRequest struct {

@@ -14,7 +14,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.10.0
 	github.com/lestrrat-go/jwx v1.2.31
-	github.com/twilio/twilio-go v1.26.1
 	github.com/u2takey/ffmpeg-go v0.5.0
 	go.mongodb.org/mongo-driver v1.17.3
 	golang.org/x/crypto v0.38.0
@@ -54,8 +53,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect

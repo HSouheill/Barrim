@@ -23,6 +23,7 @@ func SetupRoutes(e *echo.Echo, db *mongo.Client, hub *websocket.Hub, authControl
 	RegisterCategoryRoutes(e, db.Database("barrim"))
 	RegisterServiceProviderCategoryRoutes(e, db.Database("barrim"))
 	RegisterWholesalerCategoryRoutes(e, db.Database("barrim"))
+	RegisterNotificationRoutes(e, db)
 
 	// Register existing route files
 	RegisterAdminRoutes(e, db.Database("barrim"), hub)

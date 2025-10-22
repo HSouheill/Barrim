@@ -73,6 +73,7 @@ type ServiceProvider struct {
 	UpdatedAt         time.Time            `json:"updatedAt,omitempty" bson:"updatedAt,omitempty"`
 	Status            string               `json:"status,omitempty" bson:"status,omitempty"`
 	CreationRequest   string               `json:"CreationRequest,omitempty" bson:"CreationRequest,omitempty"` // "approved", "rejected", or ""
+	FCMToken          string               `json:"fcmToken,omitempty" bson:"fcmToken,omitempty"`
 	// Service provider specific information
 	ServiceProviderInfo *ServiceProviderInfo `json:"serviceProviderInfo,omitempty" bson:"serviceProviderInfo,omitempty"`
 }
