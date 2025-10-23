@@ -64,7 +64,7 @@ func (nc *NotificationController) SendToServiceProvider(c echo.Context) error {
 	}
 
 	// Get service provider's FCM token from database
-	collection := nc.db.Database("barrim").Collection("serviceproviders")
+	collection := nc.db.Database("barrim").Collection("serviceProviders")
 	var serviceProvider models.ServiceProvider
 	err = collection.FindOne(context.Background(), bson.M{"_id": serviceProviderObjectID}).Decode(&serviceProvider)
 	if err != nil {
@@ -168,7 +168,7 @@ func (nc *NotificationController) UpdateServiceProviderFCMToken(c echo.Context) 
 	}
 
 	// Update FCM token in database
-	collection := nc.db.Database("barrim").Collection("serviceproviders")
+	collection := nc.db.Database("barrim").Collection("serviceProviders")
 	_, err := collection.UpdateOne(
 		context.Background(),
 		bson.M{"_id": serviceProviderID},
