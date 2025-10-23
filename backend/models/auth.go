@@ -9,7 +9,7 @@ type SignupRequest struct {
 	UserType        string    `json:"userType"` // "user", "company", "wholesaler", "serviceProvider"
 	DateOfBirth     string    `json:"dateOfBirth"`
 	Gender          string    `json:"gender"`
-	Phone           string    `json:"phone"`
+	Phone           string    `json:"phone,omitempty" bson:"phone,omitempty"`
 	ProfilePic      string    `json:"profilePic,omitempty" bson:"profilePic,omitempty"`
 	ReferralCode    string    `json:"referralCode,omitempty"`
 	InterestedDeals []string  `json:"interestedDeals" bson:"interestedDeals"`

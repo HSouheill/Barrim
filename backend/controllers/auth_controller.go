@@ -199,15 +199,17 @@ func (ac *AuthController) Signup(c echo.Context) error {
 	}
 	req.Email = email
 
-	// Validate and sanitize phone
-	phone, err := utils.SanitizePhone(req.Phone)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid phone number format",
-		})
+	// Validate and sanitize phone (optional)
+	if req.Phone != "" {
+		phone, err := utils.SanitizePhone(req.Phone)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid phone number format",
+			})
+		}
+		req.Phone = phone
 	}
-	req.Phone = phone
 
 	// Sanitize other fields
 	req.FullName = utils.SanitizeInput(req.FullName)
@@ -273,8 +275,8 @@ func (ac *AuthController) Signup(c echo.Context) error {
 	ctx := context.Background()
 	userCollection := ac.DB.Database("barrim").Collection("users")
 
-	// Check if phone number already exists (only for non-company/wholesaler users)
-	if req.UserType != "company" && req.UserType != "wholesaler" {
+	// Check if phone number already exists (only for non-company/wholesaler users and when phone is provided)
+	if req.UserType != "company" && req.UserType != "wholesaler" && req.Phone != "" {
 		var existingUserWithPhone models.User
 		err = userCollection.FindOne(ctx, bson.M{"phone": req.Phone}).Decode(&existingUserWithPhone)
 		if err == nil {
@@ -368,61 +370,166 @@ func (ac *AuthController) Signup(c echo.Context) error {
 		req.WholesalerData.Address.City = utils.SanitizeInput(req.WholesalerData.Address.City)
 	}
 
-	// Generate OTP
-	otp := generateAuthOTP()
-	ac.logger.Printf("Generated OTP: %s for phone: %s", otp, req.Phone)
-	fmt.Printf("🔐 SIGNUP OTP: %s for phone: %s\n", otp, req.Phone)
+	// If phone is provided, generate and send OTP
+	if req.Phone != "" {
+		// Generate OTP
+		otp := generateAuthOTP()
+		ac.logger.Printf("Generated OTP: %s for phone: %s", otp, req.Phone)
+		fmt.Printf("🔐 SIGNUP OTP: %s for phone: %s\n", otp, req.Phone)
 
-	// Store OTP and signup data in database
-	otpCollection := ac.DB.Database("barrim").Collection("phone_otps")
-	otpDoc := models.PhoneOTP{
-		Phone:      req.Phone,
-		OTP:        otp,
-		SignupData: &req,
-		ExpiresAt:  time.Now().Add(10 * time.Minute),
-		Verified:   false,
-	}
-
-	// Delete any existing OTPs for this phone number
-	_, err = otpCollection.DeleteMany(ctx, bson.M{"phone": req.Phone})
-	if err != nil {
-		ac.logger.Printf("Failed to delete existing OTPs: %v", err)
-	}
-
-	// Insert new OTP
-	_, err = otpCollection.InsertOne(ctx, otpDoc)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to store OTP",
-		})
-	}
-
-	// Send OTP via SMS using BestSMSBulk API
-	smsErr := ac.sendOTP(req.Phone, otp)
-	if smsErr != nil {
-		ac.logger.Printf("SMS OTP failed: %v", smsErr)
-		errMsg := "Failed to send OTP"
-		if strings.Contains(smsErr.Error(), "auth") {
-			errMsg = "Authentication error with SMS provider"
-		} else if strings.Contains(smsErr.Error(), "credentials") {
-			errMsg = "SMS provider credentials not properly configured"
+		// Store OTP and signup data in database
+		otpCollection := ac.DB.Database("barrim").Collection("phone_otps")
+		otpDoc := models.PhoneOTP{
+			Phone:      req.Phone,
+			OTP:        otp,
+			SignupData: &req,
+			ExpiresAt:  time.Now().Add(10 * time.Minute),
+			Verified:   false,
 		}
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: errMsg,
+
+		// Delete any existing OTPs for this phone number
+		_, err = otpCollection.DeleteMany(ctx, bson.M{"phone": req.Phone})
+		if err != nil {
+			ac.logger.Printf("Failed to delete existing OTPs: %v", err)
+		}
+
+		// Insert new OTP
+		_, err = otpCollection.InsertOne(ctx, otpDoc)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to store OTP",
+			})
+		}
+
+		// Send OTP via SMS using BestSMSBulk API
+		smsErr := ac.sendOTP(req.Phone, otp)
+		if smsErr != nil {
+			ac.logger.Printf("SMS OTP failed: %v", smsErr)
+			errMsg := "Failed to send OTP"
+			if strings.Contains(smsErr.Error(), "auth") {
+				errMsg = "Authentication error with SMS provider"
+			} else if strings.Contains(smsErr.Error(), "credentials") {
+				errMsg = "SMS provider credentials not properly configured"
+			}
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: errMsg,
+			})
+		}
+
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "OTP sent successfully via SMS. Please verify your phone number.",
+			Data: map[string]interface{}{
+				"phone":     req.Phone,
+				"expiresAt": otpDoc.ExpiresAt,
+				"method":    "sms",
+			},
+		})
+	} else {
+		// If no phone provided, create user directly without OTP verification
+		// Hash password
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Error hashing password",
+			})
+		}
+
+		// Create user
+		userID := primitive.NewObjectID()
+
+		// Generate referral code based on user type for the new user
+		var referralCode string
+		var referralErr error
+
+		switch req.UserType {
+		case "user":
+			referralCode, referralErr = utils.GenerateUserReferralCode()
+		case "company":
+			referralCode, referralErr = utils.GenerateCompanyReferralCode()
+		case "wholesaler":
+			referralCode, referralErr = utils.GenerateWholesalerReferralCode()
+		case "serviceProvider":
+			referralCode, referralErr = utils.GenerateServiceProviderReferralCode()
+		default:
+			referralCode, referralErr = utils.GenerateUserReferralCode()
+		}
+
+		if referralErr != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to generate referral code",
+			})
+		}
+
+		// Process referral if a referral code was provided during signup
+		if req.ReferralCode != "" {
+			ac.logger.Printf("Processing referral during signup for user type: %s with referral code: %s", req.UserType, req.ReferralCode)
+
+			// Process the referral using the unified referral system
+			err := ac.processSignupReferral(ctx, req.ReferralCode, userID, req.UserType)
+			if err != nil {
+				ac.logger.Printf("Failed to process referral during signup: %v", err)
+				// Don't fail the signup if referral processing fails, just log the error
+			}
+		}
+
+		user := models.User{
+			ID:              userID,
+			Email:           req.Email,
+			Password:        string(hashedPassword),
+			FullName:        req.FullName,
+			Phone:           req.Phone, // Will be empty string if not provided
+			UserType:        req.UserType,
+			DateOfBirth:     req.DateOfBirth,
+			Gender:          req.Gender,
+			ProfilePic:      req.ProfilePic,
+			ReferralCode:    referralCode,
+			InterestedDeals: req.InterestedDeals,
+			Location:        req.Location,
+			Status:          "pending", // Set to pending until manager approval
+			PhoneVerified:   false,     // Phone not verified if not provided
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		}
+
+		// Handle company/wholesaler/service provider specific logic here if needed
+		// (similar to what's in VerifyOTP but without phone verification)
+
+		// Insert user
+		_, err = ac.DB.Database("barrim").Collection("users").InsertOne(ctx, user)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create user account",
+			})
+		}
+
+		// Generate JWT token
+		token, refreshToken, err := middleware.GenerateJWT(user.ID.Hex(), user.Email, user.UserType)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to generate authentication tokens",
+			})
+		}
+
+		// Remove password from response
+		user.Password = ""
+
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "User created successfully",
+			Data: map[string]interface{}{
+				"user":         user,
+				"token":        token,
+				"refreshToken": refreshToken,
+			},
 		})
 	}
-
-	return c.JSON(http.StatusOK, models.Response{
-		Status:  http.StatusOK,
-		Message: "OTP sent successfully via SMS. Please verify your phone number.",
-		Data: map[string]interface{}{
-			"phone":     req.Phone,
-			"expiresAt": otpDoc.ExpiresAt,
-			"method":    "sms",
-		},
-	})
 }
 
 // Helper function to generate a referral code
@@ -737,10 +844,10 @@ func (ac *AuthController) SignupWholesalerWithLogo(c echo.Context) error {
 	}
 
 	// Validate required fields
-	if signupRequest.Email == "" || signupRequest.Password == "" || signupRequest.FullName == "" || signupRequest.Phone == "" {
+	if signupRequest.Email == "" || signupRequest.Password == "" || signupRequest.FullName == "" {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Email, password, full name, and phone are required",
+			Message: "Email, password, and full name are required",
 		})
 	}
 
@@ -754,33 +861,38 @@ func (ac *AuthController) SignupWholesalerWithLogo(c echo.Context) error {
 	}
 	signupRequest.Email = email
 
-	phone, err := utils.SanitizePhone(signupRequest.Phone)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid phone number format",
-		})
+	// Sanitize phone if provided
+	if signupRequest.Phone != "" {
+		phone, err := utils.SanitizePhone(signupRequest.Phone)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid phone number format",
+			})
+		}
+		signupRequest.Phone = phone
 	}
-	signupRequest.Phone = phone
 
 	signupRequest.FullName = utils.SanitizeInput(signupRequest.FullName)
 
-	// Check if phone number already exists
+	// Check if phone number already exists (only if phone is provided)
 	userCollection := ac.DB.Database("barrim").Collection("users")
 	ctx2 := context.Background()
 
-	var existingUserWithPhone models.User
-	err = userCollection.FindOne(ctx2, bson.M{"phone": signupRequest.Phone}).Decode(&existingUserWithPhone)
-	if err == nil {
-		return c.JSON(http.StatusConflict, models.Response{
-			Status:  http.StatusConflict,
-			Message: "Phone number already registered",
-		})
-	} else if err != mongo.ErrNoDocuments {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Database error while checking phone number",
-		})
+	if signupRequest.Phone != "" {
+		var existingUserWithPhone models.User
+		err = userCollection.FindOne(ctx2, bson.M{"phone": signupRequest.Phone}).Decode(&existingUserWithPhone)
+		if err == nil {
+			return c.JSON(http.StatusConflict, models.Response{
+				Status:  http.StatusConflict,
+				Message: "Phone number already registered",
+			})
+		} else if err != mongo.ErrNoDocuments {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Database error while checking phone number",
+			})
+		}
 	}
 
 	// Check if email already exists
@@ -843,49 +955,60 @@ func (ac *AuthController) SignupWholesalerWithLogo(c echo.Context) error {
 		signupRequest.LogoPath = logoPath
 	}
 
-	// Store OTP and signup data in database
-	otpCollection := ac.DB.Database("barrim").Collection("phone_otps")
-	otp := generateAuthOTP()
-	fmt.Printf("🔐 WHOLESALER SIGNUP OTP: %s for phone: %s\n", otp, signupRequest.Phone)
-	otpDoc := models.PhoneOTP{
-		Phone:      signupRequest.Phone,
-		OTP:        otp,
-		SignupData: &signupRequest,
-		ExpiresAt:  time.Now().Add(10 * time.Minute),
-		Verified:   false,
-	}
+	// If phone is provided, generate and send OTP
+	if signupRequest.Phone != "" {
+		// Store OTP and signup data in database
+		otpCollection := ac.DB.Database("barrim").Collection("phone_otps")
+		otp := generateAuthOTP()
+		fmt.Printf("🔐 WHOLESALER SIGNUP OTP: %s for phone: %s\n", otp, signupRequest.Phone)
+		otpDoc := models.PhoneOTP{
+			Phone:      signupRequest.Phone,
+			OTP:        otp,
+			SignupData: &signupRequest,
+			ExpiresAt:  time.Now().Add(10 * time.Minute),
+			Verified:   false,
+		}
 
-	// Delete any existing OTPs for this phone number
-	_, err = otpCollection.DeleteMany(context.Background(), bson.M{"phone": signupRequest.Phone})
-	if err != nil {
-		ac.logger.Printf("Failed to delete existing OTPs: %v", err)
-	}
+		// Delete any existing OTPs for this phone number
+		_, err = otpCollection.DeleteMany(context.Background(), bson.M{"phone": signupRequest.Phone})
+		if err != nil {
+			ac.logger.Printf("Failed to delete existing OTPs: %v", err)
+		}
 
-	// Insert new OTP
-	_, err = otpCollection.InsertOne(context.Background(), otpDoc)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to store OTP",
+		// Insert new OTP
+		_, err = otpCollection.InsertOne(context.Background(), otpDoc)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to store OTP",
+			})
+		}
+
+		// Send OTP via SMS using BestSMSBulk API
+		smsErr := ac.sendOTP(signupRequest.Phone, otp)
+		if smsErr != nil {
+			ac.logger.Printf("SMS OTP failed: %v", smsErr)
+		}
+
+		// Return response indicating OTP sent, no user or token yet
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "OTP sent successfully. Please verify your phone number to complete registration.",
+			Data: map[string]interface{}{
+				"phone":     signupRequest.Phone,
+				"expiresAt": otpDoc.ExpiresAt,
+				"method":    "sms",
+			},
+		})
+	} else {
+		// If no phone provided, create user directly without OTP verification
+		// This would need similar logic to the main signup method
+		// For now, return an error asking for phone number
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Phone number is required for wholesaler signup",
 		})
 	}
-
-	// Send OTP via SMS using BestSMSBulk API
-	smsErr := ac.sendOTP(signupRequest.Phone, otp)
-	if smsErr != nil {
-		ac.logger.Printf("SMS OTP failed: %v", smsErr)
-	}
-
-	// Return response indicating OTP sent, no user or token yet
-	return c.JSON(http.StatusOK, models.Response{
-		Status:  http.StatusOK,
-		Message: "OTP sent successfully. Please verify your phone number to complete registration.",
-		Data: map[string]interface{}{
-			"phone":     signupRequest.Phone,
-			"expiresAt": otpDoc.ExpiresAt,
-			"method":    "sms",
-		},
-	})
 }
 
 func (ac *AuthController) SignupServiceProviderWithLogo(ctx echo.Context) error {
@@ -988,10 +1111,10 @@ func (ac *AuthController) SignupServiceProviderWithLogo(ctx echo.Context) error 
 	}
 
 	// Validate required fields
-	if signupRequest.Email == "" || signupRequest.Password == "" || signupRequest.FullName == "" || signupRequest.Phone == "" {
+	if signupRequest.Email == "" || signupRequest.Password == "" || signupRequest.FullName == "" {
 		return ctx.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: "Email, password, full name, and phone are required",
+			Message: "Email, password, and full name are required",
 		})
 	}
 
@@ -1005,33 +1128,38 @@ func (ac *AuthController) SignupServiceProviderWithLogo(ctx echo.Context) error 
 	}
 	signupRequest.Email = email
 
-	phone, err := utils.SanitizePhone(signupRequest.Phone)
-	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid phone number format",
-		})
+	// Sanitize phone if provided
+	if signupRequest.Phone != "" {
+		phone, err := utils.SanitizePhone(signupRequest.Phone)
+		if err != nil {
+			return ctx.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid phone number format",
+			})
+		}
+		signupRequest.Phone = phone
 	}
-	signupRequest.Phone = phone
 
 	signupRequest.FullName = utils.SanitizeInput(signupRequest.FullName)
 
-	// Check if phone number already exists
+	// Check if phone number already exists (only if phone is provided)
 	userCollection := ac.DB.Database("barrim").Collection("users")
 	ctx2 := context.Background()
 
-	var existingUserWithPhone models.User
-	err = userCollection.FindOne(ctx2, bson.M{"phone": signupRequest.Phone}).Decode(&existingUserWithPhone)
-	if err == nil {
-		return ctx.JSON(http.StatusConflict, models.Response{
-			Status:  http.StatusConflict,
-			Message: "Phone number already registered",
-		})
-	} else if err != mongo.ErrNoDocuments {
-		return ctx.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Database error while checking phone number",
-		})
+	if signupRequest.Phone != "" {
+		var existingUserWithPhone models.User
+		err = userCollection.FindOne(ctx2, bson.M{"phone": signupRequest.Phone}).Decode(&existingUserWithPhone)
+		if err == nil {
+			return ctx.JSON(http.StatusConflict, models.Response{
+				Status:  http.StatusConflict,
+				Message: "Phone number already registered",
+			})
+		} else if err != mongo.ErrNoDocuments {
+			return ctx.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Database error while checking phone number",
+			})
+		}
 	}
 
 	// Check if email already exists
@@ -1094,49 +1222,60 @@ func (ac *AuthController) SignupServiceProviderWithLogo(ctx echo.Context) error 
 		signupRequest.LogoPath = logoPath
 	}
 
-	// Instead, store OTP and signup data in database (like company/wholesaler)
-	otpCollection := ac.DB.Database("barrim").Collection("phone_otps")
-	otp := generateAuthOTP()
-	fmt.Printf("🔐 SERVICE PROVIDER SIGNUP OTP: %s for phone: %s\n", otp, signupRequest.Phone)
-	otpDoc := models.PhoneOTP{
-		Phone:      signupRequest.Phone,
-		OTP:        otp,
-		SignupData: &signupRequest,
-		ExpiresAt:  time.Now().Add(10 * time.Minute),
-		Verified:   false,
-	}
+	// If phone is provided, generate and send OTP
+	if signupRequest.Phone != "" {
+		// Store OTP and signup data in database (like company/wholesaler)
+		otpCollection := ac.DB.Database("barrim").Collection("phone_otps")
+		otp := generateAuthOTP()
+		fmt.Printf("🔐 SERVICE PROVIDER SIGNUP OTP: %s for phone: %s\n", otp, signupRequest.Phone)
+		otpDoc := models.PhoneOTP{
+			Phone:      signupRequest.Phone,
+			OTP:        otp,
+			SignupData: &signupRequest,
+			ExpiresAt:  time.Now().Add(10 * time.Minute),
+			Verified:   false,
+		}
 
-	// Delete any existing OTPs for this phone number
-	_, err = otpCollection.DeleteMany(context.Background(), bson.M{"phone": signupRequest.Phone})
-	if err != nil {
-		ac.logger.Printf("Failed to delete existing OTPs: %v", err)
-	}
+		// Delete any existing OTPs for this phone number
+		_, err = otpCollection.DeleteMany(context.Background(), bson.M{"phone": signupRequest.Phone})
+		if err != nil {
+			ac.logger.Printf("Failed to delete existing OTPs: %v", err)
+		}
 
-	// Insert new OTP
-	_, err = otpCollection.InsertOne(context.Background(), otpDoc)
-	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to store OTP",
+		// Insert new OTP
+		_, err = otpCollection.InsertOne(context.Background(), otpDoc)
+		if err != nil {
+			return ctx.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to store OTP",
+			})
+		}
+
+		// Send OTP via SMS using BestSMSBulk API
+		smsErr := ac.sendOTP(signupRequest.Phone, otp)
+		if smsErr != nil {
+			ac.logger.Printf("SMS OTP failed: %v", smsErr)
+		}
+
+		// Return response indicating OTP sent, no user or token yet
+		return ctx.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "OTP sent successfully. Please verify your phone number to complete registration.",
+			Data: map[string]interface{}{
+				"phone":     signupRequest.Phone,
+				"expiresAt": otpDoc.ExpiresAt,
+				"method":    "sms",
+			},
+		})
+	} else {
+		// If no phone provided, create user directly without OTP verification
+		// This would need similar logic to the main signup method
+		// For now, return an error asking for phone number
+		return ctx.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Phone number is required for service provider signup",
 		})
 	}
-
-	// Send OTP via SMS using BestSMSBulk API
-	smsErr := ac.sendOTP(signupRequest.Phone, otp)
-	if smsErr != nil {
-		ac.logger.Printf("SMS OTP failed: %v", smsErr)
-	}
-
-	// Return response indicating OTP sent, no user or token yet
-	return ctx.JSON(http.StatusOK, models.Response{
-		Status:  http.StatusOK,
-		Message: "OTP sent successfully. Please verify your phone number to complete registration.",
-		Data: map[string]interface{}{
-			"phone":     signupRequest.Phone,
-			"expiresAt": otpDoc.ExpiresAt,
-			"method":    "sms",
-		},
-	})
 }
 
 // Login handler
@@ -1683,6 +1822,14 @@ func (ac *AuthController) VerifyOTP(c echo.Context) error {
 	// Sanitize inputs
 	req.Phone = utils.SanitizeInput(req.Phone)
 	req.OTP = utils.SanitizeInput(req.OTP)
+
+	// If no phone provided, return error as OTP verification requires phone
+	if req.Phone == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Phone number is required for OTP verification",
+		})
+	}
 
 	ctx := context.Background()
 	otpCollection := ac.DB.Database("barrim").Collection("phone_otps")

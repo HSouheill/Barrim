@@ -68,6 +68,11 @@ func SanitizeEmail(email string) (string, error) {
 
 // SanitizePhone sanitizes and validates a phone number
 func SanitizePhone(phone string) (string, error) {
+	// If phone is empty, return empty string (phone is optional)
+	if strings.TrimSpace(phone) == "" {
+		return "", nil
+	}
+
 	// Remove all non-numeric characters except +
 	phone = regexp.MustCompile(`[^\d+]`).ReplaceAllString(phone, "")
 
