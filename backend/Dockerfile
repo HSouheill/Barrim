@@ -12,9 +12,7 @@ RUN addgroup -g 1001 -S appuser && \
 # Copy pre-built binary into the image
 COPY barrim_backend ./barrim_backend
 
-# Copy Firebase service account files
-COPY barrim-93482-firebase-adminsdk.json ./
-COPY barrim-3b45a-firebase-adminsdk-fbsvc-44cc12116d.json ./
+# Firebase credentials will be provided via environment variables
 
 # Create upload directories
 RUN mkdir -p /app/uploads/bookings \

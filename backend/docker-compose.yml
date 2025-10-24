@@ -59,6 +59,7 @@ services:
       - GIN_MODE=release
       - PORT=8080
       - JWT_SECRET=${JWT_SECRET}
+      - FIREBASE_CREDENTIALS_BASE64=${FIREBASE_CREDENTIALS_BASE64}
     depends_on:
       redis:
         condition: service_healthy
