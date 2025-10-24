@@ -16,7 +16,7 @@ func InitFirebase() {
 	ctx := context.Background()
 	credFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	if credFile == "" {
-		credFile = "barrim-93482-firebase-adminsdk-fbsvc-44cc12116d.json" // fallback to default if not set
+		credFile = "barrim-3b45a-firebase-adminsdk-fbsvc-44cc12116d.json" // fallback to default if not set
 	}
 	opt := option.WithCredentialsFile(credFile)
 
