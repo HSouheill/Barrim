@@ -120,12 +120,23 @@ func (nc *NotificationController) SendToServiceProvider(c echo.Context) error {
 
 	// Send FCM notification
 	ctx := context.Background()
+
+	// Check if Firebase app is initialized
+	if config.FirebaseApp == nil {
+		log.Printf("Firebase app is not initialized")
+		return c.JSON(500, map[string]interface{}{
+			"success": false,
+			"message": "Firebase app not initialized",
+		})
+	}
+
 	client, err := config.FirebaseApp.Messaging(ctx)
 	if err != nil {
 		log.Printf("Error getting messaging client: %v", err)
 		return c.JSON(500, map[string]interface{}{
 			"success": false,
 			"message": "Failed to initialize messaging client",
+			"error":   err.Error(),
 		})
 	}
 
