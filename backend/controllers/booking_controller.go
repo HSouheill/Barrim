@@ -235,13 +235,53 @@ func (c *BookingController) CreateBooking(ctx echo.Context) error {
 		})
 	}
 
+	// Send WebSocket notification to service provider
 	if err := c.hub.SendToUser(serviceProviderID, websocket.Notification{
 		Type:    "new_booking",
 		Message: "You have a new booking request",
 		Data:    booking,
 	}); err != nil {
 		log.Printf("Failed to send WebSocket notification to service provider: %v", err)
-		// Optionally, fall back to another notification method (e.g., email or FCM)
+	}
+
+	// Get service provider information for notification
+	var serviceProviderInfo models.ServiceProvider
+	err = c.db.Database("barrim").Collection("serviceProviders").FindOne(context.Background(), bson.M{"_id": serviceProviderID}).Decode(&serviceProviderInfo)
+	if err != nil {
+		log.Printf("Failed to get service provider info for notification: %v", err)
+	}
+
+	// Send FCM notification to service provider
+	serviceType := "Service Request" // Default fallback
+	if serviceProviderInfo.ServiceProviderInfo != nil && serviceProviderInfo.ServiceProviderInfo.ServiceType != "" {
+		serviceType = serviceProviderInfo.ServiceProviderInfo.ServiceType
+	}
+
+	notificationData := map[string]interface{}{
+		"bookingId":    booking.ID.Hex(),
+		"customerName": user.FullName,
+		"serviceType":  serviceType,
+		"bookingDate":  bookingDate.Format("2006-01-02"),
+		"timeSlot":     request.TimeSlot,
+		"isEmergency":  fmt.Sprintf("%t", request.IsEmergency),
+	}
+
+	if err := utils.SendFCMNotificationToServiceProvider(c.db, serviceProviderID,
+		"New Booking Request",
+		fmt.Sprintf("You have a new booking request from %s", user.FullName),
+		notificationData); err != nil {
+		log.Printf("Failed to send FCM notification to service provider: %v", err)
+		// Continue execution even if FCM notification fails
+	}
+
+	// Save in-app notification for service provider
+	if err := utils.SaveNotification(c.db, serviceProviderID,
+		"New Booking Request",
+		fmt.Sprintf("You have a new booking request from %s", user.FullName),
+		"booking_request",
+		notificationData); err != nil {
+		log.Printf("Failed to save in-app notification for service provider: %v", err)
+		// Continue execution even if saving notification fails
 	}
 
 	return ctx.JSON(http.StatusCreated, models.BookingResponse{

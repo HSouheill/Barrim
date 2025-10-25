@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"firebase.google.com/go/v4/messaging"
+	"github.com/HSouheill/barrim_backend/config"
 	"github.com/HSouheill/barrim_backend/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -120,5 +122,99 @@ func NotifySalesManagerOfCreatedEntity(db *mongo.Client, salesPersonID primitive
 		"entityName":    entityName,
 		"salesPersonId": salesPersonID.Hex(),
 	})
+	return nil
+}
+
+// SendFCMNotificationToServiceProvider sends a Firebase Cloud Messaging notification to a service provider
+func SendFCMNotificationToServiceProvider(db *mongo.Client, serviceProviderID primitive.ObjectID, title, message string, data map[string]interface{}) error {
+	// Get service provider's FCM token from database
+	collection := db.Database("barrim").Collection("serviceProviders")
+	var serviceProvider models.ServiceProvider
+	err := collection.FindOne(context.Background(), bson.M{"_id": serviceProviderID}).Decode(&serviceProvider)
+	if err != nil {
+		return fmt.Errorf("failed to find service provider: %w", err)
+	}
+
+	if serviceProvider.FCMToken == "" {
+		log.Printf("Service provider %s has no FCM token", serviceProviderID.Hex())
+		return fmt.Errorf("service provider has no FCM token")
+	}
+
+	// Check if Firebase app is initialized
+	if config.FirebaseApp == nil {
+		log.Printf("Firebase app is not initialized")
+		return fmt.Errorf("firebase app not initialized")
+	}
+
+	// Get Firebase messaging client
+	ctx := context.Background()
+	client, err := config.FirebaseApp.Messaging(ctx)
+	if err != nil {
+		log.Printf("Error getting messaging client: %v", err)
+		return fmt.Errorf("failed to initialize messaging client: %w", err)
+	}
+
+	// Prepare notification data with default values
+	notificationData := map[string]string{
+		"type":              "booking_request",
+		"bookingId":         "",
+		"serviceProviderId": serviceProviderID.Hex(),
+		"customerName":      "",
+		"serviceType":       "",
+		"bookingDate":       "",
+		"timeSlot":          "",
+		"isEmergency":       "false",
+		"timestamp":         time.Now().Format(time.RFC3339),
+	}
+
+	// Override with provided data
+	if data != nil {
+		for key, value := range data {
+			if str, ok := value.(string); ok {
+				notificationData[key] = str
+			} else {
+				notificationData[key] = ""
+			}
+		}
+	}
+
+	// Prepare FCM message
+	fcmMessage := &messaging.Message{
+		Token: serviceProvider.FCMToken,
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  message,
+		},
+		Data: notificationData,
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				Sound:     "default",
+				ChannelID: "barrim_fcm_channel",
+			},
+		},
+		APNS: &messaging.APNSConfig{
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Alert: &messaging.ApsAlert{
+						Title: title,
+						Body:  message,
+					},
+					Sound:    "default",
+					Badge:    func() *int { v := 1; return &v }(),
+					Category: "BOOKING_REQUEST",
+				},
+			},
+		},
+	}
+
+	// Send FCM notification
+	response, err := client.Send(ctx, fcmMessage)
+	if err != nil {
+		log.Printf("Error sending FCM notification: %v", err)
+		return fmt.Errorf("failed to send FCM notification: %w", err)
+	}
+
+	log.Printf("FCM notification sent successfully to service provider %s: %s", serviceProviderID.Hex(), response)
 	return nil
 }
