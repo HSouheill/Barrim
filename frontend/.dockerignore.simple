@@ -1,0 +1,59 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+*.iml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+.dockerignore*
+docker-compose*.yml
+
+# Documentation
+README.md
+*.md
+
+# Test files
+test/
+
+# Android
+android/
+*.apk
+*.aab
+
+# iOS
+ios/
+*.ipa
+
+# Linux
+linux/
+
+# macOS
+macos/
+
+# Windows
+windows/
+
+# Analysis
+analysis_options.yaml
+devtools_options.yaml
+
+# Keep build/web for simple Dockerfile
+# build/

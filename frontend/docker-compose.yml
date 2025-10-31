@@ -1,0 +1,10 @@
+services:
+  barrim-admin-dashboard:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    environment:
+      - FLUTTER_ENV=production 

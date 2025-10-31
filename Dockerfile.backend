@@ -1,0 +1,51 @@
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod files (go.sum is optional, will be regenerated if missing)
+COPY backend/go.mod ./
+COPY backend/go.sum* ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY backend/ .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o barrim_backend .
+
+# Production stage
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates curl tzdata redis
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S appuser -u 1001
+
+# Copy binary from builder stage
+COPY --from=builder /app/barrim_backend .
+
+# Create upload directories
+RUN mkdir -p /app/uploads/bookings \
+    /app/uploads/category \
+    /app/uploads/certificates \
+    /app/uploads/companies \
+    /app/uploads/logo \
+    /app/uploads/logos \
+    /app/uploads/videos \
+    /app/uploads/profiles \
+    /app/uploads/serviceprovider
+
+# Change ownership
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8080
+
+CMD ["./barrim_backend"]

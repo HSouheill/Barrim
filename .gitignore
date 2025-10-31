@@ -1,0 +1,44 @@
+# Build artifacts
+backend/barrim_backend
+frontend/build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+backend/main
+
+# Firebase Admin SDK credentials (security)
+**/*firebase-adminsdk*.json
+**/*-firebase-adminsdk-*.json
