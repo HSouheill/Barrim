@@ -13,7 +13,6 @@ import (
 	"github.com/HSouheill/barrim_backend/middleware"
 	"github.com/HSouheill/barrim_backend/models"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -59,7 +58,7 @@ func (s *GoogleAuthService) AuthenticateUser(googleUser *GoogleUser) (map[string
 	// Get user collection
 	collection := config.GetCollection(s.DB, "users")
 
-	// Check if user exists
+	// Check if user exists - DO NOT auto-create
 	var user models.User
 	err = collection.FindOne(ctx, bson.M{"email": googleUser.Email}).Decode(&user)
 
@@ -68,47 +67,8 @@ func (s *GoogleAuthService) AuthenticateUser(googleUser *GoogleUser) (map[string
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			// User doesn't exist, create new user
-			now := time.Now()
-			newUser := models.User{
-				Email:      googleUser.Email,
-				FullName:   googleUser.DisplayName,
-				UserType:   "user", // Default user type
-				GoogleID:   googleUser.GoogleID,
-				ProfilePic: googleUser.PhotoURL,
-				Points:     0,
-				CreatedAt:  now,
-				UpdatedAt:  now,
-			}
-
-			// Insert user to database
-			result, err := collection.InsertOne(ctx, newUser)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create user: %w", err)
-			}
-
-			// Get inserted ID
-			insertedID := result.InsertedID.(primitive.ObjectID)
-
-			// Generate JWT token
-			token, refreshToken, err := middleware.GenerateJWT(insertedID.Hex(), newUser.Email, newUser.UserType)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate token: %w", err)
-			}
-
-			// Set user data for response
-			userData = map[string]interface{}{
-				"token":        token,
-				"refreshToken": refreshToken,
-				"user": map[string]interface{}{
-					"id":         insertedID,
-					"email":      newUser.Email,
-					"fullName":   newUser.FullName,
-					"userType":   newUser.UserType,
-					"points":     newUser.Points,
-					"profilePic": newUser.ProfilePic,
-				},
-			}
+			// User doesn't exist - Return error instead of creating
+			return nil, fmt.Errorf("user not found. Please complete signup first")
 		} else {
 			return nil, fmt.Errorf("database error: %w", err)
 		}

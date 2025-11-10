@@ -120,7 +120,8 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	// Get pending branch subscription requests only (admin only)
 	protected.GET("/company/branch-subscription/requests/pending", subscriptionController.GetPendingBranchSubscriptionRequests)
 	// Process branch subscription request (admin only)
-	protected.POST("/company/branch-subscription/requests/:id/process", subscriptionController.ProcessBranchSubscriptionRequest)
+	// DISABLED: Payment is now handled automatically via Whish payment callbacks
+	// protected.POST("/company/branch-subscription/requests/:id/process", subscriptionController.ProcessBranchSubscriptionRequest)
 
 	// Process subscription request (admin only)
 	protected.POST("/wholesaler/subscription/process/:id", subscriptionController.ProcessWholesalerSubscriptionRequest)

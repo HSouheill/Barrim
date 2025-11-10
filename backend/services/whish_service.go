@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/models"
@@ -22,39 +24,48 @@ type WhishService struct {
 
 // NewWhishService creates a new Whish service instance
 func NewWhishService() *WhishService {
-	// Try production environment first since testing credentials may not be set up
-	isTesting := false // Set to true for sandbox, false for production
+	// Determine environment (testing or production)
+	// Default to production unless WHISH_ENV is set to "testing"
+	whishEnv := os.Getenv("WHISH_ENV")
+	isTesting := whishEnv == "testing"
 
-	baseURL := "https://whish.money/itel-service/api/"
-	if isTesting {
-		baseURL = "https://api.sandbox.whish.money/itel-service/api/"
-	}
+	var baseURL string
 
-	// channel := os.Getenv("WHISH_CHANNEL")
-	// secret := os.Getenv("WHISH_SECRET")
-	// websiteURL := os.Getenv("WHISH_WEBSITE_URL")
-	channel := "10196975"
-	secret := "024709627da343afbcd5278a5ea819e"
-	websiteURL := "https://barrim.com"
+	baseURL = "https://api.sandbox.whish.money/itel-service/api/"
 
-	// Log configuration for debugging (don't log secret in production)
-	fmt.Printf("Whish Service Configuration:\n")
-	fmt.Printf("  Environment: %s\n", map[string]string{"true": "testing", "false": "live"}[fmt.Sprintf("%t", isTesting)])
-	fmt.Printf("  Base URL: %s\n", baseURL)
-	fmt.Printf("  Channel: %s\n", channel)
-	fmt.Printf("  Website URL: %s\n", websiteURL)
-	fmt.Printf("  Secret: %s\n", func() string {
-		if secret == "" {
-			return "[NOT SET]"
+	// Get credentials from environment variables
+	channelStr := os.Getenv("WHISH_CHANNEL")
+	secret := os.Getenv("WHISH_SECRET")
+	websiteUrl := os.Getenv("WHISH_WEBSITE_URL")
+
+	// Validate required credentials
+	if channelStr == "" || secret == "" || websiteUrl == "" {
+		log.Printf("WARNING: Whish credentials not fully configured:")
+		if channelStr == "" {
+			log.Printf("  - WHISH_CHANNEL is missing")
 		}
-		return "[SET]"
-	}())
+		if secret == "" {
+			log.Printf("  - WHISH_SECRET is missing")
+		}
+		if websiteUrl == "" {
+			log.Printf("  - WHISH_WEBSITE_URL is missing")
+		}
+		log.Printf("Please set these environment variables for Whish payment service to work")
+		log.Printf("Set WHISH_ENV=testing to use sandbox, or leave unset for production")
+	} else {
+		log.Printf("Whish Service Configuration:")
+		log.Printf("  Environment: %s", map[bool]string{true: "testing", false: "production"}[isTesting])
+		log.Printf("  Base URL: %s", baseURL)
+		log.Printf("  Channel: %s", channelStr)
+		log.Printf("  Website URL: %s", websiteUrl)
+		log.Printf("  Secret: [CONFIGURED]")
+	}
 
 	return &WhishService{
 		baseURL:    baseURL,
-		channel:    channel,
+		channel:    channelStr,
 		secret:     secret,
-		websiteURL: websiteURL,
+		websiteURL: websiteUrl,
 		isTesting:  isTesting,
 	}
 }
@@ -96,14 +107,18 @@ func (s *WhishService) makeRequest(method, endpoint string, payload interface{})
 
 	// Add headers
 	headers := s.getHeaders()
-	fmt.Printf("Whish API Request:\n")
-	fmt.Printf("  URL: %s\n", url)
-	fmt.Printf("  Method: %s\n", method)
-	for key, value := range headers {
-		if key == "secret" {
-			fmt.Printf("  %s: [HIDDEN]\n", key)
-		} else {
-			fmt.Printf("  %s: %s\n", key, value)
+
+	// Log request details (only in testing or with debug enabled)
+	if s.isTesting || os.Getenv("WHISH_DEBUG") == "true" {
+		log.Printf("Whish API Request:")
+		log.Printf("  URL: %s", url)
+		log.Printf("  Method: %s", method)
+		for key, value := range headers {
+			if key == "secret" {
+				log.Printf("  %s: [HIDDEN]", key)
+			} else {
+				log.Printf("  %s: %s", key, value)
+			}
 		}
 	}
 
@@ -129,8 +144,10 @@ func (s *WhishService) makeRequest(method, endpoint string, payload interface{})
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Log the raw response for debugging
-	fmt.Printf("Whish API Response: %s\n", string(respBody))
+	// Log the raw response for debugging (only in testing or with debug enabled)
+	if s.isTesting || os.Getenv("WHISH_DEBUG") == "true" {
+		log.Printf("Whish API Response: %s", string(respBody))
+	}
 
 	// Parse response
 	var whishResp models.WhishResponse
@@ -148,7 +165,24 @@ func (s *WhishService) makeRequest(method, endpoint string, payload interface{})
 				code = fmt.Sprintf("%v", whishResp.Code)
 			}
 		}
-		return &whishResp, fmt.Errorf("whish API error: %s", code)
+
+		// Extract dialog message for better error reporting
+		var errorMsg string
+		if whishResp.Dialog != nil {
+			if dialogMap, ok := whishResp.Dialog.(map[string]interface{}); ok {
+				if msg, ok := dialogMap["message"].(string); ok {
+					errorMsg = fmt.Sprintf("whish API error: %s - %s", code, msg)
+				}
+			}
+		}
+
+		if errorMsg == "" {
+			errorMsg = fmt.Sprintf("whish API error: %s", code)
+		}
+
+		log.Printf("Whish API Error Details: Code=%s, Dialog=%v", code, whishResp.Dialog)
+
+		return &whishResp, fmt.Errorf(errorMsg)
 	}
 
 	return &whishResp, nil

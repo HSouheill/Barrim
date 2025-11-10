@@ -16,13 +16,26 @@ func RegisterCompanyRoutes(e *echo.Echo, companyController *controllers.CompanyC
 	// Subscription routes
 	companyGroup.GET("/subscription-plans", subscriptionController.GetCompanySubscriptionPlans)
 	companyGroup.POST("/subscription/:branchId/request", companySubscriptionController.CreateBranchSubscriptionRequest)
-	companyGroup.GET("/subscription/request/:branchId/status", subscriptionController.GetCompanySubscriptionRequestStatus)
+	companyGroup.GET("/subscription/request/:branchId/status", companySubscriptionController.GetBranchSubscriptionRequestStatus)
+	companyGroup.POST("/subscription/:branchId/verify-activate", companySubscriptionController.VerifyAndActivateBranchSubscription)
 	companyGroup.POST("/subscription/:branchId/cancel", subscriptionController.CancelCompanySubscription)
 	companyGroup.GET("/subscription/:branchId/remaining-time", companySubscriptionController.GetBranchSubscriptionRemainingTime)
+
+	// Whish payment callback routes (public - no auth required for Whish callbacks)
+	e.GET("/api/whish/payment/callback/success", companySubscriptionController.HandleWhishPaymentSuccess)
+	e.GET("/api/whish/payment/callback/failure", companySubscriptionController.HandleWhishPaymentFailure)
 
 	// Sponsorship routes for company branches
 	companyGroup.POST("/sponsorship/:branchId/request", companyController.CreateCompanyBranchSponsorshipRequest)
 	companyGroup.GET("/sponsorship/:branchId/remaining-time", companyController.GetCompanyBranchSponsorshipRemainingTime)
+
+	// Whish payment callback routes for sponsorship (public - no auth required for Whish callbacks)
+	e.GET("/api/whish/company-branch/sponsorship/payment/callback/success", func(c echo.Context) error {
+		return companyController.HandleWhishSponsorshipPaymentSuccess(c)
+	})
+	e.GET("/api/whish/company-branch/sponsorship/payment/callback/failure", func(c echo.Context) error {
+		return companyController.HandleWhishSponsorshipPaymentFailure(c)
+	})
 
 	// Test route to check if company routes are working
 	companyGroup.GET("/test", func(c echo.Context) error {

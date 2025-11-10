@@ -26,4 +26,10 @@ type SubscriptionRequest struct {
 	RejectedBy      string     `json:"rejectedBy,omitempty" bson:"rejectedBy,omitempty"`
 	ApprovedAt      *time.Time `json:"approvedAt,omitempty" bson:"approvedAt,omitempty"`
 	RejectedAt      *time.Time `json:"rejectedAt,omitempty" bson:"rejectedAt,omitempty"`
+
+	// Whish payment fields
+	ExternalID    int64     `json:"externalId,omitempty" bson:"externalId,omitempty"`       // Whish payment external ID
+	PaymentStatus string    `json:"paymentStatus,omitempty" bson:"paymentStatus,omitempty"` // "pending", "success", "failed"
+	CollectURL    string    `json:"collectUrl,omitempty" bson:"collectUrl,omitempty"`       // Whish payment URL
+	PaidAt        time.Time `json:"paidAt,omitempty" bson:"paidAt,omitempty"`
 }

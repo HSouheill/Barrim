@@ -33,6 +33,7 @@ func ServeImage(c echo.Context) error {
 	potentialPaths := []string{
 		filepath.Join("uploads", path),
 		filepath.Join("uploads", "serviceprovider", path),
+		filepath.Join("uploads", "serviceprovider", "portfolio", path),
 		filepath.Join("uploads", "profiles", path),
 		filepath.Join("uploads", "logos", path),
 		filepath.Join("uploads", "vouchers", path),

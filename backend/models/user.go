@@ -99,6 +99,7 @@ type ServiceProviderInfo struct {
 	YearsExperience          interface{}          `json:"yearsExperience" bson:"yearsExperience"`
 	ProfilePhoto             string               `json:"profilePhoto,omitempty" bson:"profilePhoto,omitempty"`
 	CertificateImages        []string             `json:"certificateImages,omitempty" bson:"certificateImages,omitempty"`
+	PortfolioImages          []string             `json:"portfolioImages,omitempty" bson:"portfolioImages,omitempty"`
 	AvailableHours           []string             `json:"availableHours,omitempty" bson:"availableHours,omitempty"`
 	AvailableDays            []string             `json:"availableDays,omitempty" bson:"availableDays,omitempty"`
 	ApplyToAllMonths         bool                 `json:"applyToAllMonths,omitempty" bson:"applyToAllMonths,omitempty"`

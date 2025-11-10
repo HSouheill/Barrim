@@ -104,6 +104,31 @@ func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database, serviceProv
 	})
 	log.Println("Registered /description endpoint")
 
+	// Portfolio image routes - service providers can manage portfolio images
+	protected.POST("/portfolio/upload", func(c echo.Context) error {
+		log.Printf("Received portfolio image upload request from %s", c.Request().RemoteAddr)
+		return serviceProviderController.UploadPortfolioImage(c)
+	})
+	log.Println("Registered /portfolio/upload endpoint")
+
+	protected.GET("/portfolio", func(c echo.Context) error {
+		log.Printf("Received request for portfolio images from %s", c.Request().RemoteAddr)
+		return serviceProviderController.GetPortfolioImages(c)
+	})
+	log.Println("Registered /portfolio endpoint")
+
+	protected.PUT("/portfolio", func(c echo.Context) error {
+		log.Printf("Received portfolio image update request from %s", c.Request().RemoteAddr)
+		return serviceProviderController.UpdatePortfolioImage(c)
+	})
+	log.Println("Registered /portfolio update endpoint")
+
+	protected.DELETE("/portfolio", func(c echo.Context) error {
+		log.Printf("Received portfolio image delete request from %s", c.Request().RemoteAddr)
+		return serviceProviderController.DeletePortfolioImage(c)
+	})
+	log.Println("Registered /portfolio delete endpoint")
+
 	// Public routes (no authentication required)
 	public := serviceProvider.Group("")
 
@@ -113,6 +138,32 @@ func RegisterServiceProviderRoutes(e *echo.Echo, db *mongo.Database, serviceProv
 		return salesPersonController.CreateServiceProvider(c)
 	})
 	log.Println("Registered /register endpoint")
+
+	// Whish payment callback routes (public - no auth required for Whish callbacks, registered directly on main Echo instance)
+	e.GET("/api/whish/service-provider/payment/callback/success", func(c echo.Context) error {
+		log.Printf("Received Whish payment success callback for service provider from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.HandleWhishPaymentSuccess(c)
+	})
+	log.Println("Registered /api/whish/service-provider/payment/callback/success endpoint")
+
+	e.GET("/api/whish/service-provider/payment/callback/failure", func(c echo.Context) error {
+		log.Printf("Received Whish payment failure callback for service provider from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.HandleWhishPaymentFailure(c)
+	})
+	log.Println("Registered /api/whish/service-provider/payment/callback/failure endpoint")
+
+	// Whish payment callback routes for sponsorship (public - no auth required for Whish callbacks)
+	e.GET("/api/whish/service-provider/sponsorship/payment/callback/success", func(c echo.Context) error {
+		log.Printf("Received Whish sponsorship payment success callback for service provider from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.HandleWhishSponsorshipPaymentSuccess(c)
+	})
+	log.Println("Registered /api/whish/service-provider/sponsorship/payment/callback/success endpoint")
+
+	e.GET("/api/whish/service-provider/sponsorship/payment/callback/failure", func(c echo.Context) error {
+		log.Printf("Received Whish sponsorship payment failure callback for service provider from %s", c.Request().RemoteAddr)
+		return serviceProviderSubscriptionController.HandleWhishSponsorshipPaymentFailure(c)
+	})
+	log.Println("Registered /api/whish/service-provider/sponsorship/payment/callback/failure endpoint")
 
 	// Admin/Manager routes for toggling any service provider status
 	adminGroup := serviceProvider.Group("/admin")

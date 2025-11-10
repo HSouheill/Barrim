@@ -1764,6 +1764,21 @@ func (ac *AuthController) GoogleLogin(c echo.Context) error {
 	userData, err := googleAuthService.AuthenticateUser(&googleUser)
 	if err != nil {
 		ac.logger.Printf("Google authentication error: %v", err)
+		
+		// Check if it's a user not found error
+		if strings.Contains(err.Error(), "user not found") {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "User not found. Please complete signup first.",
+				Data: map[string]interface{}{
+					"error":      "user_not_found",
+					"email":      googleUser.Email,
+					"googleID":   googleUser.GoogleID,
+					"needSignup": true,
+				},
+			})
+		}
+		
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Authentication failed: " + err.Error(),
@@ -3097,7 +3112,7 @@ func (ac *AuthController) GoogleAuthWithoutFirebase(c echo.Context) error {
 
 	ac.logger.Printf("Google auth: Processing user - Email: %s, Sub: %s, Name: %s", email, sub, name)
 
-	// Check if user exists, else create
+	// Check if user exists - DO NOT auto-create
 	ctx := context.Background()
 	collection := ac.DB.Database("barrim").Collection("users")
 	var user models.User
@@ -3108,26 +3123,24 @@ func (ac *AuthController) GoogleAuthWithoutFirebase(c echo.Context) error {
 		// User not found by Google ID, check if user exists by email
 		err = collection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
 		if err == mongo.ErrNoDocuments {
-			// No user exists with this email, create new user
-			ac.logger.Printf("Google auth: Creating new user for Google ID: %s", sub)
-			user = models.User{
-				ID:        primitive.NewObjectID(),
-				Email:     email,
-				FullName:  name,
-				GoogleID:  sub,
-				UserType:  "user",
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			}
-			_, err := collection.InsertOne(ctx, user)
-			if err != nil {
-				ac.logger.Printf("Google auth error: Failed to create user in database: %v", err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create user"})
-			}
-			ac.logger.Printf("Google auth: Successfully created new user with ID: %s", user.ID.Hex())
+			// No user exists with this email - Return error, don't create
+			ac.logger.Printf("Google auth: User not found for Google ID: %s, Email: %s", sub, email)
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "User not found. Please complete signup first.",
+				Data: map[string]interface{}{
+					"error":      "user_not_found",
+					"email":      email,
+					"googleID":   sub,
+					"needSignup": true,
+				},
+			})
 		} else if err != nil {
 			ac.logger.Printf("Google auth error: Database error while finding user by email: %v", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Database error",
+			})
 		} else {
 			// User exists with this email but no Google ID, link the Google ID
 			ac.logger.Printf("Google auth: Linking Google ID to existing user with ID: %s", user.ID.Hex())
@@ -3141,14 +3154,20 @@ func (ac *AuthController) GoogleAuthWithoutFirebase(c echo.Context) error {
 			)
 			if err != nil {
 				ac.logger.Printf("Google auth error: Failed to link Google ID: %v", err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to link Google account"})
+				return c.JSON(http.StatusInternalServerError, models.Response{
+					Status:  http.StatusInternalServerError,
+					Message: "Failed to link Google account",
+				})
 			}
 			user.GoogleID = sub
 			ac.logger.Printf("Google auth: Successfully linked Google ID to existing user")
 		}
 	} else if err != nil {
 		ac.logger.Printf("Google auth error: Database error while finding user by Google ID: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Database error",
+		})
 	} else {
 		ac.logger.Printf("Google auth: Found existing user with Google ID: %s", user.ID.Hex())
 	}
@@ -3163,9 +3182,13 @@ func (ac *AuthController) GoogleAuthWithoutFirebase(c echo.Context) error {
 
 	user.Password = ""
 	ac.logger.Printf("Google auth: Successfully authenticated user: %s", user.Email)
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"token":        token,
-		"refreshToken": refreshToken,
-		"user":         user,
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Login successful",
+		Data: map[string]interface{}{
+			"token":        token,
+			"refreshToken": refreshToken,
+			"user":         user,
+		},
 	})
 }

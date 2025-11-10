@@ -383,17 +383,29 @@ func (rc *ReviewController) PostReviewReply(c echo.Context) error {
 		})
 	}
 
-	// Send notification to the review's original author (in-app + FCM)
+	// Send notification to the review's original author (receiver) - in-app + FCM
 	go func() {
 		title := "Your review received a reply"
-		message := fmt.Sprintf("%s replied to your review: %s", spUser.FullName, req.ReplyText)
+		// Truncate reply text if too long for notification
+		replyPreview := req.ReplyText
+		if len(replyPreview) > 100 {
+			replyPreview = replyPreview[:100] + "..."
+		}
+		message := fmt.Sprintf("%s replied to your review: %s", spUser.FullName, replyPreview)
 		notifType := "review_reply"
 		data := map[string]interface{}{
-			"reviewId":          review.ID.Hex(),
-			"serviceProviderId": spUser.ID.Hex(),
+			"reviewId":            review.ID.Hex(),
+			"serviceProviderId":   spUser.ID.Hex(),
+			"serviceProviderName": spUser.FullName,
 		}
-		_ = utils.SaveNotification(rc.db, review.UserID, title, message, notifType, data)
-		_ = utils.SendFCMNotificationToUser(rc.db, review.UserID, title, message, data)
+		// Save in-app notification
+		if err := utils.SaveNotification(rc.db, review.UserID, title, message, notifType, data); err != nil {
+			log.Printf("Failed to save notification for review reply: %v", err)
+		}
+		// Send FCM push notification
+		if err := utils.SendFCMNotificationToUser(rc.db, review.UserID, title, message, data); err != nil {
+			log.Printf("Failed to send FCM notification for review reply: %v", err)
+		}
 	}()
 
 	return c.JSON(http.StatusOK, models.Response{

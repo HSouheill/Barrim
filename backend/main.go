@@ -11,7 +11,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	// "go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/HSouheill/barrim_backend/config"
 	"github.com/HSouheill/barrim_backend/controllers"
@@ -127,11 +128,11 @@ func main() {
 	routes.RegisterUnifiedReferralRoutes(e, client)
 
 	// Add public WebSocket endpoint (no authentication required for initial connection)
-	e.GET("/api/ws", func(c echo.Context) error {
-		// Handle WebSocket upgrade without authentication
-		// Authentication can be handled after connection is established
-		return websocket.HandleWebSocket(c, wsHub, primitive.NilObjectID)
-	})
+	// e.GET("/api/ws", func(c echo.Context) error {
+	// 	// Handle WebSocket upgrade without authentication
+	// 	// Authentication can be handled after connection is established
+	// 	return websocket.HandleWebSocket(c, wsHub, primitive.NilObjectID)
+	// })
 
 	// Setup remaining routes
 	routes.SetupRoutes(e, client, wsHub, authController, userController)

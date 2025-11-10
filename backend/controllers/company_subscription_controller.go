@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"io"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/HSouheill/barrim_backend/middleware"
 	"github.com/HSouheill/barrim_backend/models"
+	"github.com/HSouheill/barrim_backend/services"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -189,12 +189,12 @@ func (sc *BranchSubscriptionController) CreateBranchSubscriptionRequest(c echo.C
 	var existingRequest models.BranchSubscriptionRequest
 	err = subscriptionRequestsCollection.FindOne(ctx, bson.M{
 		"branchId": branch.ID,
-		"status":   "pending",
+		"status":   bson.M{"$in": []string{"pending", "pending_payment"}},
 	}).Decode(&existingRequest)
 	if err == nil {
 		return c.JSON(http.StatusConflict, models.Response{
 			Status:  http.StatusConflict,
-			Message: "You already have a pending subscription request for this branch. Please wait for admin approval.",
+			Message: "You already have a pending subscription request for this branch. Please complete the payment first.",
 		})
 	} else if err != mongo.ErrNoDocuments {
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -223,88 +223,493 @@ func (sc *BranchSubscriptionController) CreateBranchSubscriptionRequest(c echo.C
 		})
 	}
 
-	// Handle payment proof image upload
-	var imagePath string
-	if file, err := c.FormFile("paymentProof"); err == nil {
-		// Validate file type
-		contentType := file.Header.Get("Content-Type")
-		if !strings.HasPrefix(contentType, "image/") {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Payment proof must be an image file",
-			})
-		}
-		// Validate file size (max 5MB)
-		if file.Size > 5*1024*1024 {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Payment proof image must be less than 5MB",
-			})
-		}
-		// Save the uploaded file
-		imagePath, err = sc.saveUploadedFile(file, "uploads/payment_proofs")
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to save payment proof image",
-			})
-		}
-	}
-
 	// Create branch subscription request
 	subscriptionRequest := models.BranchSubscriptionRequest{
 		ID:          primitive.NewObjectID(),
 		BranchID:    branch.ID,
 		PlanID:      planObjectID,
-		Status:      "pending",
 		RequestedAt: time.Now(),
-		ImagePath:   imagePath,
 	}
 
-	// Save subscription request
+	// Generate externalId from ObjectID (use timestamp part as int64)
+	externalID := int64(subscriptionRequest.ID.Timestamp().Unix())
+	subscriptionRequest.ExternalID = externalID
+
+	// Create subscription request with pending_payment status
+	subscriptionRequest.Status = "pending_payment"
+	subscriptionRequest.PaymentStatus = "pending"
+
+	// Get base URL for callbacks
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://barrim.online" // Default fallback
+	}
+
+	// Get app URL for redirects
+	appURL := os.Getenv("APP_URL")
+	if appURL == "" {
+		appURL = baseURL // Fallback to baseURL if APP_URL not set
+	}
+
+	// Initialize Whish service
+	whishService := services.NewWhishService()
+
+	// Check Whish merchant account balance to verify account is active
+	// This validates that your Whish merchant account is operational
+	whishBalance, err := whishService.GetBalance()
+	if err != nil {
+		log.Printf("Warning: Could not check Whish account balance: %v", err)
+		// Continue anyway - balance check failure doesn't block payment creation
+	} else {
+		log.Printf("Whish merchant account balance: $%.2f", whishBalance)
+		// Optional: Validate account is active (negative balance might indicate issues)
+		if whishBalance < 0 {
+			log.Printf("Warning: Whish account has negative balance: $%.2f", whishBalance)
+		}
+	}
+
+	// Create Whish payment request
+	whishReq := models.WhishRequest{
+		Amount:             &plan.Price,
+		Currency:           "USD", // Use USD for subscription payments
+		Invoice:            fmt.Sprintf("Branch Subscription - %s - Plan: %s", branch.Name, plan.Title),
+		ExternalID:         &externalID,
+		SuccessCallbackURL: fmt.Sprintf("%s/api/whish/payment/callback/success", baseURL),
+		FailureCallbackURL: fmt.Sprintf("%s/api/whish/payment/callback/failure", baseURL),
+		SuccessRedirectURL: fmt.Sprintf("%s/payment-success?requestId=%s", appURL, subscriptionRequest.ID.Hex()),
+		FailureRedirectURL: fmt.Sprintf("%s/payment-failed?requestId=%s", appURL, subscriptionRequest.ID.Hex()),
+	}
+
+	// Call Whish API to create payment
+	collectURL, err := whishService.PostPayment(whishReq)
+	if err != nil {
+		log.Printf("Failed to create Whish payment: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: fmt.Sprintf("Failed to initiate payment: %v", err),
+		})
+	}
+
+	// Save collectUrl to subscription request
+	subscriptionRequest.CollectURL = collectURL
+
+	// Save subscription request to database
 	_, err = subscriptionRequestsCollection.InsertOne(ctx, subscriptionRequest)
 	if err != nil {
-		// If saving to database fails, delete the uploaded image
-		if imagePath != "" {
-			os.Remove(imagePath)
-		}
+		log.Printf("Failed to save subscription request: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to create subscription request",
 		})
 	}
 
-	// Send notification to admin
-	adminEmail := os.Getenv("ADMIN_EMAIL")
-	if adminEmail != "" {
-		subject := "New Branch Subscription Request"
-		body := fmt.Sprintf("A new subscription request has been submitted by branch: %s\nPlan: %s\nRequested At: %s\n", branch.Name, plan.Title, subscriptionRequest.RequestedAt.Format("2006-01-02 15:04:05"))
-		if err := sc.sendNotificationEmail(adminEmail, subject, body); err != nil {
-			log.Printf("Failed to send admin notification email: %v", err)
-		}
-	}
-
-	// Optionally, send to manager as well if you have a manager email
-	managerEmail := os.Getenv("MANAGER_EMAIL")
-	if managerEmail != "" {
-		subject := "New Branch Subscription Request (Manager Notification)"
-		body := fmt.Sprintf("A new subscription request has been submitted by branch: %s\nPlan: %s\nRequested At: %s\n", branch.Name, plan.Title, subscriptionRequest.RequestedAt.Format("2006-01-02 15:04:05"))
-		if err := sc.sendNotificationEmail(managerEmail, subject, body); err != nil {
-			log.Printf("Failed to send manager notification email: %v", err)
-		}
-	}
+	log.Printf("Whish payment created for branch subscription request %s: %s", subscriptionRequest.ID.Hex(), collectURL)
 
 	return c.JSON(http.StatusCreated, models.Response{
 		Status:  http.StatusCreated,
-		Message: "Subscription request submitted successfully. You will be notified once the admin reviews your request.",
+		Message: "Payment initiated successfully. Please complete the payment to activate your subscription.",
 		Data: map[string]interface{}{
 			"requestId":     subscriptionRequest.ID,
 			"plan":          plan,
 			"status":        subscriptionRequest.Status,
 			"submittedAt":   subscriptionRequest.RequestedAt,
 			"paymentAmount": plan.Price,
+			"collectUrl":    collectURL,
+			"externalId":    externalID,
 		},
 	})
+}
+
+// HandleWhishPaymentSuccess handles Whish payment success callback
+func (sc *BranchSubscriptionController) HandleWhishPaymentSuccess(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	log.Printf("==========================================")
+	log.Printf("💰 BRANCH SUBSCRIPTION PAYMENT CALLBACK RECEIVED")
+	log.Printf("==========================================")
+
+	// Get externalId from query parameters (Whish sends it as GET parameter)
+	externalIDStr := c.QueryParam("externalId")
+	if externalIDStr == "" {
+		log.Printf("❌ PAYMENT CALLBACK FAILED: Missing externalId in Whish success callback")
+		return c.String(http.StatusBadRequest, "Missing externalId parameter")
+	}
+
+	externalID, err := strconv.ParseInt(externalIDStr, 10, 64)
+	if err != nil {
+		log.Printf("❌ PAYMENT CALLBACK FAILED: Invalid externalId in callback: %v", err)
+		return c.String(http.StatusBadRequest, "Invalid externalId")
+	}
+
+	log.Printf("📋 Processing payment callback for externalId: %d", externalID)
+
+	// Find the subscription request by externalId
+	subscriptionRequestsCollection := sc.DB.Collection("branch_subscription_requests")
+	var subscriptionRequest models.BranchSubscriptionRequest
+	err = subscriptionRequestsCollection.FindOne(ctx, bson.M{"externalId": externalID}).Decode(&subscriptionRequest)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("❌ PAYMENT CALLBACK FAILED: Subscription request not found for externalId: %d", externalID)
+			return c.String(http.StatusNotFound, "Subscription request not found")
+		}
+		log.Printf("❌ PAYMENT CALLBACK FAILED: Error finding subscription request: %v", err)
+		return c.String(http.StatusInternalServerError, "Database error")
+	}
+
+	log.Printf("✅ Found subscription request: %s (Branch: %s)", subscriptionRequest.ID.Hex(), subscriptionRequest.BranchID.Hex())
+
+	// Check if already processed
+	if subscriptionRequest.PaymentStatus == "success" || subscriptionRequest.Status == "active" {
+		log.Printf("ℹ️  Payment already processed for request: %s", subscriptionRequest.ID.Hex())
+		return c.String(http.StatusOK, "Payment already processed")
+	}
+
+	// Initialize Whish service and verify payment status
+	whishService := services.NewWhishService()
+	status, phoneNumber, err := whishService.GetPaymentStatus("USD", externalID)
+	if err != nil {
+		log.Printf("❌ PAYMENT CALLBACK FAILED: Failed to verify payment status: %v", err)
+		return c.String(http.StatusInternalServerError, "Failed to verify payment")
+	}
+
+	log.Printf("📊 Payment status from Whish API: %s (Phone: %s)", status, phoneNumber)
+
+	if status != "success" {
+		log.Printf("❌ PAYMENT FAILED: Payment not successful, status: %s", status)
+		log.Printf("   Request ID: %s", subscriptionRequest.ID.Hex())
+		// Update request status to failed
+		subscriptionRequestsCollection.UpdateOne(ctx,
+			bson.M{"_id": subscriptionRequest.ID},
+			bson.M{"$set": bson.M{
+				"paymentStatus": "failed",
+				"status":        "failed",
+				"processedAt":   time.Now(),
+			}})
+		log.Printf("==========================================")
+		return c.String(http.StatusBadRequest, "Payment not successful")
+	}
+
+	// Payment verified successfully - proceed to activate subscription
+	log.Printf("🔄 Activating branch subscription...")
+	err = sc.activateBranchSubscription(ctx, subscriptionRequest, phoneNumber)
+	if err != nil {
+		log.Printf("❌ PAYMENT CALLBACK FAILED: Failed to activate subscription: %v", err)
+		return c.String(http.StatusInternalServerError, "Failed to activate subscription")
+	}
+
+	log.Printf("✅ PAYMENT SUCCESS: Branch subscription payment completed and activated")
+	log.Printf("   Request ID: %s", subscriptionRequest.ID.Hex())
+	log.Printf("   External ID: %d", externalID)
+	log.Printf("   Branch ID: %s", subscriptionRequest.BranchID.Hex())
+	log.Printf("   Phone: %s", phoneNumber)
+	log.Printf("==========================================")
+	return c.String(http.StatusOK, "Payment successful and subscription activated")
+}
+
+// HandleWhishPaymentFailure handles Whish payment failure callback
+func (sc *BranchSubscriptionController) HandleWhishPaymentFailure(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	externalIDStr := c.QueryParam("externalId")
+	if externalIDStr == "" {
+		return c.String(http.StatusBadRequest, "Missing externalId parameter")
+	}
+
+	externalID, err := strconv.ParseInt(externalIDStr, 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Invalid externalId")
+	}
+
+	// Update subscription request status to failed
+	subscriptionRequestsCollection := sc.DB.Collection("branch_subscription_requests")
+	_, err = subscriptionRequestsCollection.UpdateOne(ctx,
+		bson.M{"externalId": externalID},
+		bson.M{"$set": bson.M{
+			"paymentStatus": "failed",
+			"status":        "failed",
+			"processedAt":   time.Now(),
+		}})
+
+	if err != nil {
+		log.Printf("Failed to update subscription request on payment failure: %v", err)
+		return c.String(http.StatusInternalServerError, "Failed to update status")
+	}
+
+	log.Printf("Payment failed for externalId: %d", externalID)
+	return c.String(http.StatusOK, "Payment failure recorded")
+}
+
+// activateBranchSubscription activates the subscription after successful payment
+func (sc *BranchSubscriptionController) activateBranchSubscription(ctx context.Context, subscriptionRequest models.BranchSubscriptionRequest, payerPhone string) error {
+	// Get plan details
+	var plan models.SubscriptionPlan
+	err := sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": subscriptionRequest.PlanID}).Decode(&plan)
+	if err != nil {
+		log.Printf("Failed to get plan: %v", err)
+		return fmt.Errorf("failed to get plan details")
+	}
+
+	// Get company and branch details
+	var company models.Company
+	err = sc.DB.Collection("companies").FindOne(ctx, bson.M{"branches._id": subscriptionRequest.BranchID}).Decode(&company)
+	if err != nil {
+		log.Printf("Failed to get company: %v", err)
+		return fmt.Errorf("failed to get company details")
+	}
+
+	// Find the specific branch
+	var branch models.Branch
+	branchFound := false
+	for _, b := range company.Branches {
+		if b.ID == subscriptionRequest.BranchID {
+			branch = b
+			branchFound = true
+			break
+		}
+	}
+
+	if !branchFound {
+		return fmt.Errorf("branch not found")
+	}
+
+	// Calculate subscription dates
+	startDate := time.Now()
+	var endDate time.Time
+	switch plan.Duration {
+	case 1: // Monthly
+		endDate = startDate.AddDate(0, 1, 0)
+	case 3: // 3 Months
+		endDate = startDate.AddDate(0, 3, 0)
+	case 6: // 6 Months
+		endDate = startDate.AddDate(0, 6, 0)
+	case 12: // 1 Year
+		endDate = startDate.AddDate(1, 0, 0)
+	default:
+		return fmt.Errorf("invalid plan duration")
+	}
+
+	// Create active subscription
+	newSubscription := models.BranchSubscription{
+		ID:        primitive.NewObjectID(),
+		BranchID:  subscriptionRequest.BranchID,
+		PlanID:    subscriptionRequest.PlanID,
+		StartDate: startDate,
+		EndDate:   endDate,
+		Status:    "active",
+		AutoRenew: false,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Save subscription
+	subscriptionsCollection := sc.DB.Collection("branch_subscriptions")
+	_, err = subscriptionsCollection.InsertOne(ctx, newSubscription)
+	if err != nil {
+		log.Printf("Failed to create subscription: %v", err)
+		return fmt.Errorf("failed to create subscription")
+	}
+
+	// Update branch status to active
+	branchCollection := sc.DB.Collection("branches")
+	_, err = branchCollection.UpdateOne(ctx, bson.M{"_id": subscriptionRequest.BranchID}, bson.M{"$set": bson.M{"status": "active"}})
+	if err != nil {
+		log.Printf("Failed to update branch status: %v", err)
+	}
+
+	// Update branch status in companies collection
+	_, err = sc.DB.Collection("companies").UpdateOne(
+		ctx,
+		bson.M{
+			"_id":          company.ID,
+			"branches._id": subscriptionRequest.BranchID,
+		},
+		bson.M{
+			"$set": bson.M{
+				"branches.$.status":    "active",
+				"branches.$.updatedAt": time.Now(),
+			},
+		},
+	)
+	if err != nil {
+		log.Printf("Failed to update branch status in companies: %v", err)
+	}
+
+	// Update user status to active when subscription is activated
+	usersCollection := sc.DB.Collection("users")
+	_, err = usersCollection.UpdateOne(
+		ctx,
+		bson.M{"_id": company.UserID},
+		bson.M{"$set": bson.M{"status": "active", "updatedAt": time.Now()}},
+	)
+	if err != nil {
+		log.Printf("Failed to update user status to active: %v", err)
+	}
+
+	// Handle commission and admin wallet (30% salesperson, 70% admin)
+	planPrice := plan.Price
+	if company.CreatedBy != company.UserID && !company.CreatedBy.IsZero() {
+		// Company was created by a salesperson - split commission
+		var salesperson models.Salesperson
+		err := sc.DB.Collection("salespersons").FindOne(ctx, bson.M{"_id": company.CreatedBy}).Decode(&salesperson)
+		if err == nil {
+			// Calculate commissions: 30% salesperson, 70% admin
+			salespersonPercent := 30.0
+			adminPercent := 70.0
+
+			salespersonCommission := planPrice * salespersonPercent / 100.0
+			adminCommission := planPrice * adminPercent / 100.0
+
+			// Add salesperson commission (using SubscriptionController method through type assertion/conversion)
+			// We need to access the method - let's create a helper or use direct implementation
+			err = sc.addCommissionToSalespersonWalletDirect(ctx, salesperson.ID, salespersonCommission, newSubscription.ID, "branch_subscription", company.BusinessName)
+			if err != nil {
+				log.Printf("Failed to add salesperson commission: %v", err)
+			} else {
+				log.Printf("Added salesperson commission: $%.2f (30%% of $%.2f)", salespersonCommission, planPrice)
+			}
+
+			// Add admin commission
+			err = sc.addSubscriptionIncomeToAdminWalletDirect(ctx, adminCommission, newSubscription.ID, "branch_subscription_commission", company.BusinessName, branch.Name)
+			if err != nil {
+				log.Printf("Failed to add admin commission: %v", err)
+			} else {
+				log.Printf("Added admin commission: $%.2f (70%% of $%.2f)", adminCommission, planPrice)
+			}
+		} else {
+			log.Printf("Salesperson not found, adding full amount to admin wallet")
+			// Salesperson not found, add full amount to admin
+			err = sc.addSubscriptionIncomeToAdminWalletDirect(ctx, planPrice, newSubscription.ID, "branch_subscription", company.BusinessName, branch.Name)
+			if err != nil {
+				log.Printf("Failed to add subscription income to admin wallet: %v", err)
+			}
+		}
+	} else {
+		// Company created by itself - full amount to admin
+		err = sc.addSubscriptionIncomeToAdminWalletDirect(ctx, planPrice, newSubscription.ID, "branch_subscription", company.BusinessName, branch.Name)
+		if err != nil {
+			log.Printf("Failed to add subscription income to admin wallet: %v", err)
+		}
+	}
+
+	// Update subscription request status
+	subscriptionRequestsCollection := sc.DB.Collection("branch_subscription_requests")
+	_, err = subscriptionRequestsCollection.UpdateOne(ctx,
+		bson.M{"_id": subscriptionRequest.ID},
+		bson.M{"$set": bson.M{
+			"paymentStatus": "success",
+			"status":        "active",
+			"paidAt":        time.Now(),
+			"processedAt":   time.Now(),
+		}})
+
+	if err != nil {
+		log.Printf("Failed to update subscription request status: %v", err)
+	}
+
+	log.Printf("Branch subscription activated successfully: Branch=%s, Plan=%s, Amount=$%.2f", branch.Name, plan.Title, planPrice)
+	return nil
+}
+
+// Helper methods for wallet management (direct implementations for BranchSubscriptionController)
+func (sc *BranchSubscriptionController) addSubscriptionIncomeToAdminWalletDirect(ctx context.Context, amount float64, entityID primitive.ObjectID, entityType, companyName, branchName string) error {
+	adminWalletTransaction := models.AdminWallet{
+		ID:          primitive.NewObjectID(),
+		Type:        "subscription_income",
+		Amount:      amount,
+		Description: fmt.Sprintf("Subscription income from %s - %s (%s)", companyName, branchName, entityType),
+		EntityID:    entityID,
+		EntityType:  entityType,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	_, err := sc.DB.Collection("admin_wallet").InsertOne(ctx, adminWalletTransaction)
+	if err != nil {
+		return fmt.Errorf("failed to insert admin wallet transaction: %w", err)
+	}
+
+	balanceCollection := sc.DB.Collection("admin_wallet_balance")
+	var balance models.AdminWalletBalance
+	err = balanceCollection.FindOne(ctx, bson.M{}).Decode(&balance)
+
+	if err == mongo.ErrNoDocuments {
+		balance = models.AdminWalletBalance{
+			ID:                    primitive.NewObjectID(),
+			TotalIncome:           amount,
+			TotalWithdrawalIncome: 0,
+			TotalCommissionsPaid:  0,
+			NetBalance:            amount,
+			LastUpdated:           time.Now(),
+		}
+		_, err = balanceCollection.InsertOne(ctx, balance)
+		if err != nil {
+			return fmt.Errorf("failed to create admin wallet balance: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to find admin wallet balance: %w", err)
+	} else {
+		update := bson.M{
+			"$inc": bson.M{
+				"totalIncome": amount,
+				"netBalance":  amount,
+			},
+			"$set": bson.M{
+				"lastUpdated": time.Now(),
+			},
+		}
+		_, err = balanceCollection.UpdateOne(ctx, bson.M{"_id": balance.ID}, update)
+		if err != nil {
+			return fmt.Errorf("failed to update admin wallet balance: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (sc *BranchSubscriptionController) addCommissionToSalespersonWalletDirect(ctx context.Context, salespersonID primitive.ObjectID, amount float64, subscriptionID primitive.ObjectID, entityType, companyName string) error {
+	// Note: CommissionRecord model might need to be checked - using similar structure
+	type CommissionRecord struct {
+		ID             primitive.ObjectID `bson:"_id,omitempty"`
+		SubscriptionID primitive.ObjectID `bson:"subscriptionId"`
+		SalespersonID  primitive.ObjectID `bson:"salespersonId"`
+		Amount         float64            `bson:"amount"`
+		Role           string             `bson:"role"`
+		Status         string             `bson:"status"`
+		CreatedAt      time.Time          `bson:"createdAt"`
+	}
+
+	commissionRecord := CommissionRecord{
+		ID:             primitive.NewObjectID(),
+		SubscriptionID: subscriptionID,
+		SalespersonID:  salespersonID,
+		Amount:         amount,
+		Role:           "salesperson",
+		Status:         "pending",
+		CreatedAt:      time.Now(),
+	}
+
+	_, err := sc.DB.Collection("commission_records").InsertOne(ctx, commissionRecord)
+	if err != nil {
+		return fmt.Errorf("failed to insert salesperson commission record: %w", err)
+	}
+
+	_, err = sc.DB.Collection("salespersons").UpdateOne(
+		ctx,
+		bson.M{"_id": salespersonID},
+		bson.M{
+			"$inc": bson.M{"commissionBalance": amount},
+			"$set": bson.M{"updatedAt": time.Now()},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update salesperson commission balance: %w", err)
+	}
+
+	log.Printf("Commission $%.2f added to salesperson wallet (ID: %s) from %s - %s",
+		amount, salespersonID.Hex(), entityType, companyName)
+	return nil
 }
 
 func (sc *SubscriptionController) CancelCompanySubscription(c echo.Context) error {
@@ -338,7 +743,20 @@ func (sc *SubscriptionController) CancelCompanySubscription(c echo.Context) erro
 		})
 	}
 
-	// Find and update active subscription
+	// Get all branch IDs for this company
+	branchIDs := make([]primitive.ObjectID, len(company.Branches))
+	for i, branch := range company.Branches {
+		branchIDs[i] = branch.ID
+	}
+
+	if len(branchIDs) == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "No branches found for this company",
+		})
+	}
+
+	// Find and update active subscriptions for all branches
 	subscriptionsCollection := sc.DB.Collection("branch_subscriptions")
 	update := bson.M{
 		"$set": bson.M{
@@ -348,9 +766,9 @@ func (sc *SubscriptionController) CancelCompanySubscription(c echo.Context) erro
 		},
 	}
 
-	result, err := subscriptionsCollection.UpdateOne(ctx, bson.M{
-		"companyId": company.ID,
-		"status":    "active",
+	result, err := subscriptionsCollection.UpdateMany(ctx, bson.M{
+		"branchId": bson.M{"$in": branchIDs},
+		"status":   "active",
 	}, update)
 
 	if err != nil {
@@ -2798,6 +3216,186 @@ func (sc *SubscriptionController) GetCommissions(c echo.Context) error {
 	})
 }
 
+// GetBranchSubscriptionRequestStatus gets the status of a branch's subscription request
+func (sc *BranchSubscriptionController) GetBranchSubscriptionRequestStatus(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Get branch ID from URL parameter
+	branchID := c.Param("branchId")
+	if branchID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Missing branch ID",
+		})
+	}
+
+	branchObjectID, err := primitive.ObjectIDFromHex(branchID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid branch ID",
+		})
+	}
+
+	// Verify the branch belongs to the company
+	companyCollection := sc.DB.Collection("companies")
+	var company models.Company
+	err = companyCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&company)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find company",
+		})
+	}
+
+	// Verify branch belongs to this company
+	branchFound := false
+	for _, b := range company.Branches {
+		if b.ID == branchObjectID {
+			branchFound = true
+			break
+		}
+	}
+
+	if !branchFound {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Branch does not belong to your company",
+		})
+	}
+
+	// Find the latest subscription request for this branch
+	subscriptionRequestsCollection := sc.DB.Collection("branch_subscription_requests")
+	var subscriptionRequest models.BranchSubscriptionRequest
+	err = subscriptionRequestsCollection.FindOne(ctx,
+		bson.M{"branchId": branchObjectID},
+		options.FindOne().SetSort(bson.D{{"requestedAt", -1}}),
+	).Decode(&subscriptionRequest)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusOK, models.Response{
+				Status:  http.StatusOK,
+				Message: "No subscription request found",
+				Data: map[string]interface{}{
+					"hasRequest": false,
+				},
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find subscription request",
+		})
+	}
+
+	// If payment status is pending, automatically verify payment and activate if successful
+	if subscriptionRequest.PaymentStatus == "pending" && subscriptionRequest.ExternalID != 0 {
+		log.Printf("🔄 Auto-verifying payment for subscription request: %s (externalId: %d)", subscriptionRequest.ID.Hex(), subscriptionRequest.ExternalID)
+		
+		// Initialize Whish service and verify payment status
+		whishService := services.NewWhishService()
+		status, phoneNumber, err := whishService.GetPaymentStatus("USD", subscriptionRequest.ExternalID)
+		if err != nil {
+			log.Printf("⚠️  Failed to auto-verify payment status: %v", err)
+			// Continue to return the current status even if verification fails
+		} else {
+			log.Printf("📊 Auto-verification result: status=%s, phone=%s", status, phoneNumber)
+			
+			// If payment is successful, activate the subscription
+			if status == "success" {
+				log.Printf("✅ Payment verified as successful, activating subscription...")
+				
+				// Check if subscription already exists
+				subscriptionsCollection := sc.DB.Collection("branch_subscriptions")
+				var existingSubscription models.BranchSubscription
+				err = subscriptionsCollection.FindOne(ctx, bson.M{
+					"branchId": branchObjectID,
+					"status":   "active",
+				}).Decode(&existingSubscription)
+				
+				if err != nil {
+					// No active subscription exists, activate it
+					err = sc.activateBranchSubscription(ctx, subscriptionRequest, phoneNumber)
+					if err != nil {
+						log.Printf("❌ Failed to auto-activate subscription: %v", err)
+					} else {
+						log.Printf("✅ Subscription auto-activated successfully")
+						// Reload the subscription request to get updated status
+						err = subscriptionRequestsCollection.FindOne(ctx, bson.M{"_id": subscriptionRequest.ID}).Decode(&subscriptionRequest)
+						if err != nil {
+							log.Printf("Warning: Failed to reload subscription request after activation: %v", err)
+						}
+					}
+				} else {
+					log.Printf("ℹ️  Subscription already active, updating request status")
+					// Update request status even if subscription already exists
+					subscriptionRequestsCollection.UpdateOne(ctx,
+						bson.M{"_id": subscriptionRequest.ID},
+						bson.M{"$set": bson.M{
+							"paymentStatus": "success",
+							"status":        "active",
+							"paidAt":        time.Now(),
+							"processedAt":   time.Now(),
+						}})
+					// Reload the subscription request
+					err = subscriptionRequestsCollection.FindOne(ctx, bson.M{"_id": subscriptionRequest.ID}).Decode(&subscriptionRequest)
+					if err != nil {
+						log.Printf("Warning: Failed to reload subscription request: %v", err)
+					}
+				}
+			} else if status == "failed" {
+				// Update request status to failed
+				subscriptionRequestsCollection.UpdateOne(ctx,
+					bson.M{"_id": subscriptionRequest.ID},
+					bson.M{"$set": bson.M{
+						"paymentStatus": "failed",
+						"status":        "failed",
+						"processedAt":   time.Now(),
+					}})
+				// Reload the subscription request
+				err = subscriptionRequestsCollection.FindOne(ctx, bson.M{"_id": subscriptionRequest.ID}).Decode(&subscriptionRequest)
+				if err != nil {
+					log.Printf("Warning: Failed to reload subscription request: %v", err)
+				}
+			}
+		}
+	}
+
+	// Get plan details
+	var plan models.SubscriptionPlan
+	err = sc.DB.Collection("subscription_plans").FindOne(ctx, bson.M{"_id": subscriptionRequest.PlanID}).Decode(&plan)
+	if err != nil {
+		log.Printf("Failed to get plan details: %v", err)
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Subscription request status retrieved successfully",
+		Data: map[string]interface{}{
+			"hasRequest": true,
+			"request":    subscriptionRequest,
+			"plan":       plan,
+		},
+	})
+}
+
 // GetBranchSubscriptionRemainingTime retrieves the remaining time of the current active branch subscription
 func (sc *BranchSubscriptionController) GetBranchSubscriptionRemainingTime(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2923,6 +3521,172 @@ func (sc *BranchSubscriptionController) GetBranchSubscriptionRemainingTime(c ech
 				"startDate":      subscription.StartDate.Format(time.RFC3339),
 				"endDate":        subscription.EndDate.Format(time.RFC3339),
 			},
+		},
+	})
+}
+
+// VerifyAndActivateBranchSubscription manually verifies payment status and activates subscription if payment was successful
+// This is useful when the payment callback wasn't called by Whish
+func (sc *BranchSubscriptionController) VerifyAndActivateBranchSubscription(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Get branch ID from URL parameter
+	branchID := c.Param("branchId")
+	if branchID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Missing branch ID",
+		})
+	}
+
+	branchObjectID, err := primitive.ObjectIDFromHex(branchID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid branch ID",
+		})
+	}
+
+	// Verify the branch belongs to the company
+	companyCollection := sc.DB.Collection("companies")
+	var company models.Company
+	err = companyCollection.FindOne(ctx, bson.M{"userId": userID}).Decode(&company)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Company not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find company",
+		})
+	}
+
+	// Verify branch belongs to this company
+	branchFound := false
+	for _, b := range company.Branches {
+		if b.ID == branchObjectID {
+			branchFound = true
+			break
+		}
+	}
+
+	if !branchFound {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Branch does not belong to your company",
+		})
+	}
+
+	// Find the latest subscription request for this branch
+	subscriptionRequestsCollection := sc.DB.Collection("branch_subscription_requests")
+	var subscriptionRequest models.BranchSubscriptionRequest
+	err = subscriptionRequestsCollection.FindOne(ctx,
+		bson.M{"branchId": branchObjectID},
+		options.FindOne().SetSort(bson.D{{"requestedAt", -1}}),
+	).Decode(&subscriptionRequest)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "No subscription request found for this branch",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find subscription request",
+		})
+	}
+
+	// Check if already activated
+	if subscriptionRequest.PaymentStatus == "success" && subscriptionRequest.Status == "active" {
+		// Check if subscription exists
+		subscriptionsCollection := sc.DB.Collection("branch_subscriptions")
+		var existingSubscription models.BranchSubscription
+		err = subscriptionsCollection.FindOne(ctx, bson.M{
+			"branchId": branchObjectID,
+			"status":   "active",
+		}).Decode(&existingSubscription)
+
+		if err == nil {
+			return c.JSON(http.StatusOK, models.Response{
+				Status:  http.StatusOK,
+				Message: "Subscription is already active",
+				Data: map[string]interface{}{
+					"subscription": existingSubscription,
+				},
+			})
+		}
+	}
+
+	// Check if externalId exists
+	if subscriptionRequest.ExternalID == 0 {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "No payment external ID found for this subscription request",
+		})
+	}
+
+	log.Printf("🔄 Verifying payment status for externalId: %d", subscriptionRequest.ExternalID)
+
+	// Initialize Whish service and verify payment status
+	whishService := services.NewWhishService()
+	status, phoneNumber, err := whishService.GetPaymentStatus("USD", subscriptionRequest.ExternalID)
+	if err != nil {
+		log.Printf("Failed to verify payment status: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: fmt.Sprintf("Failed to verify payment: %v", err),
+		})
+	}
+
+	log.Printf("📊 Payment status from Whish API: %s (Phone: %s)", status, phoneNumber)
+
+	if status != "success" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: fmt.Sprintf("Payment not successful. Status: %s", status),
+			Data: map[string]interface{}{
+				"paymentStatus": status,
+				"phoneNumber":   phoneNumber,
+			},
+		})
+	}
+
+	// Payment verified successfully - proceed to activate subscription
+	log.Printf("🔄 Activating branch subscription...")
+	err = sc.activateBranchSubscription(ctx, subscriptionRequest, phoneNumber)
+	if err != nil {
+		log.Printf("Failed to activate subscription: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: fmt.Sprintf("Failed to activate subscription: %v", err),
+		})
+	}
+
+	log.Printf("✅ Subscription activated successfully for branch: %s", branchID)
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Payment verified and subscription activated successfully",
+		Data: map[string]interface{}{
+			"branchId":    branchID,
+			"externalId":  subscriptionRequest.ExternalID,
+			"phoneNumber": phoneNumber,
 		},
 	})
 }

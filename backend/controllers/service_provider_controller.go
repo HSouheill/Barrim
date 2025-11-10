@@ -4,13 +4,17 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/middleware"
 	"github.com/HSouheill/barrim_backend/models"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -433,6 +437,9 @@ func (spc *ServiceProviderController) UpdateServiceProviderData(c echo.Context) 
 			if updateData.ServiceProviderInfo.CertificateImages != nil {
 				existingInfo.CertificateImages = updateData.ServiceProviderInfo.CertificateImages
 			}
+			if updateData.ServiceProviderInfo.PortfolioImages != nil {
+				existingInfo.PortfolioImages = updateData.ServiceProviderInfo.PortfolioImages
+			}
 			if updateData.ServiceProviderInfo.AvailableHours != nil {
 				existingInfo.AvailableHours = updateData.ServiceProviderInfo.AvailableHours
 			}
@@ -552,6 +559,560 @@ func (spc *ServiceProviderController) UploadLogo(c echo.Context) error {
 	return c.JSON(http.StatusNotImplemented, models.Response{
 		Status:  http.StatusNotImplemented,
 		Message: "Logo upload not implemented yet",
+	})
+}
+
+// UploadPortfolioImage allows service providers to upload portfolio images
+func (spc *ServiceProviderController) UploadPortfolioImage(c echo.Context) error {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Find the service provider first to ensure it exists
+	var serviceProvider models.ServiceProvider
+	err = spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&serviceProvider)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find service provider",
+		})
+	}
+
+	// Get file from form
+	file, err := c.FormFile("image")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "No image file uploaded. Please use 'image' as the form field name",
+		})
+	}
+
+	// Validate file type (only images allowed)
+	if !strings.HasPrefix(file.Header.Get("Content-Type"), "image/") {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Only image files are allowed",
+		})
+	}
+
+	// Open the file
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to open uploaded file",
+		})
+	}
+	defer src.Close()
+
+	// Generate unique filename
+	filename := uuid.New().String() + filepath.Ext(file.Filename)
+	uploadDir := "uploads/serviceprovider/portfolio"
+
+	// Ensure directory exists
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("Failed to create upload directory: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create upload directory",
+		})
+	}
+
+	// Create destination file path
+	uploadPath := filepath.Join(uploadDir, filename)
+	dst, err := os.Create(uploadPath)
+	if err != nil {
+		log.Printf("Failed to create destination file: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to save file",
+		})
+	}
+	defer dst.Close()
+
+	// Copy file content
+	if _, err = io.Copy(dst, src); err != nil {
+		log.Printf("Failed to copy file: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to save file",
+		})
+	}
+
+	// Store relative path for API access
+	relativePath := "/" + uploadPath
+
+	// Initialize ServiceProviderInfo if it doesn't exist
+	if serviceProvider.ServiceProviderInfo == nil {
+		serviceProvider.ServiceProviderInfo = &models.ServiceProviderInfo{
+			PortfolioImages: []string{},
+		}
+	}
+
+	// Initialize PortfolioImages slice if it doesn't exist
+	if serviceProvider.ServiceProviderInfo.PortfolioImages == nil {
+		serviceProvider.ServiceProviderInfo.PortfolioImages = []string{}
+	}
+
+	// Append the new portfolio image to the existing array
+	portfolioImages := append(serviceProvider.ServiceProviderInfo.PortfolioImages, relativePath)
+
+	// Update the service provider with the new portfolio image
+	update := bson.M{
+		"$set": bson.M{
+			"serviceProviderInfo.portfolioImages": portfolioImages,
+			"updatedAt":                           time.Now(),
+		},
+	}
+
+	result, err := spc.DB.Collection("serviceProviders").UpdateOne(
+		ctx,
+		bson.M{"_id": serviceProvider.ID},
+		update,
+	)
+
+	if err != nil {
+		log.Printf("Failed to update service provider portfolio: %v", err)
+		// Clean up uploaded file if database update fails
+		os.Remove(uploadPath)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to update service provider portfolio",
+		})
+	}
+
+	if result.MatchedCount == 0 {
+		// Clean up uploaded file if no document was matched
+		os.Remove(uploadPath)
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Service provider not found",
+		})
+	}
+
+	// Log the action
+	log.Printf("Portfolio image uploaded: ServiceProviderID=%s, ImagePath=%s, UpdatedBy=%s",
+		serviceProvider.ID.Hex(), relativePath, claims.UserID)
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Portfolio image uploaded successfully",
+		Data: map[string]interface{}{
+			"imagePath":       relativePath,
+			"portfolioImages": portfolioImages,
+		},
+	})
+}
+
+// GetPortfolioImages retrieves all portfolio images for the authenticated service provider
+func (spc *ServiceProviderController) GetPortfolioImages(c echo.Context) error {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Find the service provider
+	var serviceProvider models.ServiceProvider
+	err = spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&serviceProvider)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find service provider",
+		})
+	}
+
+	// Get portfolio images
+	portfolioImages := []string{}
+	if serviceProvider.ServiceProviderInfo != nil && serviceProvider.ServiceProviderInfo.PortfolioImages != nil {
+		portfolioImages = serviceProvider.ServiceProviderInfo.PortfolioImages
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Portfolio images retrieved successfully",
+		Data: map[string]interface{}{
+			"portfolioImages": portfolioImages,
+			"count":           len(portfolioImages),
+		},
+	})
+}
+
+// DeletePortfolioImage deletes a specific portfolio image by index
+func (spc *ServiceProviderController) DeletePortfolioImage(c echo.Context) error {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Parse request body to get index
+	var req struct {
+		Index int `json:"index"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid request body. Please provide 'index' field",
+		})
+	}
+
+	// Find the service provider
+	var serviceProvider models.ServiceProvider
+	err = spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&serviceProvider)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find service provider",
+		})
+	}
+
+	// Check if ServiceProviderInfo and PortfolioImages exist
+	if serviceProvider.ServiceProviderInfo == nil || serviceProvider.ServiceProviderInfo.PortfolioImages == nil {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "No portfolio images found",
+		})
+	}
+
+	portfolioImages := serviceProvider.ServiceProviderInfo.PortfolioImages
+
+	// Validate index
+	if req.Index < 0 || req.Index >= len(portfolioImages) {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: fmt.Sprintf("Invalid index. Portfolio has %d images (index 0-%d)", len(portfolioImages), len(portfolioImages)-1),
+		})
+	}
+
+	// Get the image path to delete from filesystem
+	imagePath := portfolioImages[req.Index]
+
+	// Remove leading slash for filesystem path
+	fileSystemPath := strings.TrimPrefix(imagePath, "/")
+
+	// Remove from array using $pull
+	update := bson.M{
+		"$pull": bson.M{
+			"serviceProviderInfo.portfolioImages": imagePath,
+		},
+		"$set": bson.M{
+			"updatedAt": time.Now(),
+		},
+	}
+
+	result, err := spc.DB.Collection("serviceProviders").UpdateOne(
+		ctx,
+		bson.M{"_id": serviceProvider.ID},
+		update,
+	)
+
+	if err != nil {
+		log.Printf("Failed to delete portfolio image: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to delete portfolio image",
+		})
+	}
+
+	if result.MatchedCount == 0 {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Service provider not found",
+		})
+	}
+
+	// Delete file from filesystem
+	if err := os.Remove(fileSystemPath); err != nil {
+		// Log error but don't fail the request since DB update succeeded
+		log.Printf("Warning: Failed to delete image file %s: %v", fileSystemPath, err)
+	} else {
+		log.Printf("Successfully deleted image file: %s", fileSystemPath)
+	}
+
+	// Get updated portfolio images
+	var updatedServiceProvider models.ServiceProvider
+	spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{"_id": serviceProvider.ID}).Decode(&updatedServiceProvider)
+	updatedPortfolioImages := []string{}
+	if updatedServiceProvider.ServiceProviderInfo != nil && updatedServiceProvider.ServiceProviderInfo.PortfolioImages != nil {
+		updatedPortfolioImages = updatedServiceProvider.ServiceProviderInfo.PortfolioImages
+	}
+
+	// Log the action
+	log.Printf("Portfolio image deleted: ServiceProviderID=%s, ImagePath=%s, Index=%d, UpdatedBy=%s",
+		serviceProvider.ID.Hex(), imagePath, req.Index, claims.UserID)
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Portfolio image deleted successfully",
+		Data: map[string]interface{}{
+			"deletedImagePath": imagePath,
+			"portfolioImages":  updatedPortfolioImages,
+			"count":            len(updatedPortfolioImages),
+		},
+	})
+}
+
+// UpdatePortfolioImage replaces an existing portfolio image at a specific index with a new image
+func (spc *ServiceProviderController) UpdatePortfolioImage(c echo.Context) error {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Get user information from token
+	claims := middleware.GetUserFromToken(c)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid user ID",
+		})
+	}
+
+	// Get index from form
+	indexStr := c.FormValue("index")
+	if indexStr == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Index is required in form data",
+		})
+	}
+
+	var index int
+	if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid index format. Index must be a number",
+		})
+	}
+
+	// Find the service provider
+	var serviceProvider models.ServiceProvider
+	err = spc.DB.Collection("serviceProviders").FindOne(ctx, bson.M{
+		"$or": []bson.M{
+			{"userId": userID},
+			{"createdBy": userID},
+		},
+	}).Decode(&serviceProvider)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, models.Response{
+				Status:  http.StatusNotFound,
+				Message: "Service provider not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to find service provider",
+		})
+	}
+
+	// Check if ServiceProviderInfo and PortfolioImages exist
+	if serviceProvider.ServiceProviderInfo == nil || serviceProvider.ServiceProviderInfo.PortfolioImages == nil {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "No portfolio images found",
+		})
+	}
+
+	portfolioImages := serviceProvider.ServiceProviderInfo.PortfolioImages
+
+	// Validate index
+	if index < 0 || index >= len(portfolioImages) {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: fmt.Sprintf("Invalid index. Portfolio has %d images (index 0-%d)", len(portfolioImages), len(portfolioImages)-1),
+		})
+	}
+
+	// Get file from form
+	file, err := c.FormFile("image")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "No image file uploaded. Please use 'image' as the form field name",
+		})
+	}
+
+	// Validate file type (only images allowed)
+	if !strings.HasPrefix(file.Header.Get("Content-Type"), "image/") {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Only image files are allowed",
+		})
+	}
+
+	// Open the file
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to open uploaded file",
+		})
+	}
+	defer src.Close()
+
+	// Get old image path for deletion
+	oldImagePath := portfolioImages[index]
+	oldFileSystemPath := strings.TrimPrefix(oldImagePath, "/")
+
+	// Generate unique filename for new image
+	filename := uuid.New().String() + filepath.Ext(file.Filename)
+	uploadDir := "uploads/serviceprovider/portfolio"
+
+	// Ensure directory exists
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("Failed to create upload directory: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to create upload directory",
+		})
+	}
+
+	// Create destination file path
+	uploadPath := filepath.Join(uploadDir, filename)
+	dst, err := os.Create(uploadPath)
+	if err != nil {
+		log.Printf("Failed to create destination file: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to save file",
+		})
+	}
+	defer dst.Close()
+
+	// Copy file content
+	if _, err = io.Copy(dst, src); err != nil {
+		log.Printf("Failed to copy file: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to save file",
+		})
+	}
+
+	// Store relative path for API access
+	relativePath := "/" + uploadPath
+
+	// Update the portfolio images array at the specific index
+	portfolioImages[index] = relativePath
+
+	// Update the service provider with the new portfolio image
+	update := bson.M{
+		"$set": bson.M{
+			"serviceProviderInfo.portfolioImages": portfolioImages,
+			"updatedAt":                           time.Now(),
+		},
+	}
+
+	result, err := spc.DB.Collection("serviceProviders").UpdateOne(
+		ctx,
+		bson.M{"_id": serviceProvider.ID},
+		update,
+	)
+
+	if err != nil {
+		log.Printf("Failed to update service provider portfolio: %v", err)
+		// Clean up uploaded file if database update fails
+		os.Remove(uploadPath)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to update service provider portfolio",
+		})
+	}
+
+	if result.MatchedCount == 0 {
+		// Clean up uploaded file if no document was matched
+		os.Remove(uploadPath)
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Service provider not found",
+		})
+	}
+
+	// Delete old file from filesystem
+	if err := os.Remove(oldFileSystemPath); err != nil {
+		// Log error but don't fail the request since DB update succeeded
+		log.Printf("Warning: Failed to delete old image file %s: %v", oldFileSystemPath, err)
+	} else {
+		log.Printf("Successfully deleted old image file: %s", oldFileSystemPath)
+	}
+
+	// Log the action
+	log.Printf("Portfolio image updated: ServiceProviderID=%s, Index=%d, OldPath=%s, NewPath=%s, UpdatedBy=%s",
+		serviceProvider.ID.Hex(), index, oldImagePath, relativePath, claims.UserID)
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Portfolio image updated successfully",
+		Data: map[string]interface{}{
+			"index":           index,
+			"oldImagePath":    oldImagePath,
+			"newImagePath":    relativePath,
+			"portfolioImages": portfolioImages,
+		},
 	})
 }
 

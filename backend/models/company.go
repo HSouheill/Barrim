@@ -162,7 +162,7 @@ type BranchSubscriptionRequest struct {
 	ID              primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
 	BranchID        primitive.ObjectID `json:"branchId" bson:"branchId"` // Reference to the branch
 	PlanID          primitive.ObjectID `json:"planId" bson:"planId"`
-	Status          string             `json:"status" bson:"status"` // "pending", "approved", "rejected"
+	Status          string             `json:"status" bson:"status"` // "pending_payment", "paid", "failed", "active"
 	RequestedAt     time.Time          `json:"requestedAt" bson:"requestedAt"`
 	ImagePath       string             `json:"imagePath,omitempty" bson:"imagePath,omitempty"`
 	AdminNote       string             `json:"adminNote,omitempty" bson:"adminNote,omitempty"`
@@ -173,4 +173,9 @@ type BranchSubscriptionRequest struct {
 	RejectedBy      string             `json:"rejectedBy,omitempty" bson:"rejectedBy,omitempty"`
 	RejectedAt      time.Time          `json:"rejectedAt,omitempty" bson:"rejectedAt,omitempty"`
 	ProcessedAt     time.Time          `json:"processedAt,omitempty" bson:"processedAt,omitempty"`
+	// Whish payment fields
+	ExternalID    int64     `json:"externalId,omitempty" bson:"externalId,omitempty"`       // Whish payment external ID
+	PaymentStatus string    `json:"paymentStatus,omitempty" bson:"paymentStatus,omitempty"` // "pending", "success", "failed"
+	CollectURL    string    `json:"collectUrl,omitempty" bson:"collectUrl,omitempty"`       // Whish payment URL
+	PaidAt        time.Time `json:"paidAt,omitempty" bson:"paidAt,omitempty"`
 }
