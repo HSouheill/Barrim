@@ -2,18 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/sponsorship.dart';
 import '../utils/api_response.dart';
-import '../utils/secure_storage.dart';
+import 'api_services.dart' hide ApiResponse;
 import 'api_constant.dart';
 
 class SponsorshipSubscriptionApiService {
-  final SecureStorage _secureStorage = SecureStorage();
-
+  final String _baseUrl = ApiService.baseUrl;
+  
+  // Get headers with authentication using ApiService for consistency
   Future<Map<String, String>> _getHeaders() async {
-    final token = await _secureStorage.getToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+    return await ApiService.getAuthHeaders();
   }
 
   // Get pending sponsorship subscription requests
@@ -25,6 +22,11 @@ class SponsorshipSubscriptionApiService {
     try {
       final headers = await _getHeaders();
       
+      // Check if token is available
+      if (!headers.containsKey('Authorization')) {
+        return ApiResponse<SponsorshipSubscriptionListResponse>.error('Authentication required. Please log in again.');
+      }
+      
       // Build query parameters
       final queryParams = <String, String>{
         'page': page.toString(),
@@ -34,12 +36,21 @@ class SponsorshipSubscriptionApiService {
         queryParams['entityType'] = entityType;
       }
 
-      final uri = Uri.parse(ApiConstants.baseUrl + ApiConstants.getPendingSponsorshipSubscriptionRequests)
+      final uri = Uri.parse('$_baseUrl${ApiConstants.getPendingSponsorshipSubscriptionRequests}')
           .replace(queryParameters: queryParams);
 
       print('DEBUG: Fetching pending sponsorship requests from: $uri');
       
       final response = await http.get(uri, headers: headers);
+      
+      // Handle 401 Unauthorized errors
+      if (response.statusCode == 401) {
+        final responseData = json.decode(response.body);
+        return ApiResponse<SponsorshipSubscriptionListResponse>.error(
+          responseData['message'] ?? 'Authentication failed. Please log in again.',
+        );
+      }
+      
       final responseData = json.decode(response.body);
 
       print('DEBUG: Response status code: ${response.statusCode}');
@@ -71,7 +82,13 @@ class SponsorshipSubscriptionApiService {
   ) async {
     try {
       final headers = await _getHeaders();
-      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.processSponsorshipSubscriptionRequest}/$requestId/process');
+      
+      // Check if token is available
+      if (!headers.containsKey('Authorization')) {
+        return ApiResponse<Map<String, dynamic>>.error('Authentication required. Please log in again.');
+      }
+      
+      final uri = Uri.parse('$_baseUrl${ApiConstants.processSponsorshipSubscriptionRequest}/$requestId/process');
 
       print('DEBUG: Processing sponsorship request');
       print('DEBUG: Request ID: $requestId');
@@ -83,6 +100,14 @@ class SponsorshipSubscriptionApiService {
         headers: headers,
         body: json.encode(approvalRequest.toJson()),
       );
+
+      // Handle 401 Unauthorized errors
+      if (response.statusCode == 401) {
+        final responseData = json.decode(response.body);
+        return ApiResponse<Map<String, dynamic>>.error(
+          responseData['message'] ?? 'Authentication failed. Please log in again.',
+        );
+      }
 
       print('DEBUG: Process response status: ${response.statusCode}');
       print('DEBUG: Process response body: ${response.body}');
@@ -111,6 +136,11 @@ class SponsorshipSubscriptionApiService {
     try {
       final headers = await _getHeaders();
       
+      // Check if token is available
+      if (!headers.containsKey('Authorization')) {
+        return ApiResponse<SponsorshipSubscriptionListResponse>.error('Authentication required. Please log in again.');
+      }
+      
       // Build query parameters
       final queryParams = <String, String>{
         'page': page.toString(),
@@ -120,10 +150,19 @@ class SponsorshipSubscriptionApiService {
         queryParams['entityType'] = entityType;
       }
 
-      final uri = Uri.parse(ApiConstants.baseUrl + ApiConstants.getActiveSponsorshipSubscriptions)
+      final uri = Uri.parse('$_baseUrl${ApiConstants.getActiveSponsorshipSubscriptions}')
           .replace(queryParameters: queryParams);
 
       final response = await http.get(uri, headers: headers);
+      
+      // Handle 401 Unauthorized errors
+      if (response.statusCode == 401) {
+        final responseData = json.decode(response.body);
+        return ApiResponse<SponsorshipSubscriptionListResponse>.error(
+          responseData['message'] ?? 'Authentication failed. Please log in again.',
+        );
+      }
+      
       final responseData = json.decode(response.body);
 
       if (response.statusCode == 200) {

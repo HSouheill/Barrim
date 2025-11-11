@@ -15,10 +15,14 @@ import (
 // ConnectDB establishes connection to MongoDB
 func ConnectDB() *mongo.Client {
 	// Set client options
-	mongoURI := os.Getenv("MONGO_URI")
+	// Check for MONGODB_URI first (used in Docker), then fall back to MONGO_URI for backward compatibility
+	mongoURI := os.Getenv("MONGODB_URI")
+	if mongoURI == "" {
+		mongoURI = os.Getenv("MONGO_URI")
+	}
 	if mongoURI == "" {
 		// Default to localhost for local development
-		// In Docker, this will be overridden by the MONGO_URI environment variable
+		// In Docker, this will be overridden by the MONGODB_URI environment variable
 		mongoURI = "mongodb://admin:9Z9ZBarrim@localhost:27017/?authSource=admin"
 	}
 
