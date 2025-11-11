@@ -27,11 +27,11 @@ func NewWhishService() *WhishService {
 	// Determine environment (testing or production)
 	// Default to production unless WHISH_ENV is set to "testing"
 	whishEnv := os.Getenv("WHISH_ENV")
-	isTesting := whishEnv == "testing"
+	isTesting := whishEnv == "production"
 
 	var baseURL string
 
-	baseURL = "https://api.sandbox.whish.money/itel-service/api/"
+	baseURL = "https://whish.money/itel-service/api/"
 
 	// Get credentials from environment variables
 	channelStr := os.Getenv("WHISH_CHANNEL")
