@@ -200,187 +200,304 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
+    final padding = isMobile ? 8.0 : 16.0;
+    
     return Scaffold(
       key: _scaffoldKey,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header component from header.dart
-            Container(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: HeaderComponent(
-                logoPath: 'assets/logo/logo.png',
-                scaffoldKey: _scaffoldKey,
-                onMenuPressed: () {
-                  setState(() {
-                    _isSidebarOpen = !_isSidebarOpen;
-                  });
-                },
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(padding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header component from header.dart
+              Container(
+                padding: EdgeInsets.only(bottom: isMobile ? 8.0 : 16.0),
+                child: HeaderComponent(
+                  logoPath: 'assets/logo/logo.png',
+                  scaffoldKey: _scaffoldKey,
+                  onMenuPressed: () {
+                    setState(() {
+                      _isSidebarOpen = !_isSidebarOpen;
+                    });
+                  },
+                ),
               ),
-            ),
-            // Sub AppBar (moved under HeaderComponent)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Advertisements',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
+              // Sub AppBar (moved under HeaderComponent)
+              Padding(
+                padding: EdgeInsets.only(bottom: isMobile ? 8.0 : 12.0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back),
                     ),
-                  ),
-                  const Spacer(),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Advertisements',
+                        style: TextStyle(
+                          fontSize: isMobile ? 18 : 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: Stack(
-                children: [
-                  // Main content area
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
-                    child: Column(
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Main content area
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: pickImage,
-                              icon: const Icon(Icons.image),
-                              label: const Text('Pick Image'),
-                            ),
-                            const SizedBox(width: 16),
-                            if (_image != null || _imageBytes != null)
-                              Row(
-                                children: [
-                                  ClipRRect(
+                        // Upload section - responsive layout
+                        if (isMobile)
+                          // Mobile: Column layout
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: pickImage,
+                                icon: const Icon(Icons.image),
+                                label: const Text('Pick Image'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                              if (_image != null || _imageBytes != null) ...[
+                                const SizedBox(height: 12),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    width: double.infinity,
+                                    constraints: BoxConstraints(
+                                      maxHeight: screenHeight * 0.25,
+                                    ),
+                                    color: Colors.grey.shade100,
+                                    child: Center(
+                                      child: kIsWeb
+                                          ? Image.memory(
+                                              _imageBytes!,
+                                              fit: BoxFit.contain,
+                                            )
+                                          : Image.file(
+                                              _image!,
+                                              fit: BoxFit.contain,
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: isLoading ? null : uploadAd,
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                    ),
+                                    child: isLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : const Text('Upload'),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          )
+                        else
+                          // Desktop: Row layout
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: pickImage,
+                                icon: const Icon(Icons.image),
+                                label: const Text('Pick Image'),
+                              ),
+                              if (_image != null || _imageBytes != null) ...[
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
                                     child: Container(
-                                      width: 480,
                                       height: 300,
                                       color: Colors.grey.shade100,
                                       child: Center(
                                         child: kIsWeb
                                             ? Image.memory(
                                                 _imageBytes!,
-                                                width: 480,
-                                                height: 300,
                                                 fit: BoxFit.contain,
                                               )
                                             : Image.file(
                                                 _image!,
-                                                width: 480,
-                                                height: 300,
                                                 fit: BoxFit.contain,
                                               ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: isLoading ? null : uploadAd,
-                                    child: isLoading
-                                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                        : const Text('Upload'),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        if (isLoading) const Center(child: CircularProgressIndicator()) else Expanded(
-                          child: ads.isEmpty
-                              ? const Center(child: Text('No ads found'))
-                              : GridView.builder(
-                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 1,
-                                    childAspectRatio: 480/300, // very large banner
-                                  ),
-                                  itemCount: ads.length,
-                                  itemBuilder: (context, index) {
-                                    final ad = ads[index];
-                                    final imageUrl = (ad['imageURL'] ?? ad['imageUrl'] ?? '').toString();
-                                    final url = imageUrl.isNotEmpty ? _fullImageUrl(imageUrl) : '';
-                                    final String id = (ad['_id'] ?? ad['id'] ?? '').toString();
-                                    return Card(
-                                      child: Stack(
-                                        children: [
-                                          Container(
-                                            width: 480,
-                                            height: 300,
-                                            alignment: Alignment.center,
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: url.isNotEmpty
-                                              ? Image.network(
-                                                  url,
-                                                  width: 480,
-                                                  height: 300,
-                                                  fit: BoxFit.contain,
-                                                )
-                                              : const Icon(Icons.broken_image, size: 80),
-                                          ),
-                                          // Delete button
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: IconButton(
-                                              icon: const Icon(Icons.delete, color: Colors.red),
-                                              tooltip: 'Delete',
-                                              onPressed: isLoading ? null : () => _deleteAd(id),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
                                 ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: isLoading ? null : uploadAd,
+                                  child: isLoading
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const Text('Upload'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        const SizedBox(height: 16),
+                        // Ads list section
+                        Expanded(
+                          child: isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator(),
+                                )
+                              : ads.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        'No ads found',
+                                        style: TextStyle(
+                                          fontSize: isMobile ? 16 : 18,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    )
+                                  : GridView.builder(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: isMobile ? 1 : 2,
+                                        crossAxisSpacing: 12,
+                                        mainAxisSpacing: 12,
+                                        childAspectRatio: isMobile
+                                            ? screenWidth / (screenWidth * 0.6)
+                                            : 16 / 9,
+                                      ),
+                                      itemCount: ads.length,
+                                      itemBuilder: (context, index) {
+                                        final ad = ads[index];
+                                        final imageUrl = (ad['imageURL'] ?? ad['imageUrl'] ?? '').toString();
+                                        final url = imageUrl.isNotEmpty ? _fullImageUrl(imageUrl) : '';
+                                        final String id = (ad['_id'] ?? ad['id'] ?? '').toString();
+                                        return Card(
+                                          clipBehavior: Clip.antiAlias,
+                                          elevation: 2,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Stack(
+                                            children: [
+                                              Container(
+                                                width: double.infinity,
+                                                height: double.infinity,
+                                                alignment: Alignment.center,
+                                                child: url.isNotEmpty
+                                                    ? Image.network(
+                                                        url,
+                                                        width: double.infinity,
+                                                        height: double.infinity,
+                                                        fit: BoxFit.cover,
+                                                        errorBuilder: (context, error, stackTrace) {
+                                                          return const Center(
+                                                            child: Icon(
+                                                              Icons.broken_image,
+                                                              size: 60,
+                                                              color: Colors.grey,
+                                                            ),
+                                                          );
+                                                        },
+                                                        loadingBuilder: (context, child, loadingProgress) {
+                                                          if (loadingProgress == null) return child;
+                                                          return Center(
+                                                            child: CircularProgressIndicator(
+                                                              value: loadingProgress.expectedTotalBytes != null
+                                                                  ? loadingProgress.cumulativeBytesLoaded /
+                                                                      loadingProgress.expectedTotalBytes!
+                                                                  : null,
+                                                            ),
+                                                          );
+                                                        },
+                                                      )
+                                                    : const Center(
+                                                        child: Icon(
+                                                          Icons.broken_image,
+                                                          size: 60,
+                                                          color: Colors.grey,
+                                                        ),
+                                                      ),
+                                              ),
+                                              // Delete button
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white.withOpacity(0.9),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: IconButton(
+                                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                                    tooltip: 'Delete',
+                                                    onPressed: isLoading ? null : () => _deleteAd(id),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
                         ),
                       ],
                     ),
-                  ),
 
-                  if (_isSidebarOpen)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 280,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 4,
-                                offset: Offset(-2, 0),
-                              ),
-                            ],
-                          ),
-                          child: Sidebar(
-                            parentContext: context,
-                            onCollapse: () {
-                              setState(() {
-                                _isSidebarOpen = false;
-                              });
-                            },
+                    if (_isSidebarOpen)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: isMobile ? screenWidth * 0.8 : 280,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 4,
+                                  offset: Offset(-2, 0),
+                                ),
+                              ],
+                            ),
+                            child: Sidebar(
+                              parentContext: context,
+                              onCollapse: () {
+                                setState(() {
+                                  _isSidebarOpen = false;
+                                });
+                              },
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
