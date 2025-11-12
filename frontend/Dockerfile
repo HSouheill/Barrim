@@ -15,28 +15,26 @@ RUN apt-get update && apt-get install -y \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Flutter - download stable SDK archive (more reliable than git clone)
-# Using a known stable version - update this if needed
-RUN FLUTTER_SDK="flutter_linux_3.24.5-stable.tar.xz" && \
-    if curl -f -L "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/${FLUTTER_SDK}" -o /tmp/flutter.tar.xz 2>/dev/null; then \
-        mkdir -p /flutter && \
-        tar xf /tmp/flutter.tar.xz -C /flutter --strip-components=1 && \
-        rm /tmp/flutter.tar.xz; \
-    else \
-        echo "Failed to download Flutter SDK archive, trying git clone as fallback..." && \
-        git config --global http.postBuffer 524288000 && \
-        git config --global http.maxRequestBuffer 100M && \
-        git config --global core.compression 0 && \
-        git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /flutter || \
-        (sleep 5 && git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /flutter) || \
-        (sleep 10 && git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /flutter); \
-    fi
+# Install Flutter - use git clone to get latest stable version
+# Configure git to avoid ownership issues when running as root
+RUN git config --global --add safe.directory '*' && \
+    git config --global http.postBuffer 524288000 && \
+    git config --global http.maxRequestBuffer 100M && \
+    git config --global core.compression 0
+
+# Clone Flutter stable branch (latest stable version)
+RUN git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /flutter || \
+    (sleep 5 && git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /flutter) || \
+    (sleep 10 && git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /flutter)
 
 ENV PATH="/flutter/bin:${PATH}"
 
 # Pre-download Flutter artifacts with retry
 RUN flutter precache || (sleep 5 && flutter precache) || (sleep 10 && flutter precache)
 RUN flutter config --enable-web
+
+# Verify Flutter and Dart versions
+RUN flutter --version && dart --version
 
 # Set working directory
 WORKDIR /app
