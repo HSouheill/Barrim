@@ -593,4 +593,29 @@ class AdminService {
     }
   }
 
+  // Get All Whish Payments
+  Future<Map<String, dynamic>> getAllWhishPayments() async {
+    final response = await _makeRequest(
+      'get',
+      '$secureBaseUrl/api/admin/whish-payments',
+      headers: await _getHeaders(),
+    );
+
+    final responseData = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return {
+        'success': true,
+        'message': responseData['message'] ?? 'Payments retrieved successfully',
+        'data': responseData['data'],
+        'statusCode': response.statusCode,
+      };
+    } else {
+      return {
+        'success': false,
+        'message': responseData['message'] ?? 'Failed to fetch payments',
+        'statusCode': response.statusCode,
+      };
+    }
+  }
 }

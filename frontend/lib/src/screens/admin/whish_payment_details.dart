@@ -14,60 +14,102 @@ class WhishPaymentDetailsScreen extends StatefulWidget {
 class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
   final AdminService _adminService = AdminService(baseUrl: 'http://barrim.online:8081');
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final TextEditingController _externalIdController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   
   bool _isLoading = false;
   bool _isSidebarExpanded = false;
-  Map<String, dynamic>? _paymentDetails;
+  List<dynamic> _allPayments = [];
+  List<dynamic> _filteredPayments = [];
   String? _errorMessage;
+  String _selectedTypeFilter = 'All';
+  String _selectedStatusFilter = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPayments();
+  }
 
   @override
   void dispose() {
-    _externalIdController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchPaymentDetails() async {
-    final externalId = _externalIdController.text.trim();
-    
-    if (externalId.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter an external ID';
-        _paymentDetails = null;
-      });
-      return;
-    }
-
+  Future<void> _loadPayments() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _paymentDetails = null;
     });
 
     try {
-      final result = await _adminService.getWhishPaymentDetails(externalId);
+      final result = await _adminService.getAllWhishPayments();
       
-      if (result['success'] == true || result['statusCode'] == 200 || result['statusCode'] == 404) {
+      if (result['success'] == true) {
+        final data = result['data'];
         setState(() {
-          _paymentDetails = result['data'];
-          _errorMessage = null;
+          _allPayments = data['payments'] ?? [];
+          _filteredPayments = _allPayments;
         });
+        _applyFilters();
       } else {
         setState(() {
-          _errorMessage = result['message'] ?? 'Failed to fetch payment details';
-          _paymentDetails = null;
+          _errorMessage = result['message'] ?? 'Failed to fetch payments';
+          _allPayments = [];
+          _filteredPayments = [];
         });
       }
     } catch (e) {
       setState(() {
         _errorMessage = 'Error: ${e.toString()}';
-        _paymentDetails = null;
+        _allPayments = [];
+        _filteredPayments = [];
       });
     } finally {
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  void _applyFilters() {
+    setState(() {
+      _filteredPayments = _allPayments.where((payment) {
+        // Type filter
+        if (_selectedTypeFilter != 'All') {
+          final paymentType = payment['type']?.toString() ?? '';
+          if (!paymentType.contains(_selectedTypeFilter.toLowerCase().replaceAll(' ', '_'))) {
+            return false;
+          }
+        }
+
+        // Status filter
+        if (_selectedStatusFilter != 'All') {
+          final paymentStatus = payment['paymentStatus']?.toString().toLowerCase() ?? '';
+          if (paymentStatus != _selectedStatusFilter.toLowerCase()) {
+            return false;
+          }
+        }
+
+        // Search filter
+        final searchTerm = _searchController.text.toLowerCase();
+        if (searchTerm.isNotEmpty) {
+          final externalId = payment['externalId']?.toString() ?? '';
+          final userEmail = payment['user']?['email']?.toString().toLowerCase() ?? '';
+          final userFullName = payment['user']?['fullName']?.toString().toLowerCase() ?? '';
+          final subscriptionId = payment['subscriptionId']?.toString() ?? '';
+          
+          if (!externalId.contains(searchTerm) &&
+              !userEmail.contains(searchTerm) &&
+              !userFullName.contains(searchTerm) &&
+              !subscriptionId.contains(searchTerm)) {
+            return false;
+          }
+        }
+
+        return true;
+      }).toList();
+    });
   }
 
   @override
@@ -95,7 +137,43 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
                 
                 const SizedBox(height: 16),
                 
-                // Search Section
+                // Header Section
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Whish Payment Details',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[800],
+                          ),
+                        ),
+                      ),
+                      if (!_isLoading)
+                        Text(
+                          'Total: ${_allPayments.length}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _isLoading ? null : _loadPayments,
+                        tooltip: 'Refresh',
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Filters Section
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Card(
@@ -103,51 +181,92 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Whish Payment Details',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                          // Search
+                          TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              labelText: 'Search',
+                              hintText: 'Search by External ID, Email, Name, or Subscription ID',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        _applyFilters();
+                                      },
+                                    )
+                                  : null,
                             ),
+                            onChanged: (_) => _applyFilters(),
                           ),
+                          
                           const SizedBox(height: 16),
+                          
+                          // Type and Status Filters
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
-                                  controller: _externalIdController,
+                                child: DropdownButtonFormField<String>(
+                                  value: _selectedTypeFilter,
                                   decoration: InputDecoration(
-                                    labelText: 'External ID',
-                                    hintText: 'Enter payment external ID',
+                                    labelText: 'Type',
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    prefixIcon: const Icon(Icons.search),
                                   ),
-                                  keyboardType: TextInputType.number,
-                                  onSubmitted: (_) => _fetchPaymentDetails(),
+                                  items: [
+                                    'All',
+                                    'Service Provider',
+                                    'Company Branch',
+                                    'Wholesaler Branch',
+                                    'Sponsorship',
+                                  ].map((type) {
+                                    return DropdownMenuItem(
+                                      value: type,
+                                      child: Text(type),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedTypeFilter = value ?? 'All';
+                                    });
+                                    _applyFilters();
+                                  },
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              ElevatedButton.icon(
-                                onPressed: _isLoading ? null : _fetchPaymentDetails,
-                                icon: _isLoading
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                        ),
-                                      )
-                                    : const Icon(Icons.search),
-                                label: Text(_isLoading ? 'Loading...' : 'Search'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue[600],
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: _selectedStatusFilter,
+                                  decoration: InputDecoration(
+                                    labelText: 'Payment Status',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  items: [
+                                    'All',
+                                    'Paid',
+                                    'Pending',
+                                    'Failed',
+                                    'Cancelled',
+                                  ].map((status) {
+                                    return DropdownMenuItem(
+                                      value: status,
+                                      child: Text(status),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedStatusFilter = value ?? 'All';
+                                    });
+                                    _applyFilters();
+                                  },
                                 ),
                               ),
                             ],
@@ -185,23 +304,30 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
                                       ),
                                       textAlign: TextAlign.center,
                                     ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton(
+                                      onPressed: _loadPayments,
+                                      child: const Text('Retry'),
+                                    ),
                                   ],
                                 ),
                               ),
                             )
-                          : _paymentDetails == null
+                          : _filteredPayments.isEmpty
                               ? Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(
-                                        Icons.search,
+                                        Icons.payment_outlined,
                                         size: 64,
                                         color: Colors.grey[400],
                                       ),
                                       const SizedBox(height: 16),
                                       Text(
-                                        'Enter an external ID to search for payment details',
+                                        _allPayments.isEmpty
+                                            ? 'No payments found'
+                                            : 'No payments match your filters',
                                         style: TextStyle(
                                           fontSize: 16,
                                           color: Colors.grey[600],
@@ -210,7 +336,13 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
                                     ],
                                   ),
                                 )
-                              : _buildPaymentDetailsCard(),
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: _filteredPayments.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildPaymentCard(_filteredPayments[index]);
+                                  },
+                                ),
                 ),
               ],
             ),
@@ -236,107 +368,158 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
     );
   }
 
-  Widget _buildPaymentDetailsCard() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildPaymentCard(Map<String, dynamic> payment) {
+    final type = payment['type']?.toString() ?? 'Unknown';
+    final externalId = payment['externalId']?.toString() ?? 'N/A';
+    final paymentStatus = payment['paymentStatus']?.toString() ?? 'Unknown';
+    final whishStatus = payment['whishStatus']?.toString() ?? 'N/A';
+    final user = payment['user'] as Map<String, dynamic>?;
+    final plan = payment['plan'] as Map<String, dynamic>?;
+    final branch = payment['branch'] as Map<String, dynamic>?;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      child: ExpansionTile(
+        leading: Icon(
+          Icons.payment,
+          color: _getPaymentStatusColor(paymentStatus),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'External ID: $externalId',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _getTypeDisplayName(type),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(
             children: [
-              // Header
-              Row(
-                children: [
-                  const Icon(Icons.payment, size: 32, color: Colors.blue),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Payment Details',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (_paymentDetails?['externalId'] != null)
-                          Text(
-                            'External ID: ${_paymentDetails!['externalId']}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                      ],
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getPaymentStatusColor(paymentStatus).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _getPaymentStatusColor(paymentStatus),
+                    width: 1,
                   ),
-                ],
+                ),
+                child: Text(
+                  paymentStatus,
+                  style: TextStyle(
+                    color: _getPaymentStatusColor(paymentStatus),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
               ),
-              
-              const Divider(height: 32),
-              
-              // Whish API Information
-              _buildSectionTitle('Whish API Information'),
-              const SizedBox(height: 12),
-              _buildInfoRow(
-                'Whish Status',
-                _paymentDetails?['whishStatus']?.toString() ?? 'N/A',
-                Icons.info_outline,
-              ),
-              const SizedBox(height: 8),
-              _buildInfoRow(
-                'Phone Number',
-                _paymentDetails?['phoneNumber']?.toString() ?? 'N/A',
-                Icons.phone,
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // Database Information
-              _buildSectionTitle('Database Information'),
-              const SizedBox(height: 12),
-              _buildInfoRow(
-                'Found In',
-                _paymentDetails?['foundIn']?.toString() ?? 'Not found in database',
-                Icons.storage,
-                valueColor: _paymentDetails?['foundIn'] != null ? Colors.green : Colors.orange,
-              ),
-              
-              // Payment Record Details
-              if (_paymentDetails?['paymentRecord'] != null) ...[
-                const SizedBox(height: 24),
-                _buildSectionTitle('Payment Record'),
-                const SizedBox(height: 12),
-                _buildPaymentRecordDetails(_paymentDetails!['paymentRecord']),
-              ] else ...[
-                const SizedBox(height: 12),
+              if (whishStatus != 'N/A' && whishStatus.isNotEmpty) ...[
+                const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange[200]!),
+                    color: Colors.blue[100],
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded, color: Colors.orange[700]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'No payment record found in database',
-                          style: TextStyle(color: Colors.orange[900]),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    'Whish: $whishStatus',
+                    style: TextStyle(
+                      color: Colors.blue[900],
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
             ],
           ),
         ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // User Information
+                if (user != null) ...[
+                  _buildSectionTitle('User Information'),
+                  const SizedBox(height: 8),
+                  _buildDetailRow('Name', user['fullName']?.toString() ?? 'N/A'),
+                  _buildDetailRow('Email', user['email']?.toString() ?? 'N/A'),
+                  _buildDetailRow('Phone', user['phone']?.toString() ?? 'N/A'),
+                  _buildDetailRow('User Type', user['userType']?.toString() ?? 'N/A'),
+                  const SizedBox(height: 16),
+                ],
+
+                // Plan Information
+                if (plan != null) ...[
+                  _buildSectionTitle('Plan Information'),
+                  const SizedBox(height: 8),
+                  _buildDetailRow('Plan Title', plan['title']?.toString() ?? 'N/A'),
+                  _buildDetailRow('Price', plan['price']?.toString() ?? 'N/A'),
+                  _buildDetailRow('Plan Type', plan['type']?.toString() ?? 'N/A'),
+                  const SizedBox(height: 16),
+                ],
+
+                // Branch Information (if applicable)
+                if (branch != null) ...[
+                  _buildSectionTitle('Branch Information'),
+                  const SizedBox(height: 8),
+                  _buildDetailRow('Branch Name', branch['name']?.toString() ?? 'N/A'),
+                  _buildDetailRow('Category', branch['category']?.toString() ?? 'N/A'),
+                  _buildDetailRow('Phone', branch['phone']?.toString() ?? 'N/A'),
+                  const SizedBox(height: 16),
+                ],
+
+                // Payment Details
+                _buildSectionTitle('Payment Details'),
+                const SizedBox(height: 8),
+                _buildDetailRow('Subscription ID', payment['subscriptionId']?.toString() ?? 'N/A'),
+                _buildDetailRow('Status', payment['status']?.toString() ?? 'N/A',
+                    valueColor: _getStatusColor(payment['status']?.toString() ?? '')),
+                _buildDetailRow('Whish Status', whishStatus),
+                if (payment['whishPhoneNumber'] != null)
+                  _buildDetailRow('Whish Phone', payment['whishPhoneNumber']?.toString() ?? 'N/A'),
+                if (payment['collectUrl'] != null)
+                  _buildDetailRow('Collect URL', payment['collectUrl']?.toString() ?? 'N/A'),
+                if (payment['requestedAt'] != null)
+                  _buildDetailRow('Requested At', _formatDate(payment['requestedAt'])),
+                if (payment['paidAt'] != null)
+                  _buildDetailRow('Paid At', _formatDate(payment['paidAt'])),
+
+                // Sponsorship-specific fields
+                if (type == 'sponsorship_subscription') ...[
+                  const SizedBox(height: 16),
+                  _buildSectionTitle('Sponsorship Details'),
+                  const SizedBox(height: 8),
+                  if (payment['sponsorshipId'] != null)
+                    _buildDetailRow('Sponsorship ID', payment['sponsorshipId']?.toString() ?? 'N/A'),
+                  if (payment['entityType'] != null)
+                    _buildDetailRow('Entity Type', payment['entityType']?.toString() ?? 'N/A'),
+                  if (payment['entityId'] != null)
+                    _buildDetailRow('Entity ID', payment['entityId']?.toString() ?? 'N/A'),
+                  if (payment['entityName'] != null)
+                    _buildDetailRow('Entity Name', payment['entityName']?.toString() ?? 'N/A'),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -345,145 +528,16 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: FontWeight.bold,
         color: Colors.blue[800],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: Colors.grey[600]),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: valueColor ?? Colors.black87,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentRecordDetails(Map<String, dynamic> paymentRecord) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Type Badge
-          if (paymentRecord['type'] != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.blue[100],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                paymentRecord['type'].toString().replaceAll('_', ' ').toUpperCase(),
-                style: TextStyle(
-                  color: Colors.blue[900],
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          
-          const SizedBox(height: 16),
-          
-          // ID
-          if (paymentRecord['id'] != null)
-            _buildDetailRow('ID', paymentRecord['id'].toString()),
-          
-          // Type-specific fields
-          if (paymentRecord['serviceProviderId'] != null)
-            _buildDetailRow('Service Provider ID', paymentRecord['serviceProviderId'].toString()),
-          
-          if (paymentRecord['branchId'] != null)
-            _buildDetailRow('Branch ID', paymentRecord['branchId'].toString()),
-          
-          if (paymentRecord['sponsorshipId'] != null)
-            _buildDetailRow('Sponsorship ID', paymentRecord['sponsorshipId'].toString()),
-          
-          if (paymentRecord['entityType'] != null)
-            _buildDetailRow('Entity Type', paymentRecord['entityType'].toString()),
-          
-          if (paymentRecord['entityId'] != null)
-            _buildDetailRow('Entity ID', paymentRecord['entityId'].toString()),
-          
-          if (paymentRecord['entityName'] != null)
-            _buildDetailRow('Entity Name', paymentRecord['entityName'].toString()),
-          
-          if (paymentRecord['planId'] != null)
-            _buildDetailRow('Plan ID', paymentRecord['planId'].toString()),
-          
-          // Status fields
-          if (paymentRecord['status'] != null)
-            _buildDetailRow(
-              'Status',
-              paymentRecord['status'].toString(),
-              valueColor: _getStatusColor(paymentRecord['status'].toString()),
-            ),
-          
-          if (paymentRecord['paymentStatus'] != null)
-            _buildDetailRow(
-              'Payment Status',
-              paymentRecord['paymentStatus'].toString(),
-              valueColor: _getPaymentStatusColor(paymentRecord['paymentStatus'].toString()),
-            ),
-          
-          // URLs and Dates
-          if (paymentRecord['collectUrl'] != null)
-            _buildDetailRow('Collect URL', paymentRecord['collectUrl'].toString()),
-          
-          if (paymentRecord['requestedAt'] != null)
-            _buildDetailRow(
-              'Requested At',
-              _formatDate(paymentRecord['requestedAt']),
-            ),
-          
-          if (paymentRecord['paidAt'] != null)
-            _buildDetailRow(
-              'Paid At',
-              _formatDate(paymentRecord['paidAt']),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -511,6 +565,21 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
         ],
       ),
     );
+  }
+
+  String _getTypeDisplayName(String type) {
+    switch (type) {
+      case 'service_provider_subscription':
+        return 'Service Provider Subscription';
+      case 'company_branch_subscription':
+        return 'Company Branch Subscription';
+      case 'wholesaler_branch_subscription':
+        return 'Wholesaler Branch Subscription';
+      case 'sponsorship_subscription':
+        return 'Sponsorship Subscription';
+      default:
+        return type.replaceAll('_', ' ').toUpperCase();
+    }
   }
 
   Color _getStatusColor(String status) {
@@ -548,11 +617,9 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
     
     try {
       if (dateValue is String) {
-        // Try to parse ISO 8601 format
         final dateTime = DateTime.parse(dateValue);
         return DateFormat('MMM dd, yyyy HH:mm:ss').format(dateTime);
       } else if (dateValue is int) {
-        // Assume it's a timestamp
         final dateTime = DateTime.fromMillisecondsSinceEpoch(dateValue);
         return DateFormat('MMM dd, yyyy HH:mm:ss').format(dateTime);
       }
@@ -562,4 +629,3 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
     }
   }
 }
-
