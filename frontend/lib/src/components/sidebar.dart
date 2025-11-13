@@ -18,6 +18,7 @@ import '../screens/user_management/user_management_screen.dart';
 import '../screens/admin_withdraws.dart';
 import '../screens/admin_wallet.dart';
 import '../screens/admin/requests.dart';
+import '../screens/admin/whish_payment_details.dart';
 import '../screens/admin_sponsorship.dart';
 import '../screens/bookings_and_reviews.dart';
 import '../screens/categories/categories_screen.dart';
@@ -296,6 +297,19 @@ MaterialPageRoute(builder: (context) => const DashboardPage()),                 
                     Future.delayed(const Duration(milliseconds: 300), () {
                       Navigator.of(parentContext).pushReplacement(
                         MaterialPageRoute(builder: (context) => const AdminWalletScreen()),
+                      );
+                    });
+                  },
+                ),
+
+                _buildMenuItem(
+                  Icons.payment,
+                  'Whish Payment Details',
+                  onTap: () {
+                    onCollapse();
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      Navigator.of(parentContext).pushReplacement(
+                        MaterialPageRoute(builder: (context) => const WhishPaymentDetailsScreen()),
                       );
                     });
                   },

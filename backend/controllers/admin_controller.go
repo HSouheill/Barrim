@@ -16,6 +16,7 @@ import (
 	"github.com/HSouheill/barrim_backend/config"
 	"github.com/HSouheill/barrim_backend/middleware"
 	"github.com/HSouheill/barrim_backend/models"
+	"github.com/HSouheill/barrim_backend/services"
 	"github.com/HSouheill/barrim_backend/utils"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
@@ -6290,4 +6291,159 @@ func (ac *AdminController) getServiceProviderBranchSubscriptionIncome(ctx contex
 	}
 
 	return totalIncome, nil
+}
+
+func (ac *AdminController) GetWhishPaymentDetails(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get externalId from path parameter
+	externalIDStr := c.Param("externalId")
+	if externalIDStr == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "externalId parameter is required",
+		})
+	}
+
+	externalID, err := strconv.ParseInt(externalIDStr, 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid externalId format",
+		})
+	}
+
+	// Initialize Whish service
+	whishService := services.NewWhishService()
+
+	// Get payment status from Whish API
+	whishStatus, phoneNumber, err := whishService.GetPaymentStatus("USD", externalID)
+	if err != nil {
+		log.Printf("Failed to get payment status from Whish API: %v", err)
+		// Continue even if Whish API fails, we'll still return database info
+	}
+
+	// Search across all collections that might have this externalId
+	paymentDetails := map[string]interface{}{
+		"externalId":    externalID,
+		"whishStatus":   whishStatus,
+		"phoneNumber":   phoneNumber,
+		"foundIn":       nil,
+		"paymentRecord": nil,
+	}
+
+	// Search in subscription_requests (service provider subscriptions)
+	subscriptionRequestsCollection := ac.DB.Collection("subscription_requests")
+	var subscriptionRequest models.SubscriptionRequest
+	err = subscriptionRequestsCollection.FindOne(ctx, bson.M{"externalId": externalID}).Decode(&subscriptionRequest)
+	if err == nil {
+		paymentDetails["foundIn"] = "subscription_requests"
+		paymentDetails["paymentRecord"] = map[string]interface{}{
+			"id":                subscriptionRequest.ID,
+			"type":              "service_provider_subscription",
+			"serviceProviderId": subscriptionRequest.ServiceProviderID,
+			"planId":            subscriptionRequest.PlanID,
+			"status":            subscriptionRequest.Status,
+			"paymentStatus":     subscriptionRequest.PaymentStatus,
+			"collectUrl":        subscriptionRequest.CollectURL,
+			"requestedAt":       subscriptionRequest.RequestedAt,
+			"paidAt":            subscriptionRequest.PaidAt,
+		}
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Payment details retrieved successfully",
+			Data:    paymentDetails,
+		})
+	}
+
+	// Search in branch_subscription_requests (company branch subscriptions)
+	branchSubscriptionRequestsCollection := ac.DB.Collection("branch_subscription_requests")
+	var branchSubscriptionRequest models.BranchSubscriptionRequest
+	err = branchSubscriptionRequestsCollection.FindOne(ctx, bson.M{"externalId": externalID}).Decode(&branchSubscriptionRequest)
+	if err == nil {
+		paymentDetails["foundIn"] = "branch_subscription_requests"
+		paymentDetails["paymentRecord"] = map[string]interface{}{
+			"id":            branchSubscriptionRequest.ID,
+			"type":          "company_branch_subscription",
+			"branchId":      branchSubscriptionRequest.BranchID,
+			"planId":        branchSubscriptionRequest.PlanID,
+			"status":        branchSubscriptionRequest.Status,
+			"paymentStatus": branchSubscriptionRequest.PaymentStatus,
+			"collectUrl":    branchSubscriptionRequest.CollectURL,
+			"requestedAt":   branchSubscriptionRequest.RequestedAt,
+			"paidAt":        branchSubscriptionRequest.PaidAt,
+		}
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Payment details retrieved successfully",
+			Data:    paymentDetails,
+		})
+	}
+
+	// Search in wholesaler_branch_subscription_requests (wholesaler branch subscriptions)
+	wholesalerBranchSubscriptionRequestsCollection := ac.DB.Collection("wholesaler_branch_subscription_requests")
+	var wholesalerBranchSubscriptionRequest models.WholesalerBranchSubscriptionRequest
+	err = wholesalerBranchSubscriptionRequestsCollection.FindOne(ctx, bson.M{"externalId": externalID}).Decode(&wholesalerBranchSubscriptionRequest)
+	if err == nil {
+		paymentDetails["foundIn"] = "wholesaler_branch_subscription_requests"
+		paymentDetails["paymentRecord"] = map[string]interface{}{
+			"id":            wholesalerBranchSubscriptionRequest.ID,
+			"type":          "wholesaler_branch_subscription",
+			"branchId":      wholesalerBranchSubscriptionRequest.BranchID,
+			"planId":        wholesalerBranchSubscriptionRequest.PlanID,
+			"status":        wholesalerBranchSubscriptionRequest.Status,
+			"paymentStatus": wholesalerBranchSubscriptionRequest.PaymentStatus,
+			"collectUrl":    wholesalerBranchSubscriptionRequest.CollectURL,
+			"requestedAt":   wholesalerBranchSubscriptionRequest.RequestedAt,
+			"paidAt":        wholesalerBranchSubscriptionRequest.PaidAt,
+		}
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Payment details retrieved successfully",
+			Data:    paymentDetails,
+		})
+	}
+
+	// Search in sponsorship_subscription_requests (sponsorship subscriptions)
+	sponsorshipSubscriptionRequestsCollection := ac.DB.Collection("sponsorship_subscription_requests")
+	var sponsorshipSubscriptionRequest models.SponsorshipSubscriptionRequest
+	err = sponsorshipSubscriptionRequestsCollection.FindOne(ctx, bson.M{"externalId": externalID}).Decode(&sponsorshipSubscriptionRequest)
+	if err == nil {
+		paymentDetails["foundIn"] = "sponsorship_subscription_requests"
+		paymentDetails["paymentRecord"] = map[string]interface{}{
+			"id":            sponsorshipSubscriptionRequest.ID,
+			"type":          "sponsorship_subscription",
+			"sponsorshipId": sponsorshipSubscriptionRequest.SponsorshipID,
+			"entityType":    sponsorshipSubscriptionRequest.EntityType,
+			"entityId":      sponsorshipSubscriptionRequest.EntityID,
+			"entityName":    sponsorshipSubscriptionRequest.EntityName,
+			"status":        sponsorshipSubscriptionRequest.Status,
+			"paymentStatus": sponsorshipSubscriptionRequest.PaymentStatus,
+			"collectUrl":    sponsorshipSubscriptionRequest.CollectURL,
+			"requestedAt":   sponsorshipSubscriptionRequest.RequestedAt,
+			"paidAt":        sponsorshipSubscriptionRequest.PaidAt,
+		}
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Payment details retrieved successfully",
+			Data:    paymentDetails,
+		})
+	}
+
+	// If not found in any collection, return Whish API status only
+	if whishStatus == "" {
+		return c.JSON(http.StatusNotFound, models.Response{
+			Status:  http.StatusNotFound,
+			Message: "Payment not found in database or Whish API",
+			Data:    paymentDetails,
+		})
+	}
+
+	// Return Whish API status even if not found in database
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Payment found in Whish API but not in database",
+		Data:    paymentDetails,
+	})
 }

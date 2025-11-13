@@ -237,4 +237,6 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	protected.GET("/ads", adsController.GetAds)
 	protected.DELETE("/ads/:id", adsController.DeleteAd)
 
+	protected.GET("/whish-payment/:externalId", adminController.GetWhishPaymentDetails)
+
 }

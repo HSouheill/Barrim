@@ -118,4 +118,8 @@ class ApiConstants {
   static const String updateVoucher = '/api/admin/vouchers';
   static const String deleteVoucher = '/api/admin/vouchers';
   static const String toggleVoucherStatus = '/api/admin/vouchers';
+
+  // Whish payment endpoints
+  static const String getWhishPaymentDetails = '/api/admin/whish-payment/';
+
 }
