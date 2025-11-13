@@ -14,14 +14,16 @@ class AdminService {
 
   AdminService({required this.baseUrl});
 
-  String get secureBaseUrl {
-    if (baseUrl.startsWith('https://')) {
-      return baseUrl;
-    } else if (baseUrl.startsWith('http://')) {
-      return baseUrl.replaceFirst('http://', 'https://');
-    }
-    return 'https://$baseUrl';
-  }
+  // String get secureBaseUrl {
+  //   if (baseUrl.startsWith('https://')) {
+  //     return baseUrl;
+  //   } else if (baseUrl.startsWith('http://')) {
+  //     return baseUrl.replaceFirst('http://', 'https://');
+  //   }
+  //   return 'https://$baseUrl';
+  // }
+
+  String get secureBaseUrl => ApiService.baseUrl;
 
   Future<http.Response> _makeRequest(
     String method,
@@ -565,32 +567,6 @@ class AdminService {
       'message': responseData['message'] ?? 'Failed to update wholesaler branch status',
       'statusCode': response.statusCode,
     };
-  }
-
-  // Get Whish Payment Details
-  Future<Map<String, dynamic>> getWhishPaymentDetails(String externalId) async {
-    final response = await _makeRequest(
-      'get',
-      '$secureBaseUrl/api/admin/whish-payment/$externalId',
-      headers: await _getHeaders(),
-    );
-
-    final responseData = jsonDecode(response.body);
-
-    if (response.statusCode == 200 || response.statusCode == 404) {
-      return {
-        'success': response.statusCode == 200,
-        'message': responseData['message'] ?? 'Payment details retrieved',
-        'data': responseData['data'],
-        'statusCode': response.statusCode,
-      };
-    } else {
-      return {
-        'success': false,
-        'message': responseData['message'] ?? 'Failed to fetch payment details',
-        'statusCode': response.statusCode,
-      };
-    }
   }
 
   // Get All Whish Payments

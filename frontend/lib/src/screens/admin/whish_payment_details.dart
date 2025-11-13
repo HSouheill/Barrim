@@ -12,7 +12,7 @@ class WhishPaymentDetailsScreen extends StatefulWidget {
 }
 
 class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
-  final AdminService _adminService = AdminService(baseUrl: 'http://barrim.online:8081');
+  final AdminService _adminService = AdminService(baseUrl: 'https://barrim.online');
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _searchController = TextEditingController();
   
@@ -91,14 +91,15 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
           }
         }
 
-        // Search filter
-        final searchTerm = _searchController.text.toLowerCase();
+        // Search filter - searches by External ID, Email, Name, or Subscription ID
+        final searchTerm = _searchController.text.toLowerCase().trim();
         if (searchTerm.isNotEmpty) {
-          final externalId = payment['externalId']?.toString() ?? '';
+          final externalId = payment['externalId']?.toString().toLowerCase() ?? '';
           final userEmail = payment['user']?['email']?.toString().toLowerCase() ?? '';
           final userFullName = payment['user']?['fullName']?.toString().toLowerCase() ?? '';
-          final subscriptionId = payment['subscriptionId']?.toString() ?? '';
+          final subscriptionId = payment['subscriptionId']?.toString().toLowerCase() ?? '';
           
+          // Check if search term matches any of the fields
           if (!externalId.contains(searchTerm) &&
               !userEmail.contains(searchTerm) &&
               !userFullName.contains(searchTerm) &&
@@ -143,25 +144,28 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'Whish Payment Details',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[800],
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Whish Payment Details',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue[800],
+                              ),
+                            ),
+                            if (!_isLoading && _allPayments.isNotEmpty)
+                              Text(
+                                'Showing ${_filteredPayments.length} of ${_allPayments.length} payments',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      if (!_isLoading)
-                        Text(
-                          'Total: ${_allPayments.length}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      const SizedBox(width: 12),
                       IconButton(
                         icon: const Icon(Icons.refresh),
                         onPressed: _isLoading ? null : _loadPayments,
@@ -203,6 +207,7 @@ class _WhishPaymentDetailsScreenState extends State<WhishPaymentDetailsScreen> {
                                   : null,
                             ),
                             onChanged: (_) => _applyFilters(),
+                            onSubmitted: (_) => _applyFilters(),
                           ),
                           
                           const SizedBox(height: 16),
