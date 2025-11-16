@@ -295,6 +295,45 @@ func (cc *CompanyController) CreateBranch(c echo.Context) error {
 		})
 	}
 
+	// Get phone number from branch data
+	phoneNumber := getString(branchData, "phone", "")
+
+	// Check if phone number already exists in any branch (companies or wholesalers)
+	if phoneNumber != "" {
+		// Check in companies
+		var existingCompany models.Company
+		err = companyCollection.FindOne(ctx, bson.M{"branches.phone": phoneNumber}).Decode(&existingCompany)
+		if err == nil {
+			return c.JSON(http.StatusConflict, models.Response{
+				Status:  http.StatusConflict,
+				Message: "Phone number already exists in another branch",
+			})
+		} else if err != mongo.ErrNoDocuments {
+			log.Printf("Error checking phone number existence in companies: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to check phone number availability",
+			})
+		}
+
+		// Check in wholesalers
+		wholesalerCollection := config.GetCollection(cc.DB, "wholesalers")
+		var existingWholesaler models.Wholesaler
+		err = wholesalerCollection.FindOne(ctx, bson.M{"branches.phone": phoneNumber}).Decode(&existingWholesaler)
+		if err == nil {
+			return c.JSON(http.StatusConflict, models.Response{
+				Status:  http.StatusConflict,
+				Message: "Phone number already exists in another branch",
+			})
+		} else if err != mongo.ErrNoDocuments {
+			log.Printf("Error checking phone number existence in wholesalers: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to check phone number availability",
+			})
+		}
+	}
+
 	// Handle file uploads
 	files := form.File["images"]
 	var imagePaths []string
@@ -1531,6 +1570,172 @@ func (cc *CompanyController) GetAllBranches(c echo.Context) error {
 		Status:  http.StatusOK,
 		Message: "All branches retrieved successfully",
 		Data:    allBranches,
+	})
+}
+
+// FilterBranches filters company branches by category, subcategory, and distance
+func (cc *CompanyController) FilterBranches(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Parse query parameters
+	category := c.QueryParam("category")
+	subCategory := c.QueryParam("subCategory")
+	latStr := c.QueryParam("lat")
+	lngStr := c.QueryParam("lng")
+	distanceStr := c.QueryParam("distance") // in meters
+
+	// Validate required parameters
+	if latStr == "" || lngStr == "" || distanceStr == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "lat, lng, and distance are required",
+		})
+	}
+
+	// Parse coordinates and distance
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid latitude",
+		})
+	}
+
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid longitude",
+		})
+	}
+
+	maxDistance, err := strconv.ParseFloat(distanceStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid distance",
+		})
+	}
+
+	// Get company collection
+	companyCollection := config.GetCollection(cc.DB, "companies")
+
+	// Build MongoDB filter for companies with branches
+	filter := bson.M{
+		"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}},
+	}
+
+	// Add category filter if provided
+	if category != "" {
+		filter["branches.category"] = category
+	}
+
+	// Find all companies with branches
+	cursor, err := companyCollection.Find(ctx, filter)
+	if err != nil {
+		log.Printf("Error finding companies with branches: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve companies with branches",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	var companies []models.Company
+	if err = cursor.All(ctx, &companies); err != nil {
+		log.Printf("Error decoding companies: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode companies",
+		})
+	}
+
+	// Get user information for contact details
+	db := cc.DB.Database("barrim")
+	userIDs := make([]primitive.ObjectID, 0, len(companies))
+	for _, company := range companies {
+		userIDs = append(userIDs, company.UserID)
+	}
+
+	userMap := make(map[string]models.User)
+	if len(userIDs) > 0 {
+		userCursor, err := db.Collection("users").Find(ctx, bson.M{"_id": bson.M{"$in": userIDs}})
+		if err == nil {
+			var users []models.User
+			_ = userCursor.All(ctx, &users)
+			userCursor.Close(ctx)
+			for _, user := range users {
+				userMap[user.ID.Hex()] = user
+			}
+		}
+	}
+
+	// Filter branches by category, subcategory, and distance
+	var filteredBranches []map[string]interface{}
+	for _, company := range companies {
+		user := userMap[company.UserID.Hex()]
+		for _, branch := range company.Branches {
+			// Filter by category if provided
+			if category != "" && branch.Category != category {
+				continue
+			}
+
+			// Filter by subcategory if provided
+			if subCategory != "" && branch.SubCategory != subCategory {
+				continue
+			}
+
+			// Check if branch has valid coordinates
+			if branch.Location.Lat == 0 && branch.Location.Lng == 0 {
+				continue
+			}
+
+			// Calculate distance
+			distance := utils.CalculateDistance(lat, lng, branch.Location.Lat, branch.Location.Lng)
+
+			// Filter by distance
+			if distance > maxDistance {
+				continue
+			}
+
+			// Add branch to results
+			branchData := map[string]interface{}{
+				"id":          branch.ID.Hex(),
+				"name":        branch.Name,
+				"location":    branch.Location,
+				"phone":       branch.Phone,
+				"category":    branch.Category,
+				"subCategory": branch.SubCategory,
+				"description": branch.Description,
+				"images":      branch.Images,
+				"videos":      branch.Videos,
+				"status":      branch.Status,
+				"socialMedia": branch.SocialMedia,
+				"createdAt":   branch.CreatedAt,
+				"updatedAt":   branch.UpdatedAt,
+				"distance":    distance, // Include distance in response
+				"company": map[string]interface{}{
+					"id":           company.ID.Hex(),
+					"businessName": company.BusinessName,
+					"email":        user.Email,
+					"contactInfo": map[string]interface{}{
+						"phone": company.ContactInfo.Phone,
+					},
+					"socialMedia": map[string]interface{}{
+						"instagram": company.SocialMedia.Instagram,
+						"facebook":  company.SocialMedia.Facebook,
+					},
+				},
+			}
+			filteredBranches = append(filteredBranches, branchData)
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branches filtered successfully",
+		Data:    filteredBranches,
 	})
 }
 

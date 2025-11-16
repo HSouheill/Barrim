@@ -687,6 +687,145 @@ func (wc *WholesalerController) GetAllBranches(c echo.Context) error {
 	})
 }
 
+// FilterBranches filters wholesaler branches by category, subcategory, and distance
+func (wc *WholesalerController) FilterBranches(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Parse query parameters
+	category := c.QueryParam("category")
+	subCategory := c.QueryParam("subCategory")
+	latStr := c.QueryParam("lat")
+	lngStr := c.QueryParam("lng")
+	distanceStr := c.QueryParam("distance") // in meters
+
+	// Validate required parameters
+	if latStr == "" || lngStr == "" || distanceStr == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "lat, lng, and distance are required",
+		})
+	}
+
+	// Parse coordinates and distance
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid latitude",
+		})
+	}
+
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid longitude",
+		})
+	}
+
+	maxDistance, err := strconv.ParseFloat(distanceStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid distance",
+		})
+	}
+
+	// Get wholesaler collection
+	wholesalerCollection := config.GetCollection(wc.DB, "wholesalers")
+
+	// Build MongoDB filter for wholesalers with branches
+	filter := bson.M{
+		"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}},
+	}
+
+	// Add category filter if provided
+	if category != "" {
+		filter["branches.category"] = category
+	}
+
+	// Find all wholesalers with branches
+	cursor, err := wholesalerCollection.Find(ctx, filter)
+	if err != nil {
+		log.Printf("Error finding wholesalers with branches: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve wholesalers with branches",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	var wholesalers []models.Wholesaler
+	if err = cursor.All(ctx, &wholesalers); err != nil {
+		log.Printf("Error decoding wholesalers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode wholesalers",
+		})
+	}
+
+	// Filter branches by category, subcategory, and distance
+	var filteredBranches []map[string]interface{}
+	for _, wholesaler := range wholesalers {
+		for _, branch := range wholesaler.Branches {
+			// Filter by category if provided
+			if category != "" && branch.Category != category {
+				continue
+			}
+
+			// Filter by subcategory if provided
+			if subCategory != "" && branch.SubCategory != subCategory {
+				continue
+			}
+
+			// Check if branch has valid coordinates
+			if branch.Location.Lat == 0 && branch.Location.Lng == 0 {
+				continue
+			}
+
+			// Calculate distance
+			distance := utils.CalculateDistance(lat, lng, branch.Location.Lat, branch.Location.Lng)
+
+			// Filter by distance
+			if distance > maxDistance {
+				continue
+			}
+
+			// Add branch to results
+			branchData := map[string]interface{}{
+				"id":          branch.ID.Hex(),
+				"name":        branch.Name,
+				"location":    branch.Location,
+				"phone":       branch.Phone,
+				"category":    branch.Category,
+				"subCategory": branch.SubCategory,
+				"description": branch.Description,
+				"images":      branch.Images,
+				"videos":      branch.Videos,
+				"status":      branch.Status,
+				"createdAt":   branch.CreatedAt,
+				"updatedAt":   branch.UpdatedAt,
+				"distance":    distance, // Include distance in response
+				"wholesaler": map[string]interface{}{
+					"id":           wholesaler.ID.Hex(),
+					"businessName": wholesaler.BusinessName,
+					"contactInfo": map[string]interface{}{
+						"phone": wholesaler.ContactInfo.Phone,
+					},
+				},
+			}
+			filteredBranches = append(filteredBranches, branchData)
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branches filtered successfully",
+		Data:    filteredBranches,
+	})
+}
+
 // EditBranch handles updating an existing branch
 func (wc *WholesalerController) EditBranch(c echo.Context) error {
 	// Add request logging at the start

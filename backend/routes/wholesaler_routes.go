@@ -51,6 +51,8 @@ func RegisterWholesalerRoutes(e *echo.Echo, db *mongo.Database, wholesalerVouche
 	protected.GET("/branches/:id", wholesalerController.GetBranch)
 	protected.DELETE("/branches/:id", wholesalerController.DeleteBranch)
 
+	// Note: Combined branch filter is now at /api/branches/filter in auth_routes.go
+
 	log.Println("Finished registering all wholesaler routes")
 
 	wholesalerGroup := wholesaler.Group("")

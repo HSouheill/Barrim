@@ -2312,3 +2312,251 @@ func (uc *UserController) FilterCompaniesAndWholesalers(c echo.Context) error {
 		Data:    results,
 	})
 }
+
+// FilterBranches filters both company and wholesaler branches by category, subcategory, and distance
+func (uc *UserController) FilterBranches(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Parse query parameters
+	category := c.QueryParam("category")
+	subCategory := c.QueryParam("subCategory")
+	latStr := c.QueryParam("lat")
+	lngStr := c.QueryParam("lng")
+	distanceStr := c.QueryParam("distance") // in meters
+
+	// Validate required parameters
+	if latStr == "" || lngStr == "" || distanceStr == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "lat, lng, and distance are required",
+		})
+	}
+
+	// Parse coordinates and distance
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid latitude",
+		})
+	}
+
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid longitude",
+		})
+	}
+
+	maxDistance, err := strconv.ParseFloat(distanceStr, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid distance",
+		})
+	}
+
+	// Get collections
+	companyCollection := config.GetCollection(uc.DB, "companies")
+	wholesalerCollection := config.GetCollection(uc.DB, "wholesalers")
+
+	// Build MongoDB filters for companies and wholesalers with branches
+	companyFilter := bson.M{
+		"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}},
+	}
+	wholesalerFilter := bson.M{
+		"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}},
+	}
+
+	// Add category filter if provided
+	if category != "" {
+		companyFilter["branches.category"] = category
+		wholesalerFilter["branches.category"] = category
+	}
+
+	// Find all companies with branches
+	companyCursor, err := companyCollection.Find(ctx, companyFilter)
+	if err != nil {
+		log.Printf("Error finding companies with branches: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve companies with branches",
+		})
+	}
+	defer companyCursor.Close(ctx)
+
+	var companies []models.Company
+	if err = companyCursor.All(ctx, &companies); err != nil {
+		log.Printf("Error decoding companies: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode companies",
+		})
+	}
+
+	// Find all wholesalers with branches
+	wholesalerCursor, err := wholesalerCollection.Find(ctx, wholesalerFilter)
+	if err != nil {
+		log.Printf("Error finding wholesalers with branches: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to retrieve wholesalers with branches",
+		})
+	}
+	defer wholesalerCursor.Close(ctx)
+
+	var wholesalers []models.Wholesaler
+	if err = wholesalerCursor.All(ctx, &wholesalers); err != nil {
+		log.Printf("Error decoding wholesalers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode wholesalers",
+		})
+	}
+
+	// Get user information for contact details (companies only)
+	db := uc.DB.Database("barrim")
+	userIDs := make([]primitive.ObjectID, 0, len(companies))
+	for _, company := range companies {
+		userIDs = append(userIDs, company.UserID)
+	}
+
+	userMap := make(map[string]models.User)
+	if len(userIDs) > 0 {
+		userCursor, err := db.Collection("users").Find(ctx, bson.M{"_id": bson.M{"$in": userIDs}})
+		if err == nil {
+			var users []models.User
+			_ = userCursor.All(ctx, &users)
+			userCursor.Close(ctx)
+			for _, user := range users {
+				userMap[user.ID.Hex()] = user
+			}
+		}
+	}
+
+	// Filter branches by category, subcategory, and distance
+	var filteredBranches []map[string]interface{}
+
+	// Process company branches
+	for _, company := range companies {
+		user := userMap[company.UserID.Hex()]
+		for _, branch := range company.Branches {
+			// Filter by category if provided
+			if category != "" && branch.Category != category {
+				continue
+			}
+
+			// Filter by subcategory if provided
+			if subCategory != "" && branch.SubCategory != subCategory {
+				continue
+			}
+
+			// Check if branch has valid coordinates
+			if branch.Location.Lat == 0 && branch.Location.Lng == 0 {
+				continue
+			}
+
+			// Calculate distance
+			distance := utils.CalculateDistance(lat, lng, branch.Location.Lat, branch.Location.Lng)
+
+			// Filter by distance
+			if distance > maxDistance {
+				continue
+			}
+
+			// Add branch to results
+			branchData := map[string]interface{}{
+				"id":          branch.ID.Hex(),
+				"name":        branch.Name,
+				"location":    branch.Location,
+				"phone":       branch.Phone,
+				"category":    branch.Category,
+				"subCategory": branch.SubCategory,
+				"description": branch.Description,
+				"images":      branch.Images,
+				"videos":      branch.Videos,
+				"status":      branch.Status,
+				"socialMedia": branch.SocialMedia,
+				"createdAt":   branch.CreatedAt,
+				"updatedAt":   branch.UpdatedAt,
+				"distance":    distance,
+				"type":        "company", // Add type to distinguish
+				"company": map[string]interface{}{
+					"id":           company.ID.Hex(),
+					"businessName": company.BusinessName,
+					"email":        user.Email,
+					"contactInfo": map[string]interface{}{
+						"phone": company.ContactInfo.Phone,
+					},
+					"socialMedia": map[string]interface{}{
+						"instagram": company.SocialMedia.Instagram,
+						"facebook":  company.SocialMedia.Facebook,
+					},
+				},
+			}
+			filteredBranches = append(filteredBranches, branchData)
+		}
+	}
+
+	// Process wholesaler branches
+	for _, wholesaler := range wholesalers {
+		for _, branch := range wholesaler.Branches {
+			// Filter by category if provided
+			if category != "" && branch.Category != category {
+				continue
+			}
+
+			// Filter by subcategory if provided
+			if subCategory != "" && branch.SubCategory != subCategory {
+				continue
+			}
+
+			// Check if branch has valid coordinates
+			if branch.Location.Lat == 0 && branch.Location.Lng == 0 {
+				continue
+			}
+
+			// Calculate distance
+			distance := utils.CalculateDistance(lat, lng, branch.Location.Lat, branch.Location.Lng)
+
+			// Filter by distance
+			if distance > maxDistance {
+				continue
+			}
+
+			// Add branch to results
+			branchData := map[string]interface{}{
+				"id":          branch.ID.Hex(),
+				"name":        branch.Name,
+				"location":    branch.Location,
+				"phone":       branch.Phone,
+				"category":    branch.Category,
+				"subCategory": branch.SubCategory,
+				"description": branch.Description,
+				"images":      branch.Images,
+				"videos":      branch.Videos,
+				"status":      branch.Status,
+				"createdAt":   branch.CreatedAt,
+				"updatedAt":   branch.UpdatedAt,
+				"distance":    distance,
+				"type":        "wholesaler", // Add type to distinguish
+				"wholesaler": map[string]interface{}{
+					"id":           wholesaler.ID.Hex(),
+					"businessName": wholesaler.BusinessName,
+					"contactInfo": map[string]interface{}{
+						"phone": wholesaler.ContactInfo.Phone,
+					},
+				},
+			}
+			filteredBranches = append(filteredBranches, branchData)
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branches filtered successfully",
+		Data:    filteredBranches,
+	})
+}

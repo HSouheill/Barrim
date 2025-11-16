@@ -59,6 +59,9 @@ func RegisterAuthRoutes(e *echo.Echo, db *mongo.Client, authController *controll
 	// Public company and wholesaler filter
 	e.GET("/filter/companies-wholesalers", userController.FilterCompaniesAndWholesalers)
 
+	// Public branch filter (combines company and wholesaler branches)
+	e.GET("/api/branches/filter", userController.FilterBranches)
+
 	// Public sponsorship routes
 	e.GET("/api/sponsorships", func(c echo.Context) error {
 		sponsorshipController := controllers.NewSponsorshipController(db.Database("barrim"))
