@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import '../services/api_services.dart';
 import '../components/header.dart';
 import '../components/sidebar.dart';
+import '../screens/homepage/homepage.dart';
 
 class AdvertisementPage extends StatefulWidget {
   const AdvertisementPage({Key? key}) : super(key: key);
@@ -25,7 +26,6 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
   final picker = ImagePicker();
   static const String _baseUrl = 'https://barrim.online';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _isSidebarOpen = false;
 
   @override
   void initState() {
@@ -207,6 +207,12 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
     
     return Scaffold(
       key: _scaffoldKey,
+      endDrawer: Sidebar(
+        onCollapse: () {
+          _scaffoldKey.currentState?.closeEndDrawer();
+        },
+        parentContext: context,
+      ),
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.all(padding),
@@ -220,9 +226,7 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
                   logoPath: 'assets/logo/logo.png',
                   scaffoldKey: _scaffoldKey,
                   onMenuPressed: () {
-                    setState(() {
-                      _isSidebarOpen = !_isSidebarOpen;
-                    });
+                    _scaffoldKey.currentState?.openEndDrawer();
                   },
                 ),
               ),
@@ -232,8 +236,14 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: () => Navigator.of(context).maybePop(),
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => const DashboardPage()),
+                        );
+                      },
                       icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back to Dashboard',
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -249,10 +259,7 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
                 ),
               ),
               Expanded(
-                child: Stack(
-                  children: [
-                    // Main content area
-                    Column(
+                child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Upload section - responsive layout
@@ -462,39 +469,6 @@ class _AdvertisementPageState extends State<AdvertisementPage> {
                         ),
                       ],
                     ),
-
-                    if (_isSidebarOpen)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          width: isMobile ? screenWidth * 0.8 : 280,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 4,
-                                  offset: Offset(-2, 0),
-                                ),
-                              ],
-                            ),
-                            child: Sidebar(
-                              parentContext: context,
-                              onCollapse: () {
-                                setState(() {
-                                  _isSidebarOpen = false;
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
               ),
             ],
           ),
