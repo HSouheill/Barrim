@@ -1,8 +1,13 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
+
+import '../utils/google_maps_loader.dart' as google_maps_loader;
 
 class SimpleLocationPicker extends StatefulWidget {
   final Function(double lat, double lng, String address) onLocationSelected;
@@ -21,88 +26,246 @@ class SimpleLocationPicker extends StatefulWidget {
 }
 
 class _SimpleLocationPickerState extends State<SimpleLocationPicker> {
-  final MapController _mapController = MapController();
+  static const String _googleMapsApiKey = 'AIzaSyAHe-qtN5j-7_fb4RNxv_V8ZqPryDTjjyQ';
+  static const LatLng _defaultCenter = LatLng(33.8938, 35.5018); // Beirut
+
   final TextEditingController _addressController = TextEditingController();
-  
+  GoogleMapController? _mapController;
+  LatLng _currentCenter = _defaultCenter;
   LatLng? _selectedLocation;
   bool _isLoading = false;
+  bool _isMapReady = false;
   String? _errorMessage;
+  Set<Marker> _markers = {};
 
   @override
   void initState() {
     super.initState();
     if (widget.initialLat != null && widget.initialLng != null) {
-      _selectedLocation = LatLng(widget.initialLat!, widget.initialLng!);
-      _getAddressFromLocation(_selectedLocation!);
-    } else {
-      _selectedLocation = const LatLng(33.8938, 35.5018); // Default to Beirut
+      _currentCenter = LatLng(widget.initialLat!, widget.initialLng!);
+    }
+    _selectedLocation = _currentCenter;
+    _markers = {
+      Marker(
+        markerId: const MarkerId('selected'),
+        position: _currentCenter,
+      ),
+    };
+    _initializePicker();
+  }
+
+  Future<void> _initializePicker() async {
+    try {
+      await google_maps_loader.ensureGoogleMapsScriptLoaded(_googleMapsApiKey);
+      if (!mounted) return;
+      setState(() {
+        _isMapReady = true;
+      });
+      await _reverseGeocode(_currentCenter);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Failed to initialize Google Maps: $e';
+      });
     }
   }
 
   @override
   void dispose() {
-    _mapController.dispose();
+    _mapController?.dispose();
     _addressController.dispose();
     super.dispose();
   }
 
-  Future<void> _getAddressFromLocation(LatLng location) async {
+  Future<void> _reverseGeocode(LatLng location) async {
+    _setLoading(true);
     try {
-      setState(() => _isLoading = true);
-      List<Placemark> placemarks = await placemarkFromCoordinates(
+      final success = await _tryGoogleReverseGeocode(location);
+      if (!success) {
+        final fallbackSuccess = await _reverseGeocodeFallback(location);
+        if (!fallbackSuccess && mounted) {
+          setState(() {
+            _errorMessage = 'Unable to determine address for this location.';
+          });
+        }
+      }
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> _tryGoogleReverseGeocode(LatLng location) async {
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.latitude},${location.longitude}&key=$_googleMapsApiKey',
+      );
+      final response = await http.get(url);
+      if (!mounted) return false;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final status = data['status'] as String?;
+        if (status == 'OK' && (data['results'] as List).isNotEmpty) {
+          final formattedAddress = data['results'][0]['formatted_address'] as String;
+          setState(() {
+            _addressController.text = formattedAddress;
+            _errorMessage = null;
+          });
+          return true;
+        }
+      }
+    } catch (_) {
+      // Ignore and fall back.
+    }
+    return false;
+  }
+
+  Future<bool> _reverseGeocodeFallback(LatLng location) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(
         location.latitude,
         location.longitude,
       );
-      
-      if (placemarks.isNotEmpty) {
-        Placemark place = placemarks[0];
-        String address = [
-          place.street,
-          place.locality,
-          place.administrativeArea,
-          place.postalCode,
-          place.country,
-        ].where((e) => e != null && e.isNotEmpty).join(', ');
-        
-        _addressController.text = address;
-      }
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to get address: $e');
-    } finally {
-      setState(() => _isLoading = false);
+      if (!mounted) return false;
+      if (placemarks.isEmpty) return false;
+      final place = placemarks.first;
+      final parts = [
+        place.street,
+        place.locality,
+        place.administrativeArea,
+        place.country,
+      ].whereType<String>().where((part) => part.isNotEmpty).toList();
+      if (parts.isEmpty) return false;
+      setState(() {
+        _addressController.text = parts.join(', ');
+        _errorMessage = null;
+      });
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
-  Future<void> _getLocationFromAddress(String address) async {
+  Future<void> _searchPlace(String query) async {
+    if (query.trim().isEmpty) return;
+    _setLoading(true);
     try {
-      setState(() => _isLoading = true);
-      List<Location> locations = await locationFromAddress(address);
-      
-      if (locations.isNotEmpty) {
-        Location location = locations[0];
-        LatLng newLocation = LatLng(location.latitude, location.longitude);
-        
-        setState(() {
-          _selectedLocation = newLocation;
-          _errorMessage = null;
-        });
-        
-        _mapController.move(newLocation, 15.0);
-        _getAddressFromLocation(newLocation);
+      final success = await _tryGooglePlaceSearch(query);
+      if (!success) {
+        final fallback = await _fallbackPlaceSearch(query);
+        if (!fallback && mounted) {
+          setState(() {
+            _errorMessage = 'Unable to locate "$query".';
+          });
+        }
       }
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to find location: $e');
     } finally {
-      setState(() => _isLoading = false);
+      _setLoading(false);
     }
   }
 
-  void _onMapTap(TapPosition tapPosition, LatLng location) {
+  Future<bool> _tryGooglePlaceSearch(String query) async {
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
+        '?input=${Uri.encodeComponent(query)}'
+        '&inputtype=textquery'
+        '&fields=formatted_address,geometry'
+        '&key=$_googleMapsApiKey',
+      );
+      final response = await http.get(url);
+      if (!mounted) return false;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final status = data['status'] as String?;
+        final candidates = (data['candidates'] as List?) ?? [];
+        if (status == 'OK' && candidates.isNotEmpty) {
+          final candidate = candidates.first as Map<String, dynamic>;
+          final geometry = candidate['geometry'] as Map<String, dynamic>;
+          final location = geometry['location'] as Map<String, dynamic>;
+          final latLng = LatLng(
+            (location['lat'] as num).toDouble(),
+            (location['lng'] as num).toDouble(),
+          );
+          _addressController.text = candidate['formatted_address'] as String? ?? query;
+          _updateSelectedLocation(latLng);
+          return true;
+        }
+      }
+    } catch (_) {
+      // Ignore and fall back.
+    }
+    return false;
+  }
+
+  Future<bool> _fallbackPlaceSearch(String query) async {
+    try {
+      final locations = await locationFromAddress(query);
+      if (locations.isEmpty) return false;
+      final location = locations.first;
+      final latLng = LatLng(location.latitude, location.longitude);
+      _updateSelectedLocation(latLng);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    _setLoading(true);
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = 'Location permissions are permanently denied';
+        });
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (!mounted) return;
+      final latLng = LatLng(position.latitude, position.longitude);
+      _updateSelectedLocation(latLng);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Failed to get current location: $e';
+      });
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  void _updateSelectedLocation(LatLng location) {
     setState(() {
       _selectedLocation = location;
+      _currentCenter = location;
+      _markers = {
+        Marker(
+          markerId: const MarkerId('selected'),
+          position: location,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      };
       _errorMessage = null;
     });
-    _getAddressFromLocation(location);
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: location, zoom: 15),
+      ),
+    );
+    _reverseGeocode(location);
+  }
+
+  void _onMapTap(LatLng location) {
+    _updateSelectedLocation(location);
   }
 
   void _onConfirm() {
@@ -114,6 +277,13 @@ class _SimpleLocationPickerState extends State<SimpleLocationPicker> {
       );
       Navigator.of(context).pop();
     }
+  }
+
+  void _setLoading(bool value) {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = value;
+    });
   }
 
   @override
@@ -175,28 +345,13 @@ class _SimpleLocationPickerState extends State<SimpleLocationPicker> {
                         )
                       : IconButton(
                           icon: const Icon(Icons.my_location),
-                          onPressed: () async {
-                            try {
-                              Position position = await Geolocator.getCurrentPosition(
-                                desiredAccuracy: LocationAccuracy.high,
-                              );
-                              LatLng location = LatLng(position.latitude, position.longitude);
-                              setState(() {
-                                _selectedLocation = location;
-                                _errorMessage = null;
-                              });
-                              _mapController.move(location, 15.0);
-                              _getAddressFromLocation(location);
-                            } catch (e) {
-                              setState(() => _errorMessage = 'Failed to get current location: $e');
-                            }
-                          },
+                          onPressed: _useCurrentLocation,
                         ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onSubmitted: _getLocationFromAddress,
+                onSubmitted: _searchPlace,
               ),
             ),
             
@@ -221,37 +376,21 @@ class _SimpleLocationPickerState extends State<SimpleLocationPicker> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter: _selectedLocation!,
-                        initialZoom: 15.0,
-                        onTap: _onMapTap,
-                        minZoom: 10.0,
-                        maxZoom: 18.0,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.example.app',
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            if (_selectedLocation != null)
-                              Marker(
-                                point: _selectedLocation!,
-                                width: 30,
-                                height: 30,
-                                child: const Icon(
-                                  Icons.location_on,
-                                  color: Colors.red,
-                                  size: 30,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                    child: _isMapReady
+                        ? GoogleMap(
+                            onMapCreated: (controller) => _mapController = controller,
+                            initialCameraPosition: CameraPosition(
+                              target: _currentCenter,
+                              zoom: 15,
+                            ),
+                            onTap: _onMapTap,
+                            markers: _markers,
+                            myLocationButtonEnabled: false,
+                            myLocationEnabled: true,
+                            zoomControlsEnabled: false,
+                            mapToolbarEnabled: false,
+                          )
+                        : const Center(child: CircularProgressIndicator()),
                   ),
                 ),
               ),

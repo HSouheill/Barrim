@@ -266,6 +266,27 @@ class _SalespersonDashboardState extends State<SalespersonDashboard> {
     );
   }
 
+  Future<void> _safeCopyToClipboard(String text, String successMessage) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(successMessage),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to copy: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1086,18 +1107,15 @@ _availableBalance.toStringAsFixed(2),
                               color: Color(0xFF1E40AF),
                               letterSpacing: 1.2,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         GestureDetector(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _referralCode));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Referral code copied to clipboard!'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          },
+                          onTap: () => _safeCopyToClipboard(
+                            _referralCode,
+                            'Referral code copied to clipboard!',
+                          ),
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
@@ -1177,19 +1195,15 @@ _availableBalance.toStringAsFixed(2),
                               fontSize: 14,
                               color: Color(0xFF059669),
                             ),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         GestureDetector(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _referralLink));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Referral link copied to clipboard!'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          },
+                          onTap: () => _safeCopyToClipboard(
+                            _referralLink,
+                            'Referral link copied to clipboard!',
+                          ),
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
@@ -2065,7 +2079,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
   }
 
   // Method to find the nearest location from coordinates using reverse geocoding
-  Future<Map<String, String>> _findNearestLocation(double lat, double lng) async {
+  Future<Map<String, String?>> _findNearestLocation(double lat, double lng) async {
     try {
       // Use reverse geocoding to get the actual location information
       List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
@@ -2073,86 +2087,79 @@ class _AddNewDialogState extends State<AddNewDialog> {
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         
-        // Extract location information from the placemark
-        String country = place.country ?? 'Lebanon';
-        String district = place.administrativeArea ?? 'Beirut';
-        String city = place.locality ?? place.subLocality ?? 'Beirut';
-        
-        // For Lebanon, try to map administrative areas to proper governorates
-        if (country.toLowerCase().contains('lebanon') || country.isEmpty) {
-          country = 'Lebanon';
-          
-          // Map common administrative areas to Lebanese governorates (using exact names from LocationService)
-          final Map<String, String> lebanonMapping = {
-            'beirut': 'Beirut Governorate (Beirut)',
-            'mount lebanon': 'Mount Lebanon Governorate (Baabda)',
-            'north lebanon': 'North Lebanon Governorate (Tripoli)',
-            'south lebanon': 'South Lebanon Governorate (Sidon)',
-            'nabatieh': 'Nabatieh Governorate (Nabatieh)',
-            'bekaa': 'Bekaa Governorate (Zahle)',
-            'baalbek-hermel': 'Baalbek-Hermel Governorate (Baalbek)',
-            'akkar': 'Akkar Governorate (Halba)',
-            'baalbek': 'Baalbek-Hermel Governorate (Baalbek)',
-            'hermel': 'Baalbek-Hermel Governorate (Baalbek)',
-            'zahle': 'Bekaa Governorate (Zahle)',
-            'caza': 'Mount Lebanon Governorate (Baabda)', // Default for caza
-            'keserwan': 'Keserwan-Jbeil Governorate (Jounieh)',
-            'metn': 'Mount Lebanon Governorate (Baabda)',
-            'jounieh': 'Keserwan-Jbeil Governorate (Jounieh)',
-            'byblos': 'Keserwan-Jbeil Governorate (Jounieh)',
-            'jbeil': 'Keserwan-Jbeil Governorate (Jounieh)',
-            'tripoli': 'North Lebanon Governorate (Tripoli)',
-            'zgharta': 'North Lebanon Governorate (Tripoli)',
-            'koura': 'North Lebanon Governorate (Tripoli)',
-            'sidon': 'South Lebanon Governorate (Sidon)',
-            'saida': 'South Lebanon Governorate (Sidon)',
-            'tyre': 'South Lebanon Governorate (Sidon)',
-            'sur': 'South Lebanon Governorate (Sidon)',
-            'jezzine': 'South Lebanon Governorate (Sidon)',
-            'marjayoun': 'South Lebanon Governorate (Sidon)',
-            'hasbaya': 'South Lebanon Governorate (Sidon)',
-            'rashaya': 'South Lebanon Governorate (Sidon)',
-            'chtaura': 'Bekaa Governorate (Zahle)',
-            'anjar': 'Bekaa Governorate (Zahle)',
-            'western bekaa': 'Bekaa Governorate (Zahle)',
-            'rachaya': 'Bekaa Governorate (Zahle)',
-          };
-          
-          // Try to find a match in the mapping
-          String lowerDistrict = district.toLowerCase();
-          for (final entry in lebanonMapping.entries) {
-            if (lowerDistrict.contains(entry.key)) {
-              district = entry.value;
-              break;
-            }
-          }
-          
-          // If no specific mapping found, try to determine from coordinates
-          if (district == 'Beirut' || district.isEmpty) {
-            if (lat >= 34.0 && lat <= 34.5) {
-              if (lng >= 35.0 && lng <= 35.5) {
-                district = 'North Lebanon Governorate (Tripoli)';
-              } else if (lng >= 35.5 && lng <= 36.0) {
-                district = 'Mount Lebanon Governorate (Baabda)';
-              }
-            } else if (lat >= 33.0 && lat <= 34.0) {
-              if (lng >= 35.0 && lng <= 35.5) {
-                district = 'Beirut Governorate (Beirut)';
-              } else if (lng >= 35.5 && lng <= 36.0) {
-                district = 'Mount Lebanon Governorate (Baabda)';
-              } else if (lng >= 36.0 && lng <= 36.5) {
-                district = 'Bekaa Governorate (Zahle)';
-              }
-            } else if (lat >= 33.0 && lat <= 33.5) {
-              district = 'South Lebanon Governorate (Sidon)';
-            }
-          }
+        final List<String> availableCountries = LocationService.getCountries();
+        final String fallbackCountry = availableCountries.isNotEmpty ? availableCountries.first : 'Lebanon';
+
+        final String matchedCountry = _matchLocationValue(place.country, availableCountries) ?? fallbackCountry;
+        final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(matchedCountry);
+
+        final List<String> firstLevelOptions = usesGovernorateStructure
+            ? LocationService.getGovernorates(matchedCountry)
+            : LocationService.getDistricts(matchedCountry);
+
+        String? matchedDistrict;
+        for (final candidate in [
+          place.administrativeArea,
+          place.subAdministrativeArea,
+          place.locality,
+          place.subLocality,
+        ]) {
+          matchedDistrict = _matchLocationValue(candidate, firstLevelOptions);
+          if (matchedDistrict != null) break;
+        }
+        matchedDistrict ??= _getDefaultFirstLevel(matchedCountry);
+
+        List<String> secondLevelOptions = [];
+        if (matchedDistrict != null) {
+          secondLevelOptions = usesGovernorateStructure
+              ? LocationService.getDistrictsByGovernorate(matchedCountry, matchedDistrict)
+              : LocationService.getCities(matchedCountry, matchedDistrict);
+        }
+
+        String? matchedCity;
+        for (final candidate in [
+          place.locality,
+          place.subLocality,
+          place.street,
+          place.thoroughfare,
+          place.name,
+        ]) {
+          matchedCity = _matchLocationValue(candidate, secondLevelOptions);
+          if (matchedCity != null) break;
+        }
+        if (matchedCity == null && secondLevelOptions.isNotEmpty) {
+          matchedCity = secondLevelOptions.first;
+        }
+
+        List<String> thirdLevelOptions = [];
+        if (matchedCity != null && matchedDistrict != null) {
+          thirdLevelOptions = usesGovernorateStructure
+              ? LocationService.getStreetsByGovernorate(matchedCountry, matchedDistrict, matchedCity)
+              : LocationService.getGovernoratesLegacy(matchedCountry, matchedDistrict, matchedCity);
+        }
+
+        String? matchedGovernorate;
+        for (final candidate in [
+          place.street,
+          place.subLocality,
+          place.thoroughfare,
+          place.name,
+        ]) {
+          matchedGovernorate = _matchLocationValue(candidate, thirdLevelOptions);
+          if (matchedGovernorate != null) break;
+        }
+        if (matchedGovernorate == null && matchedCity != null && matchedDistrict != null) {
+          matchedGovernorate = _getDefaultThirdLevel(matchedCountry, matchedDistrict, matchedCity);
         }
         
         return {
-          'country': country,
-          'district': district,
-          'city': city,
+          'country': matchedCountry,
+          'district': matchedDistrict ?? _getDefaultFirstLevel(matchedCountry) ?? matchedCountry,
+          'city': matchedCity ??
+              (matchedDistrict != null
+                  ? _getDefaultSecondLevel(matchedCountry, matchedDistrict) ?? matchedDistrict
+                  : matchedCountry),
+          'governorate': matchedGovernorate,
         };
       }
     } catch (e) {
@@ -2162,13 +2169,14 @@ class _AddNewDialogState extends State<AddNewDialog> {
     // Fallback to default values if geocoding fails
     return {
       'country': 'Lebanon',
-      'district': 'Beirut Governorate (Beirut)',
-      'city': 'Beirut (Beirut)',
+      'district': 'Beirut',
+      'city': 'Beirut',
+      'governorate': null,
     };
   }
 
   // Helper method to validate location values against available dropdown items
-  Map<String, String?> _validateLocationValues(String country, String district, String city) {
+  Map<String, String?> _validateLocationValues(String? country, String? district, String? city, String? governorate) {
     // Validate country
     final availableCountries = LocationService.getCountries();
     String? validatedCountry = availableCountries.contains(country) ? country : null;
@@ -2196,10 +2204,25 @@ class _AddNewDialogState extends State<AddNewDialog> {
       }
     }
 
+    // Validate governorate/street
+    String? validatedGovernorate;
+    if (validatedCountry != null && validatedDistrict != null && validatedCity != null) {
+      final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(validatedCountry);
+      final List<String> availableGovernorates = usesGovernorateStructure
+          ? LocationService.getStreetsByGovernorate(validatedCountry, validatedDistrict, validatedCity)
+          : LocationService.getGovernoratesLegacy(validatedCountry, validatedDistrict, validatedCity);
+      if (availableGovernorates.contains(governorate)) {
+        validatedGovernorate = governorate;
+      } else if (availableGovernorates.isNotEmpty) {
+        validatedGovernorate = availableGovernorates.first;
+      }
+    }
+
     return {
       'country': validatedCountry,
       'district': validatedDistrict,
       'city': validatedCity,
+      'governorate': validatedGovernorate,
     };
   }
 
@@ -2221,6 +2244,51 @@ class _AddNewDialogState extends State<AddNewDialog> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  String? _matchLocationValue(String? rawValue, List<String> options) {
+    if (rawValue == null) return null;
+    final normalized = rawValue.toLowerCase().trim();
+    if (normalized.isEmpty) return null;
+
+    for (final option in options) {
+      if (option.toLowerCase() == normalized) {
+        return option;
+      }
+    }
+
+    for (final option in options) {
+      final lower = option.toLowerCase();
+      if (normalized.contains(lower) || lower.contains(normalized)) {
+        return option;
+      }
+    }
+
+    return null;
+  }
+
+  String? _getDefaultFirstLevel(String country) {
+    final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(country);
+    final List<String> options = usesGovernorateStructure
+        ? LocationService.getGovernorates(country)
+        : LocationService.getDistricts(country);
+    return options.isNotEmpty ? options.first : null;
+  }
+
+  String? _getDefaultSecondLevel(String country, String district) {
+    final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(country);
+    final List<String> options = usesGovernorateStructure
+        ? LocationService.getDistrictsByGovernorate(country, district)
+        : LocationService.getCities(country, district);
+    return options.isNotEmpty ? options.first : null;
+  }
+
+  String? _getDefaultThirdLevel(String country, String district, String city) {
+    final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(country);
+    final List<String> options = usesGovernorateStructure
+        ? LocationService.getStreetsByGovernorate(country, district, city)
+        : LocationService.getGovernoratesLegacy(country, district, city);
+    return options.isNotEmpty ? options.first : null;
   }
 
   void _showLocationPicker() {
@@ -2247,16 +2315,17 @@ class _AddNewDialogState extends State<AddNewDialog> {
             
             // Validate and correct the location values to match available dropdown items
             final validatedLocation = _validateLocationValues(
-              locationInfo['country'] ?? 'Lebanon',
-              locationInfo['district'] ?? 'Beirut Governorate (Beirut)',
-              locationInfo['city'] ?? 'Beirut (Beirut)',
+              locationInfo['country'],
+              locationInfo['district'],
+              locationInfo['city'],
+              locationInfo['governorate'],
             );
             
             setState(() {
               _selectedCountry = validatedLocation['country'];
               _selectedDistrict = validatedLocation['district'];
               _selectedCity = validatedLocation['city'];
-              _selectedGovernorate = null; // Reset street selection
+              _selectedGovernorate = validatedLocation['governorate'];
             });
             
             // Show success message

@@ -40,7 +40,24 @@ class LocationService {
       },
       'Beirut': {
         'Beirut': [
-          'Beirut'
+          'Beirut',
+          'Achrafieh',
+          'Hamra',
+          'Verdun',
+          'Gemmayzeh',
+          'Mar Mikhael',
+          'Ain El Mreisseh',
+          'Ras Beirut',
+          'Sodeco',
+          'Kantari',
+          'Saifi',
+          'Furn El Chebbak',
+          'Badaro',
+          'Clemenceau',
+          'Barbir',
+          'Barbeer',
+          'Hazmieh',
+          'Ain El Tineh'
         ]
       },
       'Beqaa': {
