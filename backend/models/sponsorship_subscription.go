@@ -39,6 +39,8 @@ type SponsorshipSubscriptionRequest struct {
 	RejectedAt      time.Time          `json:"rejectedAt,omitempty" bson:"rejectedAt,omitempty"`
 	RequestedAt     time.Time          `json:"requestedAt" bson:"requestedAt"`
 	ProcessedAt     time.Time          `json:"processedAt,omitempty" bson:"processedAt,omitempty"`
+	// Payment method: "whish" or "cash"
+	PaymentMethod string `json:"paymentMethod,omitempty" bson:"paymentMethod,omitempty"` // "whish" or "cash"
 	// Whish payment fields
 	ExternalID    int64     `json:"externalId,omitempty" bson:"externalId,omitempty"`       // Whish payment external ID
 	PaymentStatus string    `json:"paymentStatus,omitempty" bson:"paymentStatus,omitempty"` // "pending", "success", "failed"

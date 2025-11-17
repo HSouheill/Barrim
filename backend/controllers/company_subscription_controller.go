@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"io"
@@ -104,13 +105,28 @@ func (sc *BranchSubscriptionController) CreateBranchSubscriptionRequest(c echo.C
 		})
 	}
 
-	// Get plan ID from form and branch ID from URL parameter
+	// Get plan ID, payment method from form and branch ID from URL parameter
 	planID := c.FormValue("planId")
+	paymentMethod := c.FormValue("paymentMethod")
 	branchID := c.Param("branchId")
 	if planID == "" || branchID == "" {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Plan ID and Branch ID are required",
+		})
+	}
+
+	// Validate payment method
+	if paymentMethod == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Payment method is required. Must be 'whish' or 'cash'",
+		})
+	}
+	if paymentMethod != "whish" && paymentMethod != "cash" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid payment method. Must be 'whish' or 'cash'",
 		})
 	}
 
@@ -225,99 +241,224 @@ func (sc *BranchSubscriptionController) CreateBranchSubscriptionRequest(c echo.C
 
 	// Create branch subscription request
 	subscriptionRequest := models.BranchSubscriptionRequest{
-		ID:          primitive.NewObjectID(),
-		BranchID:    branch.ID,
-		PlanID:      planObjectID,
-		RequestedAt: time.Now(),
+		ID:            primitive.NewObjectID(),
+		BranchID:      branch.ID,
+		PlanID:        planObjectID,
+		RequestedAt:   time.Now(),
+		PaymentMethod: paymentMethod,
 	}
 
-	// Generate externalId from ObjectID (use timestamp part as int64)
-	externalID := int64(subscriptionRequest.ID.Timestamp().Unix())
-	subscriptionRequest.ExternalID = externalID
+	var collectURL string
+	var externalID int64
 
-	// Create subscription request with pending_payment status
-	subscriptionRequest.Status = "pending_payment"
-	subscriptionRequest.PaymentStatus = "pending"
+	if paymentMethod == "whish" {
+		// Generate externalId from ObjectID (use timestamp part as int64)
+		externalID = int64(subscriptionRequest.ID.Timestamp().Unix())
+		subscriptionRequest.ExternalID = externalID
 
-	// Get base URL for callbacks
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://barrim.online" // Default fallback
-	}
+		// Create subscription request with pending_payment status
+		subscriptionRequest.Status = "pending_payment"
+		subscriptionRequest.PaymentStatus = "pending"
 
-	// Get app URL for redirects
-	appURL := os.Getenv("APP_URL")
-	if appURL == "" {
-		appURL = baseURL // Fallback to baseURL if APP_URL not set
-	}
-
-	// Initialize Whish service
-	whishService := services.NewWhishService()
-
-	// Check Whish merchant account balance to verify account is active
-	// This validates that your Whish merchant account is operational
-	whishBalance, err := whishService.GetBalance()
-	if err != nil {
-		log.Printf("Warning: Could not check Whish account balance: %v", err)
-		// Continue anyway - balance check failure doesn't block payment creation
-	} else {
-		log.Printf("Whish merchant account balance: $%.2f", whishBalance)
-		// Optional: Validate account is active (negative balance might indicate issues)
-		if whishBalance < 0 {
-			log.Printf("Warning: Whish account has negative balance: $%.2f", whishBalance)
+		// Get base URL for callbacks
+		baseURL := os.Getenv("BASE_URL")
+		if baseURL == "" {
+			baseURL = "https://barrim.online" // Default fallback
 		}
-	}
 
-	// Create Whish payment request
-	whishReq := models.WhishRequest{
-		Amount:             &plan.Price,
-		Currency:           "USD", // Use USD for subscription payments
-		Invoice:            fmt.Sprintf("Branch Subscription - %s - Plan: %s", branch.Name, plan.Title),
-		ExternalID:         &externalID,
-		SuccessCallbackURL: fmt.Sprintf("%s/api/whish/payment/callback/success", baseURL),
-		FailureCallbackURL: fmt.Sprintf("%s/api/whish/payment/callback/failure", baseURL),
-		SuccessRedirectURL: fmt.Sprintf("%s/payment-success?requestId=%s", appURL, subscriptionRequest.ID.Hex()),
-		FailureRedirectURL: fmt.Sprintf("%s/payment-failed?requestId=%s", appURL, subscriptionRequest.ID.Hex()),
-	}
+		// Get app URL for redirects
+		appURL := os.Getenv("APP_URL")
+		if appURL == "" {
+			appURL = baseURL // Fallback to baseURL if APP_URL not set
+		}
 
-	// Call Whish API to create payment
-	collectURL, err := whishService.PostPayment(whishReq)
-	if err != nil {
-		log.Printf("Failed to create Whish payment: %v", err)
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: fmt.Sprintf("Failed to initiate payment: %v", err),
-		})
-	}
+		// Initialize Whish service
+		whishService := services.NewWhishService()
 
-	// Save collectUrl to subscription request
-	subscriptionRequest.CollectURL = collectURL
+		// Check Whish merchant account balance to verify account is active
+		// This validates that your Whish merchant account is operational
+		whishBalance, err := whishService.GetBalance()
+		if err != nil {
+			log.Printf("Warning: Could not check Whish account balance: %v", err)
+			// Continue anyway - balance check failure doesn't block payment creation
+		} else {
+			log.Printf("Whish merchant account balance: $%.2f", whishBalance)
+			// Optional: Validate account is active (negative balance might indicate issues)
+			if whishBalance < 0 {
+				log.Printf("Warning: Whish account has negative balance: $%.2f", whishBalance)
+			}
+		}
+
+		// Create Whish payment request
+		whishReq := models.WhishRequest{
+			Amount:             &plan.Price,
+			Currency:           "USD", // Use USD for subscription payments
+			Invoice:            fmt.Sprintf("Branch Subscription - %s - Plan: %s", branch.Name, plan.Title),
+			ExternalID:         &externalID,
+			SuccessCallbackURL: fmt.Sprintf("%s/api/whish/payment/callback/success", baseURL),
+			FailureCallbackURL: fmt.Sprintf("%s/api/whish/payment/callback/failure", baseURL),
+			SuccessRedirectURL: fmt.Sprintf("%s/payment-success?requestId=%s", appURL, subscriptionRequest.ID.Hex()),
+			FailureRedirectURL: fmt.Sprintf("%s/payment-failed?requestId=%s", appURL, subscriptionRequest.ID.Hex()),
+		}
+
+		// Call Whish API to create payment
+		collectURL, err = whishService.PostPayment(whishReq)
+		if err != nil {
+			log.Printf("Failed to create Whish payment: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: fmt.Sprintf("Failed to initiate payment: %v", err),
+			})
+		}
+
+		// Save collectUrl to subscription request
+		subscriptionRequest.CollectURL = collectURL
+
+		log.Printf("Whish payment created for branch subscription request %s: %s", subscriptionRequest.ID.Hex(), collectURL)
+	} else if paymentMethod == "cash" {
+		// For cash payment, set status to pending (waiting for admin approval)
+		subscriptionRequest.Status = "pending"
+		subscriptionRequest.PaymentStatus = "cash_pending"
+
+		// Payment proof image is required for cash payments
+		file, err := c.FormFile("paymentProof")
+		if err != nil || file == nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Payment proof image is required for cash payments",
+			})
+		}
+
+		// Validate file size (max 5MB)
+		if file.Size > 5*1024*1024 {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Payment proof image size exceeds 5MB limit",
+			})
+		}
+
+		// Open the uploaded file
+		src, err := file.Open()
+		if err != nil {
+			log.Printf("Failed to open uploaded file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to process payment proof image",
+			})
+		}
+		defer src.Close()
+
+		// Validate file type (read first 512 bytes for mime type detection)
+		buffer := make([]byte, 512)
+		_, err = src.Read(buffer)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Failed to read payment proof image",
+			})
+		}
+
+		// Reset file pointer
+		src.Seek(0, 0)
+
+		// Detect mime type
+		mimeType := http.DetectContentType(buffer)
+		allowedMimeTypes := map[string]bool{
+			"image/jpeg": true,
+			"image/png":  true,
+			"image/gif":  true,
+			"image/webp": true,
+		}
+
+		if !allowedMimeTypes[mimeType] {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid file type. Only JPEG, PNG, GIF and WebP images are allowed",
+			})
+		}
+
+		// Generate unique filename
+		ext := filepath.Ext(file.Filename)
+		uniqueFilename := fmt.Sprintf("payment_proof_%s_%d%s", subscriptionRequest.ID.Hex(), time.Now().Unix(), ext)
+
+		// Create uploads/bookings directory if it doesn't exist (or use a dedicated directory)
+		uploadDir := "uploads/bookings"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			log.Printf("Failed to create upload directory: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to create upload directory",
+			})
+		}
+
+		// Create destination file
+		uploadPath := filepath.Join(uploadDir, uniqueFilename)
+		dst, err := os.Create(uploadPath)
+		if err != nil {
+			log.Printf("Failed to create destination file: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save payment proof image",
+			})
+		}
+		defer dst.Close()
+
+		// Copy file content
+		if _, err = io.Copy(dst, src); err != nil {
+			log.Printf("Failed to copy file: %v", err)
+			os.Remove(uploadPath) // Clean up on error
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to save payment proof image",
+			})
+		}
+
+		// Store relative path for API access
+		subscriptionRequest.ImagePath = "/" + uploadPath
+		log.Printf("Payment proof image saved: %s", subscriptionRequest.ImagePath)
+	}
 
 	// Save subscription request to database
 	_, err = subscriptionRequestsCollection.InsertOne(ctx, subscriptionRequest)
 	if err != nil {
 		log.Printf("Failed to save subscription request: %v", err)
+		// Clean up uploaded image if database insert fails
+		if subscriptionRequest.ImagePath != "" {
+			imagePath := strings.TrimPrefix(subscriptionRequest.ImagePath, "/")
+			os.Remove(imagePath)
+		}
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to create subscription request",
 		})
 	}
 
-	log.Printf("Whish payment created for branch subscription request %s: %s", subscriptionRequest.ID.Hex(), collectURL)
+	// Prepare response data
+	responseData := map[string]interface{}{
+		"requestId":     subscriptionRequest.ID,
+		"plan":          plan,
+		"status":        subscriptionRequest.Status,
+		"submittedAt":   subscriptionRequest.RequestedAt,
+		"paymentAmount": plan.Price,
+		"paymentMethod": subscriptionRequest.PaymentMethod,
+	}
 
-	return c.JSON(http.StatusCreated, models.Response{
-		Status:  http.StatusCreated,
-		Message: "Payment initiated successfully. Please complete the payment to activate your subscription.",
-		Data: map[string]interface{}{
-			"requestId":     subscriptionRequest.ID,
-			"plan":          plan,
-			"status":        subscriptionRequest.Status,
-			"submittedAt":   subscriptionRequest.RequestedAt,
-			"paymentAmount": plan.Price,
-			"collectUrl":    collectURL,
-			"externalId":    externalID,
-		},
-	})
+	if paymentMethod == "whish" {
+		responseData["collectUrl"] = collectURL
+		responseData["externalId"] = externalID
+		return c.JSON(http.StatusCreated, models.Response{
+			Status:  http.StatusCreated,
+			Message: "Payment initiated successfully. Please complete the payment to activate your subscription.",
+			Data:    responseData,
+		})
+	} else {
+		responseData["imagePath"] = subscriptionRequest.ImagePath
+		return c.JSON(http.StatusCreated, models.Response{
+			Status:  http.StatusCreated,
+			Message: "Cash payment request submitted successfully. Please wait for admin approval.",
+			Data:    responseData,
+		})
+	}
 }
 
 // HandleWhishPaymentSuccess handles Whish payment success callback
@@ -2505,10 +2646,12 @@ func (sc *SubscriptionController) ProcessBranchSubscriptionRequest(c echo.Contex
 	}
 
 	// Check if request is already processed
+	// This function processes cash payment requests (status: "pending")
+	// Whish payment requests (status: "pending_payment") are handled by payment callbacks
 	if branchSubscriptionRequest.Status != "pending" {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
-			Message: fmt.Sprintf("Branch subscription request is already %s", branchSubscriptionRequest.Status),
+			Message: fmt.Sprintf("Branch subscription request is already %s. Only pending cash payment requests can be processed here.", branchSubscriptionRequest.Status),
 		})
 	}
 
@@ -3308,7 +3451,7 @@ func (sc *BranchSubscriptionController) GetBranchSubscriptionRequestStatus(c ech
 	// If payment status is pending, automatically verify payment and activate if successful
 	if subscriptionRequest.PaymentStatus == "pending" && subscriptionRequest.ExternalID != 0 {
 		log.Printf("🔄 Auto-verifying payment for subscription request: %s (externalId: %d)", subscriptionRequest.ID.Hex(), subscriptionRequest.ExternalID)
-		
+
 		// Initialize Whish service and verify payment status
 		whishService := services.NewWhishService()
 		status, phoneNumber, err := whishService.GetPaymentStatus("USD", subscriptionRequest.ExternalID)
@@ -3317,11 +3460,11 @@ func (sc *BranchSubscriptionController) GetBranchSubscriptionRequestStatus(c ech
 			// Continue to return the current status even if verification fails
 		} else {
 			log.Printf("📊 Auto-verification result: status=%s, phone=%s", status, phoneNumber)
-			
+
 			// If payment is successful, activate the subscription
 			if status == "success" {
 				log.Printf("✅ Payment verified as successful, activating subscription...")
-				
+
 				// Check if subscription already exists
 				subscriptionsCollection := sc.DB.Collection("branch_subscriptions")
 				var existingSubscription models.BranchSubscription
@@ -3329,7 +3472,7 @@ func (sc *BranchSubscriptionController) GetBranchSubscriptionRequestStatus(c ech
 					"branchId": branchObjectID,
 					"status":   "active",
 				}).Decode(&existingSubscription)
-				
+
 				if err != nil {
 					// No active subscription exists, activate it
 					err = sc.activateBranchSubscription(ctx, subscriptionRequest, phoneNumber)

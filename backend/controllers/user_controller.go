@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -2318,12 +2319,27 @@ func (uc *UserController) FilterBranches(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Parse query parameters
-	category := c.QueryParam("category")
-	subCategory := c.QueryParam("subCategory")
+	// Parse query parameters and URL decode them to handle spaces and special characters
+	categoryParam := c.QueryParam("category")
+	subCategoryParam := c.QueryParam("subCategory")
 	latStr := c.QueryParam("lat")
 	lngStr := c.QueryParam("lng")
 	distanceStr := c.QueryParam("distance") // in meters
+
+	// URL decode category and subCategory to handle spaces and special characters like "&"
+	category, err := url.QueryUnescape(categoryParam)
+	if err != nil {
+		category = strings.TrimSpace(categoryParam) // Fallback to original if decoding fails
+	} else {
+		category = strings.TrimSpace(category)
+	}
+
+	subCategory, err := url.QueryUnescape(subCategoryParam)
+	if err != nil {
+		subCategory = strings.TrimSpace(subCategoryParam) // Fallback to original if decoding fails
+	} else {
+		subCategory = strings.TrimSpace(subCategory)
+	}
 
 	// Validate required parameters
 	if latStr == "" || lngStr == "" || distanceStr == "" {
@@ -2363,17 +2379,14 @@ func (uc *UserController) FilterBranches(c echo.Context) error {
 	wholesalerCollection := config.GetCollection(uc.DB, "wholesalers")
 
 	// Build MongoDB filters for companies and wholesalers with branches
+	// Note: We don't filter by category/subcategory in MongoDB query because:
+	// 1. branches.category doesn't work correctly for array elements
+	// 2. We filter in application code after fetching all branches
 	companyFilter := bson.M{
 		"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}},
 	}
 	wholesalerFilter := bson.M{
 		"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}},
-	}
-
-	// Add category filter if provided
-	if category != "" {
-		companyFilter["branches.category"] = category
-		wholesalerFilter["branches.category"] = category
 	}
 
 	// Find all companies with branches

@@ -310,10 +310,12 @@ func (ssc *SponsorshipSubscriptionController) ProcessSponsorshipSubscriptionRequ
 	}
 
 	// Check if request is already processed
+	// This function processes cash payment requests (status: "pending")
+	// Whish payment requests (status: "pending_payment") are handled by payment callbacks
 	if subscriptionRequest.Status != "pending" {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"success": false,
-			"message": "Request is already processed",
+			"message": fmt.Sprintf("Request is already %s. Only pending cash payment requests can be processed here.", subscriptionRequest.Status),
 		})
 	}
 
