@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/HSouheill/barrim_backend/middleware"
@@ -390,114 +389,12 @@ func (spc *ServiceProviderSubscriptionController) CreateServiceProviderSubscript
 		// For cash payment, set status to pending (waiting for admin approval)
 		subscriptionRequest.Status = "pending"
 		subscriptionRequest.PaymentStatus = "cash_pending"
-
-		// Payment proof image is required for cash payments
-		file, err := c.FormFile("paymentProof")
-		if err != nil || file == nil {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Payment proof image is required for cash payments",
-			})
-		}
-
-		// Validate file size (max 5MB)
-		if file.Size > 5*1024*1024 {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Payment proof image size exceeds 5MB limit",
-			})
-		}
-
-		// Open the uploaded file
-		src, err := file.Open()
-		if err != nil {
-			log.Printf("Failed to open uploaded file: %v", err)
-			return c.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to process payment proof image",
-			})
-		}
-		defer src.Close()
-
-		// Validate file type (read first 512 bytes for mime type detection)
-		buffer := make([]byte, 512)
-		_, err = src.Read(buffer)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Failed to read payment proof image",
-			})
-		}
-
-		// Reset file pointer
-		src.Seek(0, 0)
-
-		// Detect mime type
-		mimeType := http.DetectContentType(buffer)
-		allowedMimeTypes := map[string]bool{
-			"image/jpeg": true,
-			"image/png":  true,
-			"image/gif":  true,
-			"image/webp": true,
-		}
-
-		if !allowedMimeTypes[mimeType] {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid file type. Only JPEG, PNG, GIF and WebP images are allowed",
-			})
-		}
-
-		// Generate unique filename
-		ext := filepath.Ext(file.Filename)
-		uniqueFilename := fmt.Sprintf("payment_proof_%s_%d%s", subscriptionRequest.ID.Hex(), time.Now().Unix(), ext)
-
-		// Create uploads/bookings directory if it doesn't exist (or use a dedicated directory)
-		uploadDir := "uploads/bookings"
-		if err := os.MkdirAll(uploadDir, 0755); err != nil {
-			log.Printf("Failed to create upload directory: %v", err)
-			return c.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to create upload directory",
-			})
-		}
-
-		// Create destination file
-		uploadPath := filepath.Join(uploadDir, uniqueFilename)
-		dst, err := os.Create(uploadPath)
-		if err != nil {
-			log.Printf("Failed to create destination file: %v", err)
-			return c.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to save payment proof image",
-			})
-		}
-		defer dst.Close()
-
-		// Copy file content
-		if _, err = io.Copy(dst, src); err != nil {
-			log.Printf("Failed to copy file: %v", err)
-			os.Remove(uploadPath) // Clean up on error
-			return c.JSON(http.StatusInternalServerError, models.Response{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to save payment proof image",
-			})
-		}
-
-		// Store relative path for API access
-		subscriptionRequest.ImagePath = "/" + uploadPath
-		log.Printf("Payment proof image saved: %s", subscriptionRequest.ImagePath)
 	}
 
 	// Save subscription request to database
 	_, err = subscriptionRequestsCollection.InsertOne(ctx, subscriptionRequest)
 	if err != nil {
 		log.Printf("Failed to save subscription request: %v", err)
-		// Clean up uploaded image if database insert fails
-		if subscriptionRequest.ImagePath != "" {
-			imagePath := strings.TrimPrefix(subscriptionRequest.ImagePath, "/")
-			os.Remove(imagePath)
-		}
 		return c.JSON(http.StatusInternalServerError, models.Response{
 			Status:  http.StatusInternalServerError,
 			Message: "Failed to create subscription request",
@@ -523,7 +420,6 @@ func (spc *ServiceProviderSubscriptionController) CreateServiceProviderSubscript
 			Data:    responseData,
 		})
 	} else {
-		responseData["imagePath"] = subscriptionRequest.ImagePath
 		return c.JSON(http.StatusCreated, models.Response{
 			Status:  http.StatusCreated,
 			Message: "Cash payment request submitted successfully. Please wait for admin approval.",
