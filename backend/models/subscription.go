@@ -124,7 +124,8 @@ type ActiveSubscription struct {
 	PlanID            primitive.ObjectID `json:"planId" bson:"planId"`
 	StartDate         time.Time          `json:"startDate" bson:"startDate"`
 	EndDate           time.Time          `json:"endDate" bson:"endDate"`
-	Status            string             `json:"status" bson:"status"` // active, cancelled, expired
+	Status            string             `json:"status" bson:"status"`               // active, cancelled, expired
+	PaymentMethod     string             `json:"paymentMethod" bson:"paymentMethod"` // "whish" or "cash" - saved permanently
 	CancelledAt       *time.Time         `json:"cancelledAt,omitempty" bson:"cancelledAt,omitempty"`
 	CreatedAt         time.Time          `json:"createdAt" bson:"createdAt"`
 	UpdatedAt         time.Time          `json:"updatedAt" bson:"updatedAt"`

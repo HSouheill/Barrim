@@ -147,15 +147,16 @@ type WholesalerBranch struct {
 // WholesalerBranchSubscription represents a branch's subscription
 // Similar to BranchSubscription in company.go
 type WholesalerBranchSubscription struct {
-	ID        primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
-	BranchID  primitive.ObjectID `json:"branchId" bson:"branchId"`
-	PlanID    primitive.ObjectID `json:"planId" bson:"planId"`
-	StartDate time.Time          `json:"startDate" bson:"startDate"`
-	EndDate   time.Time          `json:"endDate" bson:"endDate"`
-	Status    string             `json:"status" bson:"status"`
-	AutoRenew bool               `json:"autoRenew" bson:"autoRenew"`
-	CreatedAt time.Time          `json:"createdAt" bson:"createdAt"`
-	UpdatedAt time.Time          `json:"updatedAt" bson:"updatedAt"`
+	ID            primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	BranchID      primitive.ObjectID `json:"branchId" bson:"branchId"`
+	PlanID        primitive.ObjectID `json:"planId" bson:"planId"`
+	StartDate     time.Time          `json:"startDate" bson:"startDate"`
+	EndDate       time.Time          `json:"endDate" bson:"endDate"`
+	Status        string             `json:"status" bson:"status"`
+	AutoRenew     bool               `json:"autoRenew" bson:"autoRenew"`
+	PaymentMethod string             `json:"paymentMethod" bson:"paymentMethod"` // "whish" or "cash" - saved permanently
+	CreatedAt     time.Time          `json:"createdAt" bson:"createdAt"`
+	UpdatedAt     time.Time          `json:"updatedAt" bson:"updatedAt"`
 }
 
 // WholesalerBranchSubscriptionRequest represents a subscription request for a wholesaler branch
@@ -175,7 +176,7 @@ type WholesalerBranchSubscriptionRequest struct {
 	RejectedAt      time.Time          `json:"rejectedAt,omitempty" bson:"rejectedAt,omitempty"`
 	ProcessedAt     time.Time          `json:"processedAt,omitempty" bson:"processedAt,omitempty"`
 	// Payment method: "whish" or "cash"
-	PaymentMethod   string             `json:"paymentMethod,omitempty" bson:"paymentMethod,omitempty"` // "whish" or "cash"
+	PaymentMethod string `json:"paymentMethod,omitempty" bson:"paymentMethod,omitempty"` // "whish" or "cash"
 	// Whish payment fields
 	ExternalID    int64     `json:"externalId,omitempty" bson:"externalId,omitempty"`       // Whish payment external ID
 	PaymentStatus string    `json:"paymentStatus,omitempty" bson:"paymentStatus,omitempty"` // "pending", "success", "failed"

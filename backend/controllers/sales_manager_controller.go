@@ -1538,6 +1538,7 @@ func (smc *SalesManagerController) ProcessSubscriptionRequest(c echo.Context) er
 				EndDate:           endDate,
 				Status:            "active",
 				AutoRenew:         false,
+				PaymentMethod:     subscriptionRequest.PaymentMethod, // Save payment method permanently
 				CreatedAt:         time.Now(),
 				UpdatedAt:         time.Now(),
 			}

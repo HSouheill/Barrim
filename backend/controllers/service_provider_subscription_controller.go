@@ -574,6 +574,7 @@ func (spc *ServiceProviderSubscriptionController) activateServiceProviderSubscri
 		EndDate:           endDate,
 		Status:            "active",
 		AutoRenew:         false,
+		PaymentMethod:     subscriptionRequest.PaymentMethod, // Save payment method permanently
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	}
@@ -1310,7 +1311,8 @@ func (spc *ServiceProviderSubscriptionController) ProcessServiceProviderSubscrip
 			StartDate:         startDate,
 			EndDate:           endDate,
 			Status:            "active",
-			AutoRenew:         false, // Default to false, can be changed later
+			AutoRenew:         false,                             // Default to false, can be changed later
+			PaymentMethod:     subscriptionRequest.PaymentMethod, // Save payment method permanently
 			CreatedAt:         time.Now(),
 			UpdatedAt:         time.Now(),
 		}

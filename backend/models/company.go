@@ -141,15 +141,16 @@ type CompanySubscription struct {
 // BranchSubscription represents a branch's subscription
 // Similar to CompanySubscription but for branches
 type BranchSubscription struct {
-	ID        primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
-	BranchID  primitive.ObjectID `json:"branchId" bson:"branchId"` // Reference to the branch
-	PlanID    primitive.ObjectID `json:"planId" bson:"planId"`     // Reference to the subscribed plan
-	StartDate time.Time          `json:"startDate" bson:"startDate"`
-	EndDate   time.Time          `json:"endDate" bson:"endDate"`
-	Status    string             `json:"status" bson:"status"`       // e.g., "active", "paused", "expired"
-	AutoRenew bool               `json:"autoRenew" bson:"autoRenew"` // Whether the subscription should auto-renew
-	CreatedAt time.Time          `json:"createdAt" bson:"createdAt"`
-	UpdatedAt time.Time          `json:"updatedAt" bson:"updatedAt"`
+	ID            primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	BranchID      primitive.ObjectID `json:"branchId" bson:"branchId"` // Reference to the branch
+	PlanID        primitive.ObjectID `json:"planId" bson:"planId"`     // Reference to the subscribed plan
+	StartDate     time.Time          `json:"startDate" bson:"startDate"`
+	EndDate       time.Time          `json:"endDate" bson:"endDate"`
+	Status        string             `json:"status" bson:"status"`               // e.g., "active", "paused", "expired"
+	AutoRenew     bool               `json:"autoRenew" bson:"autoRenew"`         // Whether the subscription should auto-renew
+	PaymentMethod string             `json:"paymentMethod" bson:"paymentMethod"` // "whish" or "cash" - saved permanently
+	CreatedAt     time.Time          `json:"createdAt" bson:"createdAt"`
+	UpdatedAt     time.Time          `json:"updatedAt" bson:"updatedAt"`
 }
 
 // SubscriptionApprovalRequest represents the request body for approving/rejecting subscriptions

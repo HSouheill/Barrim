@@ -13,8 +13,9 @@ type ServiceProviderSubscription struct {
 	PlanID            primitive.ObjectID `json:"planId" bson:"planId"`                       // Reference to the subscribed plan
 	StartDate         time.Time          `json:"startDate" bson:"startDate"`
 	EndDate           time.Time          `json:"endDate" bson:"endDate"`
-	Status            string             `json:"status" bson:"status"`       // e.g., "active", "paused", "expired"
-	AutoRenew         bool               `json:"autoRenew" bson:"autoRenew"` // Whether the subscription should auto-renew
+	Status            string             `json:"status" bson:"status"`               // e.g., "active", "paused", "expired"
+	AutoRenew         bool               `json:"autoRenew" bson:"autoRenew"`         // Whether the subscription should auto-renew
+	PaymentMethod     string             `json:"paymentMethod" bson:"paymentMethod"` // "whish" or "cash" - saved permanently
 	CreatedAt         time.Time          `json:"createdAt" bson:"createdAt"`
 	UpdatedAt         time.Time          `json:"updatedAt" bson:"updatedAt"`
 }

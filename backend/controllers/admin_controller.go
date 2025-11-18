@@ -907,7 +907,7 @@ type CompanySubscriptionPayment struct {
 	PlanID           primitive.ObjectID     `json:"planId"`
 	PlanTitle        string                 `json:"planTitle"`
 	PlanPrice        float64                `json:"planPrice"`
-	PaymentMethod    string                 `json:"paymentMethod,omitempty"`
+	PaymentMethod    string                 `json:"paymentMethod"`
 	PaymentStatus    string                 `json:"paymentStatus,omitempty"`
 	Status           string                 `json:"status"`
 	RequestedAt      time.Time              `json:"requestedAt"`
@@ -928,7 +928,7 @@ type WholesalerSubscriptionPayment struct {
 	PlanID           primitive.ObjectID     `json:"planId"`
 	PlanTitle        string                 `json:"planTitle"`
 	PlanPrice        float64                `json:"planPrice"`
-	PaymentMethod    string                 `json:"paymentMethod,omitempty"`
+	PaymentMethod    string                 `json:"paymentMethod"`
 	PaymentStatus    string                 `json:"paymentStatus,omitempty"`
 	Status           string                 `json:"status"`
 	RequestedAt      time.Time              `json:"requestedAt"`
@@ -947,7 +947,7 @@ type ServiceProviderSubscriptionPayment struct {
 	PlanID            primitive.ObjectID     `json:"planId"`
 	PlanTitle         string                 `json:"planTitle"`
 	PlanPrice         float64                `json:"planPrice"`
-	PaymentMethod     string                 `json:"paymentMethod,omitempty"`
+	PaymentMethod     string                 `json:"paymentMethod"`
 	PaymentStatus     string                 `json:"paymentStatus,omitempty"`
 	Status            string                 `json:"status"`
 	RequestedAt       time.Time              `json:"requestedAt"`
@@ -3831,6 +3831,9 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
 				// If payment status suggests whish payment
 				paymentMethod = "whish"
+			} else {
+				// Default to "unknown" if we can't determine it
+				paymentMethod = "unknown"
 			}
 		}
 
@@ -3869,16 +3872,25 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 		branchesProcessed[sub.BranchID] = true
 
-		// Try to find the original request for payment method info
-		// First try to match by both branchID and planID
-		key := fmt.Sprintf("%s_%s", sub.BranchID.Hex(), sub.PlanID.Hex())
-		originalRequest, hasRequest := requestByBranchAndPlan[key]
-		if !hasRequest {
-			// Fallback to just branchID if no exact match
-			originalRequest, hasRequest = requestByBranchID[sub.BranchID]
-		}
 		plan, planExists := planMap[sub.PlanID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		// Get payment method from subscription (now saved permanently)
+		paymentMethod := sub.PaymentMethod
+		if paymentMethod == "" {
+			// Fallback: try to find from original request if subscription doesn't have it
+			key := fmt.Sprintf("%s_%s", sub.BranchID.Hex(), sub.PlanID.Hex())
+			originalRequest, hasRequest := requestByBranchAndPlan[key]
+			if !hasRequest {
+				originalRequest, hasRequest = requestByBranchID[sub.BranchID]
+			}
+			if hasRequest {
+				paymentMethod = originalRequest.PaymentMethod
+			}
+			if paymentMethod == "" {
+				paymentMethod = "unknown"
+			}
+		}
 
 		payment := CompanySubscriptionPayment{
 			CompanyID:        meta.companyID,
@@ -3886,6 +3898,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			BranchID:         sub.BranchID,
 			BranchName:       meta.branch.Name,
 			PlanID:           sub.PlanID,
+			PaymentMethod:    paymentMethod,
 			Status:           "active",
 			RequestedAt:      sub.CreatedAt,
 			Salesperson:      salespersonInfo,
@@ -3895,26 +3908,6 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		if planExists {
 			payment.PlanTitle = plan.Title
 			payment.PlanPrice = plan.Price
-		}
-
-		if hasRequest {
-			// Infer payment method if not set
-			paymentMethod := originalRequest.PaymentMethod
-			if paymentMethod == "" {
-				if originalRequest.CollectURL != "" {
-					paymentMethod = "whish"
-				} else if originalRequest.PaymentStatus == "cash_pending" || originalRequest.PaymentStatus == "cash" {
-					paymentMethod = "cash"
-				} else if originalRequest.PaymentStatus == "success" || originalRequest.PaymentStatus == "pending" {
-					paymentMethod = "whish"
-				}
-			}
-			payment.PaymentMethod = paymentMethod
-			payment.PaymentStatus = originalRequest.PaymentStatus
-			if !originalRequest.PaidAt.IsZero() {
-				paid := originalRequest.PaidAt
-				payment.PaidAt = &paid
-			}
 		}
 
 		companyPayments = append(companyPayments, payment)
@@ -3945,6 +3938,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				paymentMethod = "cash"
 			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
 				paymentMethod = "whish"
+			} else {
+				paymentMethod = "unknown"
 			}
 		}
 
@@ -4028,6 +4023,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				paymentMethod = "cash"
 			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
 				paymentMethod = "whish"
+			} else {
+				paymentMethod = "unknown"
 			}
 		}
 
@@ -4072,6 +4069,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				paymentMethod = "cash"
 			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
 				paymentMethod = "whish"
+			} else {
+				paymentMethod = "unknown"
 			}
 		}
 
@@ -4127,6 +4126,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				paymentMethod = "cash"
 			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
 				paymentMethod = "whish"
+			} else {
+				paymentMethod = "unknown"
 			}
 		}
 
@@ -4169,6 +4170,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				paymentMethod = "cash"
 			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
 				paymentMethod = "whish"
+			} else {
+				paymentMethod = "unknown"
 			}
 		}
 

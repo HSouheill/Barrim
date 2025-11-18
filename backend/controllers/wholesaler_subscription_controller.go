@@ -1595,15 +1595,16 @@ func (sc *WholesalerBranchSubscriptionController) ApproveBranchSubscriptionReque
 	}
 
 	subscription := models.WholesalerBranchSubscription{
-		ID:        primitive.NewObjectID(),
-		BranchID:  request.BranchID,
-		PlanID:    request.PlanID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Status:    "active",
-		AutoRenew: false,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:            primitive.NewObjectID(),
+		BranchID:      request.BranchID,
+		PlanID:        request.PlanID,
+		StartDate:     startDate,
+		EndDate:       endDate,
+		Status:        "active",
+		AutoRenew:     false,
+		PaymentMethod: request.PaymentMethod, // Save payment method permanently
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	subscriptionsCollection := sc.DB.Collection("wholesaler_branch_subscriptions")
@@ -2283,15 +2284,16 @@ func (sc *WholesalerBranchSubscriptionController) ProcessWholesalerBranchSubscri
 
 		// Create subscription
 		newSubscription := models.WholesalerBranchSubscription{
-			ID:        primitive.NewObjectID(),
-			BranchID:  subscriptionRequest.BranchID,
-			PlanID:    subscriptionRequest.PlanID,
-			StartDate: startDate,
-			EndDate:   endDate,
-			Status:    "active",
-			AutoRenew: false, // Default to false, can be changed later
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			ID:            primitive.NewObjectID(),
+			BranchID:      subscriptionRequest.BranchID,
+			PlanID:        subscriptionRequest.PlanID,
+			StartDate:     startDate,
+			EndDate:       endDate,
+			Status:        "active",
+			AutoRenew:     false,                             // Default to false, can be changed later
+			PaymentMethod: subscriptionRequest.PaymentMethod, // Save payment method permanently
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
 		}
 
 		// Save subscription

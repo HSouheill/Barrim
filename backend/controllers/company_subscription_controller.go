@@ -530,15 +530,16 @@ func (sc *BranchSubscriptionController) activateBranchSubscription(ctx context.C
 
 	// Create active subscription
 	newSubscription := models.BranchSubscription{
-		ID:        primitive.NewObjectID(),
-		BranchID:  subscriptionRequest.BranchID,
-		PlanID:    subscriptionRequest.PlanID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Status:    "active",
-		AutoRenew: false,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:            primitive.NewObjectID(),
+		BranchID:      subscriptionRequest.BranchID,
+		PlanID:        subscriptionRequest.PlanID,
+		StartDate:     startDate,
+		EndDate:       endDate,
+		Status:        "active",
+		AutoRenew:     false,
+		PaymentMethod: subscriptionRequest.PaymentMethod, // Save payment method permanently
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	// Save subscription
@@ -2622,15 +2623,16 @@ func (sc *SubscriptionController) ProcessBranchSubscriptionRequest(c echo.Contex
 
 		// Create subscription
 		newSubscription := models.BranchSubscription{
-			ID:        primitive.NewObjectID(),
-			BranchID:  branchSubscriptionRequest.BranchID,
-			PlanID:    branchSubscriptionRequest.PlanID,
-			StartDate: startDate,
-			EndDate:   endDate,
-			Status:    "active",
-			AutoRenew: false, // Default to false, can be changed later
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			ID:            primitive.NewObjectID(),
+			BranchID:      branchSubscriptionRequest.BranchID,
+			PlanID:        branchSubscriptionRequest.PlanID,
+			StartDate:     startDate,
+			EndDate:       endDate,
+			Status:        "active",
+			AutoRenew:     false,                                   // Default to false, can be changed later
+			PaymentMethod: branchSubscriptionRequest.PaymentMethod, // Save payment method permanently
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
 		}
 
 		// Save subscription
