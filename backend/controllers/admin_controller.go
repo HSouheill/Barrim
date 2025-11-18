@@ -3821,13 +3821,26 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		plan, planExists := planMap[req.PlanID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
 
+		// Infer payment method if not set
+		paymentMethod := req.PaymentMethod
+		if paymentMethod == "" {
+			if req.CollectURL != "" {
+				paymentMethod = "whish"
+			} else if req.PaymentStatus == "cash_pending" || req.PaymentStatus == "cash" {
+				paymentMethod = "cash"
+			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
+				// If payment status suggests whish payment
+				paymentMethod = "whish"
+			}
+		}
+
 		payment := CompanySubscriptionPayment{
 			CompanyID:        meta.companyID,
 			CompanyName:      meta.companyName,
 			BranchID:         req.BranchID,
 			BranchName:       meta.branch.Name,
 			PlanID:           req.PlanID,
-			PaymentMethod:    req.PaymentMethod,
+			PaymentMethod:    paymentMethod,
 			PaymentStatus:    req.PaymentStatus,
 			Status:           req.Status,
 			RequestedAt:      req.RequestedAt,
@@ -3885,7 +3898,18 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 
 		if hasRequest {
-			payment.PaymentMethod = originalRequest.PaymentMethod
+			// Infer payment method if not set
+			paymentMethod := originalRequest.PaymentMethod
+			if paymentMethod == "" {
+				if originalRequest.CollectURL != "" {
+					paymentMethod = "whish"
+				} else if originalRequest.PaymentStatus == "cash_pending" || originalRequest.PaymentStatus == "cash" {
+					paymentMethod = "cash"
+				} else if originalRequest.PaymentStatus == "success" || originalRequest.PaymentStatus == "pending" {
+					paymentMethod = "whish"
+				}
+			}
+			payment.PaymentMethod = paymentMethod
 			payment.PaymentStatus = originalRequest.PaymentStatus
 			if !originalRequest.PaidAt.IsZero() {
 				paid := originalRequest.PaidAt
@@ -3912,13 +3936,25 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		sponsorship, sponsorshipExists := sponsorshipMap[req.SponsorshipID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
 
+		// Infer payment method if not set
+		paymentMethod := req.PaymentMethod
+		if paymentMethod == "" {
+			if req.CollectURL != "" {
+				paymentMethod = "whish"
+			} else if req.PaymentStatus == "cash_pending" || req.PaymentStatus == "cash" {
+				paymentMethod = "cash"
+			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
+				paymentMethod = "whish"
+			}
+		}
+
 		payment := CompanySubscriptionPayment{
 			CompanyID:        meta.companyID,
 			CompanyName:      meta.companyName,
 			BranchID:         req.EntityID,
 			BranchName:       meta.branch.Name,
 			PlanID:           primitive.NilObjectID,
-			PaymentMethod:    req.PaymentMethod,
+			PaymentMethod:    paymentMethod,
 			PaymentStatus:    req.PaymentStatus,
 			Status:           req.Status,
 			RequestedAt:      req.RequestedAt,
@@ -3982,6 +4018,19 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 		plan := planMap[req.PlanID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		// Infer payment method if not set
+		paymentMethod := req.PaymentMethod
+		if paymentMethod == "" {
+			if req.CollectURL != "" {
+				paymentMethod = "whish"
+			} else if req.PaymentStatus == "cash_pending" || req.PaymentStatus == "cash" {
+				paymentMethod = "cash"
+			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
+				paymentMethod = "whish"
+			}
+		}
+
 		wholesalerPayments = append(wholesalerPayments, WholesalerSubscriptionPayment{
 			WholesalerID:     meta.wholesalerID,
 			WholesalerName:   meta.wholesalerName,
@@ -3990,7 +4039,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			PlanID:           req.PlanID,
 			PlanTitle:        plan.Title,
 			PlanPrice:        plan.Price,
-			PaymentMethod:    req.PaymentMethod,
+			PaymentMethod:    paymentMethod,
 			PaymentStatus:    req.PaymentStatus,
 			Status:           req.Status,
 			RequestedAt:      req.RequestedAt,
@@ -4014,13 +4063,25 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		sponsorship, sponsorshipExists := sponsorshipMap[req.SponsorshipID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
 
+		// Infer payment method if not set
+		paymentMethod := req.PaymentMethod
+		if paymentMethod == "" {
+			if req.CollectURL != "" {
+				paymentMethod = "whish"
+			} else if req.PaymentStatus == "cash_pending" || req.PaymentStatus == "cash" {
+				paymentMethod = "cash"
+			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
+				paymentMethod = "whish"
+			}
+		}
+
 		payment := WholesalerSubscriptionPayment{
 			WholesalerID:     meta.wholesalerID,
 			WholesalerName:   meta.wholesalerName,
 			BranchID:         req.EntityID,
 			BranchName:       meta.branch.Name,
 			PlanID:           primitive.NilObjectID,
-			PaymentMethod:    req.PaymentMethod,
+			PaymentMethod:    paymentMethod,
 			PaymentStatus:    req.PaymentStatus,
 			Status:           req.Status,
 			RequestedAt:      req.RequestedAt,
@@ -4056,13 +4117,26 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			status = "pending"
 		}
 		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		// Infer payment method if not set
+		paymentMethod := req.PaymentMethod
+		if paymentMethod == "" {
+			if req.CollectURL != "" {
+				paymentMethod = "whish"
+			} else if req.PaymentStatus == "cash_pending" || req.PaymentStatus == "cash" {
+				paymentMethod = "cash"
+			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
+				paymentMethod = "whish"
+			}
+		}
+
 		serviceProviderPayments = append(serviceProviderPayments, ServiceProviderSubscriptionPayment{
 			ServiceProviderID: req.ServiceProviderID,
 			BusinessName:      meta.businessName,
 			PlanID:            req.PlanID,
 			PlanTitle:         plan.Title,
 			PlanPrice:         plan.Price,
-			PaymentMethod:     req.PaymentMethod,
+			PaymentMethod:     paymentMethod,
 			PaymentStatus:     req.PaymentStatus,
 			Status:            status,
 			RequestedAt:       req.RequestedAt,
@@ -4086,11 +4160,23 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		sponsorship, sponsorshipExists := sponsorshipMap[req.SponsorshipID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
 
+		// Infer payment method if not set
+		paymentMethod := req.PaymentMethod
+		if paymentMethod == "" {
+			if req.CollectURL != "" {
+				paymentMethod = "whish"
+			} else if req.PaymentStatus == "cash_pending" || req.PaymentStatus == "cash" {
+				paymentMethod = "cash"
+			} else if req.PaymentStatus == "success" || req.PaymentStatus == "pending" {
+				paymentMethod = "whish"
+			}
+		}
+
 		payment := ServiceProviderSubscriptionPayment{
 			ServiceProviderID: req.EntityID,
 			BusinessName:      meta.businessName,
 			PlanID:            primitive.NilObjectID,
-			PaymentMethod:     req.PaymentMethod,
+			PaymentMethod:     paymentMethod,
 			PaymentStatus:     req.PaymentStatus,
 			Status:            req.Status,
 			RequestedAt:       req.RequestedAt,
