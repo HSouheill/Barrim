@@ -78,6 +78,192 @@ func (rc *ReviewController) GetReviewsByProviderID(c echo.Context) error {
 	})
 }
 
+// GetServiceProviderRating retrieves the calculated rating for a service provider based on all reviews
+// This is a public endpoint that calculates the average rating from all user reviews
+func (rc *ReviewController) GetServiceProviderRating(c echo.Context) error {
+	userID := c.Param("userid")
+
+	// Validate user ID
+	providerID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid service provider ID",
+		})
+	}
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Calculate rating from reviews
+	reviewsCollection := rc.db.Database("barrim").Collection("reviews")
+
+	// Pipeline to calculate average rating, total count, and rating distribution
+	pipeline := []bson.M{
+		{"$match": bson.M{"serviceProviderId": providerID}},
+		{"$group": bson.M{
+			"_id":           nil,
+			"averageRating": bson.M{"$avg": "$rating"},
+			"totalReviews":  bson.M{"$sum": 1},
+			"rating1": bson.M{
+				"$sum": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$rating", 1}},
+						1,
+						0,
+					},
+				},
+			},
+			"rating2": bson.M{
+				"$sum": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$rating", 2}},
+						1,
+						0,
+					},
+				},
+			},
+			"rating3": bson.M{
+				"$sum": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$rating", 3}},
+						1,
+						0,
+					},
+				},
+			},
+			"rating4": bson.M{
+				"$sum": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$rating", 4}},
+						1,
+						0,
+					},
+				},
+			},
+			"rating5": bson.M{
+				"$sum": bson.M{
+					"$cond": []interface{}{
+						bson.M{"$eq": []interface{}{"$rating", 5}},
+						1,
+						0,
+					},
+				},
+			},
+		}},
+	}
+
+	cursor, err := reviewsCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		log.Printf("Error calculating rating: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error calculating rating",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	var results []bson.M
+	if err := cursor.All(ctx, &results); err != nil {
+		log.Printf("Error parsing rating results: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error parsing rating results",
+		})
+	}
+
+	// Prepare response data
+	ratingData := map[string]interface{}{
+		"serviceProviderId": providerID,
+		"averageRating":     0.0,
+		"totalReviews":      0,
+		"ratingDistribution": map[string]int{
+			"1": 0,
+			"2": 0,
+			"3": 0,
+			"4": 0,
+			"5": 0,
+		},
+	}
+
+	// If there are reviews, extract the calculated values
+	if len(results) > 0 {
+		result := results[0]
+
+		// Get average rating
+		if avgRating, ok := result["averageRating"]; ok && avgRating != nil {
+			ratingData["averageRating"] = math.Round(avgRating.(float64)*10) / 10 // Round to 1 decimal place
+		}
+
+		// Get total reviews count
+		if totalReviews, ok := result["totalReviews"]; ok {
+			ratingData["totalReviews"] = totalReviews
+		}
+
+		// Get rating distribution
+		distribution := map[string]int{
+			"1": 0,
+			"2": 0,
+			"3": 0,
+			"4": 0,
+			"5": 0,
+		}
+		if rating1, ok := result["rating1"]; ok && rating1 != nil {
+			if val, ok := rating1.(int32); ok {
+				distribution["1"] = int(val)
+			} else if val, ok := rating1.(int64); ok {
+				distribution["1"] = int(val)
+			} else if val, ok := rating1.(int); ok {
+				distribution["1"] = val
+			}
+		}
+		if rating2, ok := result["rating2"]; ok && rating2 != nil {
+			if val, ok := rating2.(int32); ok {
+				distribution["2"] = int(val)
+			} else if val, ok := rating2.(int64); ok {
+				distribution["2"] = int(val)
+			} else if val, ok := rating2.(int); ok {
+				distribution["2"] = val
+			}
+		}
+		if rating3, ok := result["rating3"]; ok && rating3 != nil {
+			if val, ok := rating3.(int32); ok {
+				distribution["3"] = int(val)
+			} else if val, ok := rating3.(int64); ok {
+				distribution["3"] = int(val)
+			} else if val, ok := rating3.(int); ok {
+				distribution["3"] = val
+			}
+		}
+		if rating4, ok := result["rating4"]; ok && rating4 != nil {
+			if val, ok := rating4.(int32); ok {
+				distribution["4"] = int(val)
+			} else if val, ok := rating4.(int64); ok {
+				distribution["4"] = int(val)
+			} else if val, ok := rating4.(int); ok {
+				distribution["4"] = val
+			}
+		}
+		if rating5, ok := result["rating5"]; ok && rating5 != nil {
+			if val, ok := rating5.(int32); ok {
+				distribution["5"] = int(val)
+			} else if val, ok := rating5.(int64); ok {
+				distribution["5"] = int(val)
+			} else if val, ok := rating5.(int); ok {
+				distribution["5"] = val
+			}
+		}
+		ratingData["ratingDistribution"] = distribution
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Service provider rating retrieved successfully",
+		Data:    ratingData,
+	})
+}
+
 // CreateReview adds a new review for a service provider
 func (rc *ReviewController) CreateReview(c echo.Context) error {
 	// Get user from JWT token

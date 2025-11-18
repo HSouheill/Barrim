@@ -42,6 +42,7 @@ func RegisterAuthRoutes(e *echo.Echo, db *mongo.Client, authController *controll
 	e.GET("/api/service-providers", userController.SearchServiceProviders)
 	e.GET("/api/service-providers/all", serviceProviderController.GetAllServiceProviders)
 	e.GET("/api/service-providers/:userid/reviews", reviewController.GetReviewsByProviderID)
+	e.GET("/api/service-providers/:userid/rating", reviewController.GetServiceProviderRating)
 	e.GET("/api/service-providers/:id/logo", serviceProviderController.GetServiceProviderLogo)
 	e.GET("/api/service-providers/:id", serviceProviderController.GetServiceProviderByID)
 	e.GET("/api/qrcode/referral/:code", serviceProviderController.GenerateReferralQRCode)
