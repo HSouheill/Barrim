@@ -113,6 +113,7 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 	// Subscription request routes
 	protected.GET("/subscription-requests/pending", subscriptionController.GetPendingSubscriptionRequests)
 	protected.POST("/subscription-requests/:id/process", subscriptionController.ProcessSubscriptionRequest)
+	protected.GET("/salespersons/subscription-payments", adminController.GetSalespersonSubscriptionPayments)
 
 	// Get pending subscription requests (admin only)
 	protected.GET("/wholesaler/subscription/pending", subscriptionController.GetPendingWholesalerSubscriptionRequests)

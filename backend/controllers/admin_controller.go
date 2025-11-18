@@ -890,6 +890,63 @@ type SalespersonInfo struct {
 	SalesManagerID primitive.ObjectID `json:"salesManagerID"`
 }
 
+// SalespersonSubscriptionSummary groups subscription payment information for entities created by a salesperson
+type SalespersonSubscriptionSummary struct {
+	SalespersonID    primitive.ObjectID                   `json:"salespersonId"`
+	FullName         string                               `json:"fullName"`
+	Email            string                               `json:"email"`
+	PhoneNumber      string                               `json:"phoneNumber"`
+	Companies        []CompanySubscriptionPayment         `json:"companies"`
+	Wholesalers      []WholesalerSubscriptionPayment      `json:"wholesalers"`
+	ServiceProviders []ServiceProviderSubscriptionPayment `json:"serviceProviders"`
+}
+
+// CompanySubscriptionPayment describes a single branch subscription request and its payment metadata
+type CompanySubscriptionPayment struct {
+	CompanyID     primitive.ObjectID `json:"companyId"`
+	CompanyName   string             `json:"companyName"`
+	BranchID      primitive.ObjectID `json:"branchId"`
+	BranchName    string             `json:"branchName"`
+	PlanID        primitive.ObjectID `json:"planId"`
+	PlanTitle     string             `json:"planTitle"`
+	PlanPrice     float64            `json:"planPrice"`
+	PaymentMethod string             `json:"paymentMethod,omitempty"`
+	PaymentStatus string             `json:"paymentStatus,omitempty"`
+	Status        string             `json:"status"`
+	RequestedAt   time.Time          `json:"requestedAt"`
+	PaidAt        *time.Time         `json:"paidAt,omitempty"`
+}
+
+// WholesalerSubscriptionPayment describes a wholesaler branch subscription request and its payment metadata
+type WholesalerSubscriptionPayment struct {
+	WholesalerID   primitive.ObjectID `json:"wholesalerId"`
+	WholesalerName string             `json:"wholesalerName"`
+	BranchID       primitive.ObjectID `json:"branchId"`
+	BranchName     string             `json:"branchName"`
+	PlanID         primitive.ObjectID `json:"planId"`
+	PlanTitle      string             `json:"planTitle"`
+	PlanPrice      float64            `json:"planPrice"`
+	PaymentMethod  string             `json:"paymentMethod,omitempty"`
+	PaymentStatus  string             `json:"paymentStatus,omitempty"`
+	Status         string             `json:"status"`
+	RequestedAt    time.Time          `json:"requestedAt"`
+	PaidAt         *time.Time         `json:"paidAt,omitempty"`
+}
+
+// ServiceProviderSubscriptionPayment describes a service provider subscription request and its payment metadata
+type ServiceProviderSubscriptionPayment struct {
+	ServiceProviderID primitive.ObjectID `json:"serviceProviderId"`
+	BusinessName      string             `json:"businessName"`
+	PlanID            primitive.ObjectID `json:"planId"`
+	PlanTitle         string             `json:"planTitle"`
+	PlanPrice         float64            `json:"planPrice"`
+	PaymentMethod     string             `json:"paymentMethod,omitempty"`
+	PaymentStatus     string             `json:"paymentStatus,omitempty"`
+	Status            string             `json:"status"`
+	RequestedAt       time.Time          `json:"requestedAt"`
+	PaidAt            *time.Time         `json:"paidAt,omitempty"`
+}
+
 // GetAllUsers retrieves all users with userType "user"
 func (ac *AdminController) GetAllUsers(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
@@ -3261,6 +3318,433 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 			"wholesalers":      wholesalers,
 			"branches":         allBranches,
 		},
+	})
+}
+
+// GetSalespersonSubscriptionPayments returns the entities created by salespersons along with their subscription payment methods
+func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) error {
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil || claims.UserType != "admin" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins can access this resource",
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	salespersonIDParam := c.QueryParam("salespersonId")
+	salespersonFilter := bson.M{}
+	if salespersonIDParam != "" {
+		salespersonID, err := primitive.ObjectIDFromHex(salespersonIDParam)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid salesperson ID",
+			})
+		}
+		salespersonFilter["_id"] = salespersonID
+	}
+
+	salespersonCursor, err := ac.DB.Collection("salespersons").Find(ctx, salespersonFilter)
+	if err != nil {
+		log.Printf("Failed to fetch salespersons: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to fetch salespersons",
+		})
+	}
+	defer salespersonCursor.Close(ctx)
+
+	var salespeople []models.Salesperson
+	if err := salespersonCursor.All(ctx, &salespeople); err != nil {
+		log.Printf("Failed to decode salespersons: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode salespersons",
+		})
+	}
+
+	if len(salespeople) == 0 {
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "No salespersons found for provided criteria",
+			Data:    []SalespersonSubscriptionSummary{},
+		})
+	}
+
+	salespersonIDs := make([]primitive.ObjectID, 0, len(salespeople))
+	resultMap := make(map[primitive.ObjectID]*SalespersonSubscriptionSummary, len(salespeople))
+	for _, sp := range salespeople {
+		salespersonIDs = append(salespersonIDs, sp.ID)
+		resultMap[sp.ID] = &SalespersonSubscriptionSummary{
+			SalespersonID:    sp.ID,
+			FullName:         sp.FullName,
+			Email:            sp.Email,
+			PhoneNumber:      sp.PhoneNumber,
+			Companies:        make([]CompanySubscriptionPayment, 0),
+			Wholesalers:      make([]WholesalerSubscriptionPayment, 0),
+			ServiceProviders: make([]ServiceProviderSubscriptionPayment, 0),
+		}
+	}
+
+	companyCursor, err := ac.DB.Collection("companies").Find(ctx, bson.M{"createdBy": bson.M{"$in": salespersonIDs}})
+	if err != nil {
+		log.Printf("Failed to fetch companies: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to fetch companies",
+		})
+	}
+	defer companyCursor.Close(ctx)
+
+	var companies []models.Company
+	if err := companyCursor.All(ctx, &companies); err != nil {
+		log.Printf("Failed to decode companies: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode companies",
+		})
+	}
+
+	wholesalerCursor, err := ac.DB.Collection("wholesalers").Find(ctx, bson.M{"createdBy": bson.M{"$in": salespersonIDs}})
+	if err != nil {
+		log.Printf("Failed to fetch wholesalers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to fetch wholesalers",
+		})
+	}
+	defer wholesalerCursor.Close(ctx)
+
+	var wholesalers []models.Wholesaler
+	if err := wholesalerCursor.All(ctx, &wholesalers); err != nil {
+		log.Printf("Failed to decode wholesalers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode wholesalers",
+		})
+	}
+
+	serviceProviderCursor, err := ac.DB.Collection("serviceProviders").Find(ctx, bson.M{"createdBy": bson.M{"$in": salespersonIDs}})
+	if err != nil {
+		log.Printf("Failed to fetch service providers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to fetch service providers",
+		})
+	}
+	defer serviceProviderCursor.Close(ctx)
+
+	var serviceProviders []models.ServiceProvider
+	if err := serviceProviderCursor.All(ctx, &serviceProviders); err != nil {
+		log.Printf("Failed to decode service providers: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to decode service providers",
+		})
+	}
+
+	companyBranchLookup := make(map[primitive.ObjectID]struct {
+		salespersonID primitive.ObjectID
+		companyID     primitive.ObjectID
+		companyName   string
+		branch        models.Branch
+	})
+	companyBranchIDs := make([]primitive.ObjectID, 0)
+	for _, company := range companies {
+		if company.CreatedBy.IsZero() {
+			continue
+		}
+		if _, ok := resultMap[company.CreatedBy]; !ok {
+			continue
+		}
+		for _, branch := range company.Branches {
+			if branch.ID.IsZero() {
+				continue
+			}
+			companyBranchLookup[branch.ID] = struct {
+				salespersonID primitive.ObjectID
+				companyID     primitive.ObjectID
+				companyName   string
+				branch        models.Branch
+			}{
+				salespersonID: company.CreatedBy,
+				companyID:     company.ID,
+				companyName:   company.BusinessName,
+				branch:        branch,
+			}
+			companyBranchIDs = append(companyBranchIDs, branch.ID)
+		}
+	}
+
+	wholesalerBranchLookup := make(map[primitive.ObjectID]struct {
+		salespersonID  primitive.ObjectID
+		wholesalerID   primitive.ObjectID
+		wholesalerName string
+		branch         models.Branch
+	})
+	wholesalerBranchIDs := make([]primitive.ObjectID, 0)
+	for _, wholesaler := range wholesalers {
+		if wholesaler.CreatedBy.IsZero() {
+			continue
+		}
+		if _, ok := resultMap[wholesaler.CreatedBy]; !ok {
+			continue
+		}
+		for _, branch := range wholesaler.Branches {
+			if branch.ID.IsZero() {
+				continue
+			}
+			wholesalerBranchLookup[branch.ID] = struct {
+				salespersonID  primitive.ObjectID
+				wholesalerID   primitive.ObjectID
+				wholesalerName string
+				branch         models.Branch
+			}{
+				salespersonID:  wholesaler.CreatedBy,
+				wholesalerID:   wholesaler.ID,
+				wholesalerName: wholesaler.BusinessName,
+				branch:         branch,
+			}
+			wholesalerBranchIDs = append(wholesalerBranchIDs, branch.ID)
+		}
+	}
+
+	serviceProviderLookup := make(map[primitive.ObjectID]struct {
+		salespersonID primitive.ObjectID
+		businessName  string
+	})
+	serviceProviderIDs := make([]primitive.ObjectID, 0, len(serviceProviders))
+	for _, sp := range serviceProviders {
+		if sp.ID.IsZero() || sp.CreatedBy.IsZero() {
+			continue
+		}
+		if _, ok := resultMap[sp.CreatedBy]; !ok {
+			continue
+		}
+		serviceProviderLookup[sp.ID] = struct {
+			salespersonID primitive.ObjectID
+			businessName  string
+		}{
+			salespersonID: sp.CreatedBy,
+			businessName:  sp.BusinessName,
+		}
+		serviceProviderIDs = append(serviceProviderIDs, sp.ID)
+	}
+
+	var companyBranchRequests []models.BranchSubscriptionRequest
+	if len(companyBranchIDs) > 0 {
+		cursor, err := ac.DB.Collection("branch_subscription_requests").Find(ctx, bson.M{"branchId": bson.M{"$in": companyBranchIDs}})
+		if err != nil {
+			log.Printf("Failed to fetch company branch subscription requests: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to fetch branch subscription requests",
+			})
+		}
+		defer cursor.Close(ctx)
+		if err := cursor.All(ctx, &companyBranchRequests); err != nil {
+			log.Printf("Failed to decode company branch subscription requests: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to decode branch subscription requests",
+			})
+		}
+	}
+
+	var wholesalerBranchRequests []models.WholesalerBranchSubscriptionRequest
+	if len(wholesalerBranchIDs) > 0 {
+		cursor, err := ac.DB.Collection("wholesaler_branch_subscription_requests").Find(ctx, bson.M{"branchId": bson.M{"$in": wholesalerBranchIDs}})
+		if err != nil {
+			log.Printf("Failed to fetch wholesaler branch subscription requests: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to fetch wholesaler branch subscription requests",
+			})
+		}
+		defer cursor.Close(ctx)
+		if err := cursor.All(ctx, &wholesalerBranchRequests); err != nil {
+			log.Printf("Failed to decode wholesaler branch subscription requests: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to decode wholesaler branch subscription requests",
+			})
+		}
+	}
+
+	var serviceProviderRequests []models.SubscriptionRequest
+	if len(serviceProviderIDs) > 0 {
+		cursor, err := ac.DB.Collection("subscription_requests").Find(ctx, bson.M{"serviceProviderId": bson.M{"$in": serviceProviderIDs}})
+		if err != nil {
+			log.Printf("Failed to fetch service provider subscription requests: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to fetch service provider subscription requests",
+			})
+		}
+		defer cursor.Close(ctx)
+		if err := cursor.All(ctx, &serviceProviderRequests); err != nil {
+			log.Printf("Failed to decode service provider subscription requests: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to decode service provider subscription requests",
+			})
+		}
+	}
+
+	planIDSet := make(map[primitive.ObjectID]struct{})
+	for _, req := range companyBranchRequests {
+		if req.PlanID != primitive.NilObjectID {
+			planIDSet[req.PlanID] = struct{}{}
+		}
+	}
+	for _, req := range wholesalerBranchRequests {
+		if req.PlanID != primitive.NilObjectID {
+			planIDSet[req.PlanID] = struct{}{}
+		}
+	}
+	for _, req := range serviceProviderRequests {
+		if req.PlanID != primitive.NilObjectID {
+			planIDSet[req.PlanID] = struct{}{}
+		}
+	}
+
+	planMap := make(map[primitive.ObjectID]models.SubscriptionPlan)
+	if len(planIDSet) > 0 {
+		planIDs := make([]primitive.ObjectID, 0, len(planIDSet))
+		for id := range planIDSet {
+			planIDs = append(planIDs, id)
+		}
+		cursor, err := ac.DB.Collection("subscription_plans").Find(ctx, bson.M{"_id": bson.M{"$in": planIDs}})
+		if err != nil {
+			log.Printf("Failed to fetch subscription plans: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to fetch subscription plans",
+			})
+		}
+		defer cursor.Close(ctx)
+		var plans []models.SubscriptionPlan
+		if err := cursor.All(ctx, &plans); err != nil {
+			log.Printf("Failed to decode subscription plans: %v", err)
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to decode subscription plans",
+			})
+		}
+		for _, plan := range plans {
+			planMap[plan.ID] = plan
+		}
+	}
+
+	for _, req := range companyBranchRequests {
+		meta, ok := companyBranchLookup[req.BranchID]
+		if !ok {
+			continue
+		}
+		summary, ok := resultMap[meta.salespersonID]
+		if !ok {
+			continue
+		}
+		var paidAt *time.Time
+		if !req.PaidAt.IsZero() {
+			paid := req.PaidAt
+			paidAt = &paid
+		}
+		plan := planMap[req.PlanID]
+		summary.Companies = append(summary.Companies, CompanySubscriptionPayment{
+			CompanyID:     meta.companyID,
+			CompanyName:   meta.companyName,
+			BranchID:      req.BranchID,
+			BranchName:    meta.branch.Name,
+			PlanID:        req.PlanID,
+			PlanTitle:     plan.Title,
+			PlanPrice:     plan.Price,
+			PaymentMethod: req.PaymentMethod,
+			PaymentStatus: req.PaymentStatus,
+			Status:        req.Status,
+			RequestedAt:   req.RequestedAt,
+			PaidAt:        paidAt,
+		})
+	}
+
+	for _, req := range wholesalerBranchRequests {
+		meta, ok := wholesalerBranchLookup[req.BranchID]
+		if !ok {
+			continue
+		}
+		summary, ok := resultMap[meta.salespersonID]
+		if !ok {
+			continue
+		}
+		var paidAt *time.Time
+		if !req.PaidAt.IsZero() {
+			paid := req.PaidAt
+			paidAt = &paid
+		}
+		plan := planMap[req.PlanID]
+		summary.Wholesalers = append(summary.Wholesalers, WholesalerSubscriptionPayment{
+			WholesalerID:   meta.wholesalerID,
+			WholesalerName: meta.wholesalerName,
+			BranchID:       req.BranchID,
+			BranchName:     meta.branch.Name,
+			PlanID:         req.PlanID,
+			PlanTitle:      plan.Title,
+			PlanPrice:      plan.Price,
+			PaymentMethod:  req.PaymentMethod,
+			PaymentStatus:  req.PaymentStatus,
+			Status:         req.Status,
+			RequestedAt:    req.RequestedAt,
+			PaidAt:         paidAt,
+		})
+	}
+
+	for _, req := range serviceProviderRequests {
+		meta, ok := serviceProviderLookup[req.ServiceProviderID]
+		if !ok {
+			continue
+		}
+		summary, ok := resultMap[meta.salespersonID]
+		if !ok {
+			continue
+		}
+		var paidAt *time.Time
+		if !req.PaidAt.IsZero() {
+			paid := req.PaidAt
+			paidAt = &paid
+		}
+		plan := planMap[req.PlanID]
+		status := req.Status
+		if status == "" {
+			status = "pending"
+		}
+		summary.ServiceProviders = append(summary.ServiceProviders, ServiceProviderSubscriptionPayment{
+			ServiceProviderID: req.ServiceProviderID,
+			BusinessName:      meta.businessName,
+			PlanID:            req.PlanID,
+			PlanTitle:         plan.Title,
+			PlanPrice:         plan.Price,
+			PaymentMethod:     req.PaymentMethod,
+			PaymentStatus:     req.PaymentStatus,
+			Status:            status,
+			RequestedAt:       req.RequestedAt,
+			PaidAt:            paidAt,
+		})
+	}
+
+	response := make([]SalespersonSubscriptionSummary, 0, len(resultMap))
+	for _, sp := range salespeople {
+		if summary, ok := resultMap[sp.ID]; ok {
+			response = append(response, *summary)
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Salesperson subscription payments retrieved successfully",
+		Data:    response,
 	})
 }
 
