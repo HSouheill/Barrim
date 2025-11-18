@@ -1278,6 +1278,18 @@ func (uc *UserController) GetUserData(c echo.Context) error {
 	log.Printf("Retrieved user data: ID=%s, FullName=%s, DateOfBirth=%s, Gender=%s, Phone=%s, Location=%+v, InterestedDeals=%v",
 		user.ID.Hex(), user.FullName, user.DateOfBirth, user.Gender, user.Phone, user.Location, user.InterestedDeals)
 
+	// If user has a service provider profile, include latest rating info from serviceProviderInfo
+	if user.ServiceProviderID != nil && !user.ServiceProviderID.IsZero() && user.ServiceProviderInfo != nil {
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "User data retrieved successfully",
+			Data: map[string]interface{}{
+				"user":                  user,
+				"serviceProviderRating": user.ServiceProviderInfo.Rating,
+			},
+		})
+	}
+
 	// Return user data
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,

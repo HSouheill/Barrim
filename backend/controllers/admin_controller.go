@@ -890,61 +890,68 @@ type SalespersonInfo struct {
 	SalesManagerID primitive.ObjectID `json:"salesManagerID"`
 }
 
-// SalespersonSubscriptionSummary groups subscription payment information for entities created by a salesperson
-type SalespersonSubscriptionSummary struct {
-	SalespersonID    primitive.ObjectID                   `json:"salespersonId"`
-	FullName         string                               `json:"fullName"`
-	Email            string                               `json:"email"`
-	PhoneNumber      string                               `json:"phoneNumber"`
-	Companies        []CompanySubscriptionPayment         `json:"companies"`
-	Wholesalers      []WholesalerSubscriptionPayment      `json:"wholesalers"`
-	ServiceProviders []ServiceProviderSubscriptionPayment `json:"serviceProviders"`
+// EntitySalespersonInfo contains basic information about the salesperson who created an entity
+type EntitySalespersonInfo struct {
+	SalespersonID primitive.ObjectID `json:"salespersonId"`
+	FullName      string             `json:"fullName"`
+	Email         string             `json:"email"`
+	PhoneNumber   string             `json:"phoneNumber"`
 }
 
 // CompanySubscriptionPayment describes a single branch subscription request and its payment metadata
 type CompanySubscriptionPayment struct {
-	CompanyID     primitive.ObjectID `json:"companyId"`
-	CompanyName   string             `json:"companyName"`
-	BranchID      primitive.ObjectID `json:"branchId"`
-	BranchName    string             `json:"branchName"`
-	PlanID        primitive.ObjectID `json:"planId"`
-	PlanTitle     string             `json:"planTitle"`
-	PlanPrice     float64            `json:"planPrice"`
-	PaymentMethod string             `json:"paymentMethod,omitempty"`
-	PaymentStatus string             `json:"paymentStatus,omitempty"`
-	Status        string             `json:"status"`
-	RequestedAt   time.Time          `json:"requestedAt"`
-	PaidAt        *time.Time         `json:"paidAt,omitempty"`
+	CompanyID     primitive.ObjectID     `json:"companyId"`
+	CompanyName   string                 `json:"companyName"`
+	BranchID      primitive.ObjectID     `json:"branchId"`
+	BranchName    string                 `json:"branchName"`
+	PlanID        primitive.ObjectID     `json:"planId"`
+	PlanTitle     string                 `json:"planTitle"`
+	PlanPrice     float64                `json:"planPrice"`
+	PaymentMethod string                 `json:"paymentMethod,omitempty"`
+	PaymentStatus string                 `json:"paymentStatus,omitempty"`
+	Status        string                 `json:"status"`
+	RequestedAt   time.Time              `json:"requestedAt"`
+	PaidAt        *time.Time             `json:"paidAt,omitempty"`
+	Salesperson   *EntitySalespersonInfo `json:"salesperson,omitempty"`
 }
 
 // WholesalerSubscriptionPayment describes a wholesaler branch subscription request and its payment metadata
 type WholesalerSubscriptionPayment struct {
-	WholesalerID   primitive.ObjectID `json:"wholesalerId"`
-	WholesalerName string             `json:"wholesalerName"`
-	BranchID       primitive.ObjectID `json:"branchId"`
-	BranchName     string             `json:"branchName"`
-	PlanID         primitive.ObjectID `json:"planId"`
-	PlanTitle      string             `json:"planTitle"`
-	PlanPrice      float64            `json:"planPrice"`
-	PaymentMethod  string             `json:"paymentMethod,omitempty"`
-	PaymentStatus  string             `json:"paymentStatus,omitempty"`
-	Status         string             `json:"status"`
-	RequestedAt    time.Time          `json:"requestedAt"`
-	PaidAt         *time.Time         `json:"paidAt,omitempty"`
+	WholesalerID   primitive.ObjectID     `json:"wholesalerId"`
+	WholesalerName string                 `json:"wholesalerName"`
+	BranchID       primitive.ObjectID     `json:"branchId"`
+	BranchName     string                 `json:"branchName"`
+	PlanID         primitive.ObjectID     `json:"planId"`
+	PlanTitle      string                 `json:"planTitle"`
+	PlanPrice      float64                `json:"planPrice"`
+	PaymentMethod  string                 `json:"paymentMethod,omitempty"`
+	PaymentStatus  string                 `json:"paymentStatus,omitempty"`
+	Status         string                 `json:"status"`
+	RequestedAt    time.Time              `json:"requestedAt"`
+	PaidAt         *time.Time             `json:"paidAt,omitempty"`
+	Salesperson    *EntitySalespersonInfo `json:"salesperson,omitempty"`
 }
 
 // ServiceProviderSubscriptionPayment describes a service provider subscription request and its payment metadata
 type ServiceProviderSubscriptionPayment struct {
-	ServiceProviderID primitive.ObjectID `json:"serviceProviderId"`
-	BusinessName      string             `json:"businessName"`
-	PlanID            primitive.ObjectID `json:"planId"`
-	PlanTitle         string             `json:"planTitle"`
-	PlanPrice         float64            `json:"planPrice"`
-	PaymentMethod     string             `json:"paymentMethod,omitempty"`
-	PaymentStatus     string             `json:"paymentStatus,omitempty"`
-	Status            string             `json:"status"`
-	RequestedAt       time.Time          `json:"requestedAt"`
-	PaidAt            *time.Time         `json:"paidAt,omitempty"`
+	ServiceProviderID primitive.ObjectID     `json:"serviceProviderId"`
+	BusinessName      string                 `json:"businessName"`
+	PlanID            primitive.ObjectID     `json:"planId"`
+	PlanTitle         string                 `json:"planTitle"`
+	PlanPrice         float64                `json:"planPrice"`
+	PaymentMethod     string                 `json:"paymentMethod,omitempty"`
+	PaymentStatus     string                 `json:"paymentStatus,omitempty"`
+	Status            string                 `json:"status"`
+	RequestedAt       time.Time              `json:"requestedAt"`
+	PaidAt            *time.Time             `json:"paidAt,omitempty"`
+	Salesperson       *EntitySalespersonInfo `json:"salesperson,omitempty"`
+}
+
+// SalespersonCreatedEntitiesResponse contains all entities created by salespersons with their subscription payments
+type SalespersonCreatedEntitiesResponse struct {
+	Companies        []CompanySubscriptionPayment         `json:"companies"`
+	Wholesalers      []WholesalerSubscriptionPayment      `json:"wholesalers"`
+	ServiceProviders []ServiceProviderSubscriptionPayment `json:"serviceProviders"`
 }
 
 // GetAllUsers retrieves all users with userType "user"
@@ -3321,7 +3328,7 @@ func (ac *AdminController) GetAllEntities(c echo.Context) error {
 	})
 }
 
-// GetSalespersonSubscriptionPayments returns the entities created by salespersons along with their subscription payment methods
+// GetSalespersonSubscriptionPayments returns the entities (companies, wholesalers, service providers) created by a salesperson along with their subscription payment methods
 func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) error {
 	claims := middleware.GetUserFromToken(c)
 	if claims == nil || claims.UserType != "admin" {
@@ -3334,62 +3341,29 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	salespersonIDParam := c.QueryParam("salespersonId")
-	salespersonFilter := bson.M{}
-	if salespersonIDParam != "" {
-		salespersonID, err := primitive.ObjectIDFromHex(salespersonIDParam)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, models.Response{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid salesperson ID",
-			})
-		}
-		salespersonFilter["_id"] = salespersonID
+	salespersonIDParam := c.Param("id")
+	if salespersonIDParam == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Salesperson ID is required",
+		})
 	}
 
-	salespersonCursor, err := ac.DB.Collection("salespersons").Find(ctx, salespersonFilter)
+	salespersonID, err := primitive.ObjectIDFromHex(salespersonIDParam)
 	if err != nil {
-		log.Printf("Failed to fetch salespersons: %v", err)
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to fetch salespersons",
-		})
-	}
-	defer salespersonCursor.Close(ctx)
-
-	var salespeople []models.Salesperson
-	if err := salespersonCursor.All(ctx, &salespeople); err != nil {
-		log.Printf("Failed to decode salespersons: %v", err)
-		return c.JSON(http.StatusInternalServerError, models.Response{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to decode salespersons",
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid salesperson ID",
 		})
 	}
 
-	if len(salespeople) == 0 {
-		return c.JSON(http.StatusOK, models.Response{
-			Status:  http.StatusOK,
-			Message: "No salespersons found for provided criteria",
-			Data:    []SalespersonSubscriptionSummary{},
-		})
+	// Filter for entities created by the requested salesperson
+	entityFilter := bson.M{
+		"createdBy": salespersonID,
 	}
 
-	salespersonIDs := make([]primitive.ObjectID, 0, len(salespeople))
-	resultMap := make(map[primitive.ObjectID]*SalespersonSubscriptionSummary, len(salespeople))
-	for _, sp := range salespeople {
-		salespersonIDs = append(salespersonIDs, sp.ID)
-		resultMap[sp.ID] = &SalespersonSubscriptionSummary{
-			SalespersonID:    sp.ID,
-			FullName:         sp.FullName,
-			Email:            sp.Email,
-			PhoneNumber:      sp.PhoneNumber,
-			Companies:        make([]CompanySubscriptionPayment, 0),
-			Wholesalers:      make([]WholesalerSubscriptionPayment, 0),
-			ServiceProviders: make([]ServiceProviderSubscriptionPayment, 0),
-		}
-	}
-
-	companyCursor, err := ac.DB.Collection("companies").Find(ctx, bson.M{"createdBy": bson.M{"$in": salespersonIDs}})
+	// Fetch entities created by salespersons
+	companyCursor, err := ac.DB.Collection("companies").Find(ctx, entityFilter)
 	if err != nil {
 		log.Printf("Failed to fetch companies: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -3408,7 +3382,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		})
 	}
 
-	wholesalerCursor, err := ac.DB.Collection("wholesalers").Find(ctx, bson.M{"createdBy": bson.M{"$in": salespersonIDs}})
+	wholesalerCursor, err := ac.DB.Collection("wholesalers").Find(ctx, entityFilter)
 	if err != nil {
 		log.Printf("Failed to fetch wholesalers: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -3427,7 +3401,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		})
 	}
 
-	serviceProviderCursor, err := ac.DB.Collection("serviceProviders").Find(ctx, bson.M{"createdBy": bson.M{"$in": salespersonIDs}})
+	serviceProviderCursor, err := ac.DB.Collection("serviceProviders").Find(ctx, entityFilter)
 	if err != nil {
 		log.Printf("Failed to fetch service providers: %v", err)
 		return c.JSON(http.StatusInternalServerError, models.Response{
@@ -3446,6 +3420,50 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		})
 	}
 
+	// Collect all unique salesperson IDs to fetch their info
+	salespersonIDSet := make(map[primitive.ObjectID]struct{})
+	for _, company := range companies {
+		if !company.CreatedBy.IsZero() {
+			salespersonIDSet[company.CreatedBy] = struct{}{}
+		}
+	}
+	for _, wholesaler := range wholesalers {
+		if !wholesaler.CreatedBy.IsZero() {
+			salespersonIDSet[wholesaler.CreatedBy] = struct{}{}
+		}
+	}
+	for _, sp := range serviceProviders {
+		if !sp.CreatedBy.IsZero() {
+			salespersonIDSet[sp.CreatedBy] = struct{}{}
+		}
+	}
+
+	// Fetch salesperson info
+	salespersonIDs := make([]primitive.ObjectID, 0, len(salespersonIDSet))
+	for id := range salespersonIDSet {
+		salespersonIDs = append(salespersonIDs, id)
+	}
+
+	salespersonMap := make(map[primitive.ObjectID]*EntitySalespersonInfo)
+	if len(salespersonIDs) > 0 {
+		salespersonCursor, err := ac.DB.Collection("salespersons").Find(ctx, bson.M{"_id": bson.M{"$in": salespersonIDs}})
+		if err == nil {
+			defer salespersonCursor.Close(ctx)
+			var salespeople []models.Salesperson
+			if err := salespersonCursor.All(ctx, &salespeople); err == nil {
+				for _, sp := range salespeople {
+					salespersonMap[sp.ID] = &EntitySalespersonInfo{
+						SalespersonID: sp.ID,
+						FullName:      sp.FullName,
+						Email:         sp.Email,
+						PhoneNumber:   sp.PhoneNumber,
+					}
+				}
+			}
+		}
+	}
+
+	// Build lookup maps for company branches
 	companyBranchLookup := make(map[primitive.ObjectID]struct {
 		salespersonID primitive.ObjectID
 		companyID     primitive.ObjectID
@@ -3455,9 +3473,6 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 	companyBranchIDs := make([]primitive.ObjectID, 0)
 	for _, company := range companies {
 		if company.CreatedBy.IsZero() {
-			continue
-		}
-		if _, ok := resultMap[company.CreatedBy]; !ok {
 			continue
 		}
 		for _, branch := range company.Branches {
@@ -3479,6 +3494,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
+	// Build lookup maps for wholesaler branches
 	wholesalerBranchLookup := make(map[primitive.ObjectID]struct {
 		salespersonID  primitive.ObjectID
 		wholesalerID   primitive.ObjectID
@@ -3488,9 +3504,6 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 	wholesalerBranchIDs := make([]primitive.ObjectID, 0)
 	for _, wholesaler := range wholesalers {
 		if wholesaler.CreatedBy.IsZero() {
-			continue
-		}
-		if _, ok := resultMap[wholesaler.CreatedBy]; !ok {
 			continue
 		}
 		for _, branch := range wholesaler.Branches {
@@ -3512,6 +3525,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
+	// Build lookup map for service providers
 	serviceProviderLookup := make(map[primitive.ObjectID]struct {
 		salespersonID primitive.ObjectID
 		businessName  string
@@ -3519,9 +3533,6 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 	serviceProviderIDs := make([]primitive.ObjectID, 0, len(serviceProviders))
 	for _, sp := range serviceProviders {
 		if sp.ID.IsZero() || sp.CreatedBy.IsZero() {
-			continue
-		}
-		if _, ok := resultMap[sp.CreatedBy]; !ok {
 			continue
 		}
 		serviceProviderLookup[sp.ID] = struct {
@@ -3639,12 +3650,10 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
+	// Build response arrays
+	companyPayments := make([]CompanySubscriptionPayment, 0)
 	for _, req := range companyBranchRequests {
 		meta, ok := companyBranchLookup[req.BranchID]
-		if !ok {
-			continue
-		}
-		summary, ok := resultMap[meta.salespersonID]
 		if !ok {
 			continue
 		}
@@ -3654,7 +3663,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			paidAt = &paid
 		}
 		plan := planMap[req.PlanID]
-		summary.Companies = append(summary.Companies, CompanySubscriptionPayment{
+		salespersonInfo := salespersonMap[meta.salespersonID]
+		companyPayments = append(companyPayments, CompanySubscriptionPayment{
 			CompanyID:     meta.companyID,
 			CompanyName:   meta.companyName,
 			BranchID:      req.BranchID,
@@ -3667,15 +3677,13 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			Status:        req.Status,
 			RequestedAt:   req.RequestedAt,
 			PaidAt:        paidAt,
+			Salesperson:   salespersonInfo,
 		})
 	}
 
+	wholesalerPayments := make([]WholesalerSubscriptionPayment, 0)
 	for _, req := range wholesalerBranchRequests {
 		meta, ok := wholesalerBranchLookup[req.BranchID]
-		if !ok {
-			continue
-		}
-		summary, ok := resultMap[meta.salespersonID]
 		if !ok {
 			continue
 		}
@@ -3685,7 +3693,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			paidAt = &paid
 		}
 		plan := planMap[req.PlanID]
-		summary.Wholesalers = append(summary.Wholesalers, WholesalerSubscriptionPayment{
+		salespersonInfo := salespersonMap[meta.salespersonID]
+		wholesalerPayments = append(wholesalerPayments, WholesalerSubscriptionPayment{
 			WholesalerID:   meta.wholesalerID,
 			WholesalerName: meta.wholesalerName,
 			BranchID:       req.BranchID,
@@ -3698,15 +3707,13 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			Status:         req.Status,
 			RequestedAt:    req.RequestedAt,
 			PaidAt:         paidAt,
+			Salesperson:    salespersonInfo,
 		})
 	}
 
+	serviceProviderPayments := make([]ServiceProviderSubscriptionPayment, 0)
 	for _, req := range serviceProviderRequests {
 		meta, ok := serviceProviderLookup[req.ServiceProviderID]
-		if !ok {
-			continue
-		}
-		summary, ok := resultMap[meta.salespersonID]
 		if !ok {
 			continue
 		}
@@ -3720,7 +3727,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		if status == "" {
 			status = "pending"
 		}
-		summary.ServiceProviders = append(summary.ServiceProviders, ServiceProviderSubscriptionPayment{
+		salespersonInfo := salespersonMap[meta.salespersonID]
+		serviceProviderPayments = append(serviceProviderPayments, ServiceProviderSubscriptionPayment{
 			ServiceProviderID: req.ServiceProviderID,
 			BusinessName:      meta.businessName,
 			PlanID:            req.PlanID,
@@ -3731,19 +3739,19 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			Status:            status,
 			RequestedAt:       req.RequestedAt,
 			PaidAt:            paidAt,
+			Salesperson:       salespersonInfo,
 		})
 	}
 
-	response := make([]SalespersonSubscriptionSummary, 0, len(resultMap))
-	for _, sp := range salespeople {
-		if summary, ok := resultMap[sp.ID]; ok {
-			response = append(response, *summary)
-		}
+	response := SalespersonCreatedEntitiesResponse{
+		Companies:        companyPayments,
+		Wholesalers:      wholesalerPayments,
+		ServiceProviders: serviceProviderPayments,
 	}
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
-		Message: "Salesperson subscription payments retrieved successfully",
+		Message: "Entities created by salespersons with subscription payments retrieved successfully",
 		Data:    response,
 	})
 }
