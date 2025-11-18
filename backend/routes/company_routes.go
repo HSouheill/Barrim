@@ -62,6 +62,7 @@ func RegisterCompanyRoutes(e *echo.Echo, companyController *controllers.CompanyC
 
 	// Public routes - no authentication required
 	e.GET("/api/all-branches", companyController.GetAllBranches)
+	e.GET("/api/branches/search", companyController.SearchBranchesByName)
 	// Note: Combined branch filter is now at /api/branches/filter in auth_routes.go
 
 	// Public routes - no authentication required for viewing comments

@@ -74,16 +74,19 @@ type Branch struct {
 
 // BranchComment represents a comment on a company branch
 type BranchComment struct {
-	ID         primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
-	BranchID   primitive.ObjectID `json:"branchId" bson:"branchId"`
-	UserID     primitive.ObjectID `json:"userId" bson:"userId"`
-	UserName   string             `json:"userName" bson:"userName"`
-	UserAvatar string             `json:"userAvatar,omitempty" bson:"userAvatar,omitempty"`
-	Comment    string             `json:"comment" bson:"comment"`
-	Rating     int                `json:"rating,omitempty" bson:"rating,omitempty"`
-	Replies    []CommentReply     `json:"replies,omitempty" bson:"replies,omitempty"`
-	CreatedAt  time.Time          `json:"createdAt" bson:"createdAt"`
-	UpdatedAt  time.Time          `json:"updatedAt" bson:"updatedAt"`
+	ID           primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	BranchID     primitive.ObjectID `json:"branchId" bson:"branchId"`
+	UserID       primitive.ObjectID `json:"userId" bson:"userId"`
+	UserName     string             `json:"userName" bson:"userName"`
+	UserAvatar   string             `json:"userAvatar,omitempty" bson:"userAvatar,omitempty"`
+	MediaType    string             `json:"mediaType,omitempty" bson:"mediaType,omitempty"`
+	MediaURL     string             `json:"mediaUrl,omitempty" bson:"mediaUrl,omitempty"`
+	ThumbnailURL string             `json:"thumbnailUrl,omitempty" bson:"thumbnailUrl,omitempty"`
+	Comment      string             `json:"comment" bson:"comment"`
+	Rating       int                `json:"rating,omitempty" bson:"rating,omitempty"`
+	Replies      []CommentReply     `json:"replies,omitempty" bson:"replies,omitempty"`
+	CreatedAt    time.Time          `json:"createdAt" bson:"createdAt"`
+	UpdatedAt    time.Time          `json:"updatedAt" bson:"updatedAt"`
 }
 
 // CommentReply represents a company's reply to a user comment
@@ -174,7 +177,7 @@ type BranchSubscriptionRequest struct {
 	RejectedAt      time.Time          `json:"rejectedAt,omitempty" bson:"rejectedAt,omitempty"`
 	ProcessedAt     time.Time          `json:"processedAt,omitempty" bson:"processedAt,omitempty"`
 	// Payment method: "whish" or "cash"
-	PaymentMethod   string             `json:"paymentMethod,omitempty" bson:"paymentMethod,omitempty"` // "whish" or "cash"
+	PaymentMethod string `json:"paymentMethod,omitempty" bson:"paymentMethod,omitempty"` // "whish" or "cash"
 	// Whish payment fields
 	ExternalID    int64     `json:"externalId,omitempty" bson:"externalId,omitempty"`       // Whish payment external ID
 	PaymentStatus string    `json:"paymentStatus,omitempty" bson:"paymentStatus,omitempty"` // "pending", "success", "failed"

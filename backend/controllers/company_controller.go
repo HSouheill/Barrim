@@ -1573,6 +1573,97 @@ func (cc *CompanyController) GetAllBranches(c echo.Context) error {
 	})
 }
 
+// SearchBranchesByName finds company branches whose names contain the provided query
+func (cc *CompanyController) SearchBranchesByName(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	query := strings.TrimSpace(c.QueryParam("q"))
+	if query == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Query parameter 'q' is required",
+		})
+	}
+
+	limitParam := c.QueryParam("limit")
+	limit := int64(10)
+	if limitParam != "" {
+		if l, err := strconv.Atoi(limitParam); err == nil && l > 0 {
+			if l > 50 {
+				l = 50
+			}
+			limit = int64(l)
+		}
+	}
+
+	companyCollection := config.GetCollection(cc.DB, "companies")
+
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"branches": bson.M{"$exists": true, "$not": bson.M{"$size": 0}}}}},
+		bson.D{{Key: "$unwind", Value: "$branches"}},
+		bson.D{{Key: "$match", Value: bson.M{"branches.name": bson.M{"$regex": query, "$options": "i"}}}},
+		bson.D{{Key: "$sort", Value: bson.M{"branches.createdAt": -1}}},
+		bson.D{{Key: "$limit", Value: limit}},
+		bson.D{{Key: "$project", Value: bson.M{
+			"companyId":    "$_id",
+			"businessName": "$businessName",
+			"branch":       "$branches",
+		}}},
+	}
+
+	type branchSearchResult struct {
+		CompanyID    primitive.ObjectID `bson:"companyId"`
+		BusinessName string             `bson:"businessName"`
+		Branch       models.Branch      `bson:"branch"`
+	}
+
+	cursor, err := companyCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		log.Printf("Error searching branches by name: %v", err)
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to search branches",
+		})
+	}
+	defer cursor.Close(ctx)
+
+	var results []branchSearchResult
+	if err := cursor.All(ctx, &results); err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to parse search results",
+		})
+	}
+
+	responseData := make([]map[string]interface{}, 0, len(results))
+	for _, result := range results {
+		responseData = append(responseData, map[string]interface{}{
+			"companyId":    result.CompanyID.Hex(),
+			"businessName": result.BusinessName,
+			"branch": map[string]interface{}{
+				"id":          result.Branch.ID.Hex(),
+				"name":        result.Branch.Name,
+				"description": result.Branch.Description,
+				"category":    result.Branch.Category,
+				"subCategory": result.Branch.SubCategory,
+				"location":    result.Branch.Location,
+				"images":      result.Branch.Images,
+				"videos":      result.Branch.Videos,
+				"status":      result.Branch.Status,
+				"createdAt":   result.Branch.CreatedAt,
+				"updatedAt":   result.Branch.UpdatedAt,
+			},
+		})
+	}
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branches retrieved successfully",
+		Data:    responseData,
+	})
+}
+
 // FilterBranches filters company branches by category, subcategory, and distance
 func (cc *CompanyController) FilterBranches(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1773,20 +1864,72 @@ func (cc *CompanyController) CreateBranchComment(c echo.Context) error {
 		})
 	}
 
-	// Parse request body
-	var commentRequest struct {
-		Comment string `json:"comment"`
-		Rating  int    `json:"rating,omitempty"`
-	}
-	if err := c.Bind(&commentRequest); err != nil {
-		return c.JSON(http.StatusBadRequest, models.Response{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid request data",
-		})
+	var (
+		commentText  string
+		rating       int
+		mediaType    string
+		mediaURL     string
+		thumbnailURL string
+		fileHeader   *multipart.FileHeader
+	)
+
+	contentType := c.Request().Header.Get("Content-Type")
+	if strings.HasPrefix(strings.ToLower(contentType), "multipart/form-data") {
+		if err := c.Request().ParseMultipartForm(10 << 20); err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Failed to parse form data",
+			})
+		}
+
+		commentText = c.FormValue("comment")
+		mediaType = strings.ToLower(c.FormValue("mediaType"))
+		ratingStr := c.FormValue("rating")
+		if ratingStr != "" {
+			parsedRating, err := strconv.Atoi(ratingStr)
+			if err != nil {
+				return c.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: "Rating must be a number between 1 and 5",
+				})
+			}
+			rating = parsedRating
+		}
+
+		if mediaType != "" {
+			if mediaType != "image" && mediaType != "video" {
+				return c.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: "Invalid media type. Must be 'image' or 'video'",
+				})
+			}
+			var err error
+			fileHeader, err = c.FormFile("mediaFile")
+			if err != nil {
+				return c.JSON(http.StatusBadRequest, models.Response{
+					Status:  http.StatusBadRequest,
+					Message: "Media file is required when mediaType is provided",
+				})
+			}
+		}
+	} else {
+		// Fallback to JSON payload for backward compatibility
+		var commentRequest struct {
+			Comment string `json:"comment"`
+			Rating  int    `json:"rating,omitempty"`
+		}
+		if err := c.Bind(&commentRequest); err != nil {
+			return c.JSON(http.StatusBadRequest, models.Response{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid request data",
+			})
+		}
+		commentText = commentRequest.Comment
+		rating = commentRequest.Rating
 	}
 
 	// Validate comment
-	if commentRequest.Comment == "" {
+	if strings.TrimSpace(commentText) == "" {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Comment cannot be empty",
@@ -1794,11 +1937,64 @@ func (cc *CompanyController) CreateBranchComment(c echo.Context) error {
 	}
 
 	// Validate rating if provided
-	if commentRequest.Rating != 0 && (commentRequest.Rating < 1 || commentRequest.Rating > 5) {
+	if rating != 0 && (rating < 1 || rating > 5) {
 		return c.JSON(http.StatusBadRequest, models.Response{
 			Status:  http.StatusBadRequest,
 			Message: "Rating must be between 1 and 5",
 		})
+	}
+
+	// Handle media upload if provided
+	if fileHeader != nil {
+		src, err := fileHeader.Open()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to read uploaded file",
+			})
+		}
+		defer src.Close()
+
+		fileData, err := io.ReadAll(src)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to read file data",
+			})
+		}
+
+		timestamp := time.Now().Unix()
+		uniqueID := primitive.NewObjectID().Hex()
+		fileExt := filepath.Ext(fileHeader.Filename)
+		if fileExt == "" {
+			if mediaType == "image" {
+				fileExt = ".jpg"
+			} else {
+				fileExt = ".mp4"
+			}
+		}
+		filename := fmt.Sprintf("branch_comments/%s/%d_%s%s",
+			branchObjectID.Hex(),
+			timestamp,
+			uniqueID,
+			fileExt,
+		)
+
+		mediaURL, err = utils.UploadFile(fileData, filename, mediaType)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, models.Response{
+				Status:  http.StatusInternalServerError,
+				Message: fmt.Sprintf("Failed to upload media file: %v", err),
+			})
+		}
+
+		if mediaType == "video" {
+			thumbnailURL, err = utils.GenerateVideoThumbnail(mediaURL)
+			if err != nil {
+				log.Printf("Failed to generate video thumbnail: %v", err)
+				thumbnailURL = ""
+			}
+		}
 	}
 
 	// Get user details
@@ -1814,15 +2010,18 @@ func (cc *CompanyController) CreateBranchComment(c echo.Context) error {
 
 	// Create comment object
 	comment := models.BranchComment{
-		ID:         primitive.NewObjectID(),
-		BranchID:   branchObjectID,
-		UserID:     userID,
-		UserName:   user.FullName,
-		UserAvatar: user.ProfilePic,
-		Comment:    commentRequest.Comment,
-		Rating:     commentRequest.Rating,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		ID:           primitive.NewObjectID(),
+		BranchID:     branchObjectID,
+		UserID:       userID,
+		UserName:     user.FullName,
+		UserAvatar:   user.ProfilePic,
+		MediaType:    mediaType,
+		MediaURL:     mediaURL,
+		ThumbnailURL: thumbnailURL,
+		Comment:      commentText,
+		Rating:       rating,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	// Insert comment into database
