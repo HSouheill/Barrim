@@ -3622,6 +3622,26 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
+	// Also fetch active subscriptions for wholesaler branches
+	var wholesalerBranchSubscriptions []models.WholesalerBranchSubscription
+	if len(wholesalerBranchIDs) > 0 {
+		log.Printf("Looking for active subscriptions for %d wholesaler branches", len(wholesalerBranchIDs))
+		cursor, err := ac.DB.Collection("wholesaler_branch_subscriptions").Find(ctx, bson.M{
+			"branchId": bson.M{"$in": wholesalerBranchIDs},
+			"status":   "active",
+		})
+		if err == nil {
+			defer cursor.Close(ctx)
+			if err := cursor.All(ctx, &wholesalerBranchSubscriptions); err != nil {
+				log.Printf("Failed to decode wholesaler branch subscriptions: %v", err)
+			} else {
+				log.Printf("Found %d active wholesaler branch subscriptions", len(wholesalerBranchSubscriptions))
+			}
+		} else {
+			log.Printf("Error fetching active wholesaler branch subscriptions: %v", err)
+		}
+	}
+
 	var serviceProviderRequests []models.SubscriptionRequest
 	if len(serviceProviderIDs) > 0 {
 		cursor, err := ac.DB.Collection("subscription_requests").Find(ctx, bson.M{"serviceProviderId": bson.M{"$in": serviceProviderIDs}})
@@ -3639,6 +3659,26 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				Status:  http.StatusInternalServerError,
 				Message: "Failed to decode service provider subscription requests",
 			})
+		}
+	}
+
+	// Also fetch active subscriptions for service providers
+	var serviceProviderSubscriptions []models.ServiceProviderSubscription
+	if len(serviceProviderIDs) > 0 {
+		log.Printf("Looking for active subscriptions for %d service providers", len(serviceProviderIDs))
+		cursor, err := ac.DB.Collection("serviceProviders_subscriptions").Find(ctx, bson.M{
+			"serviceProviderId": bson.M{"$in": serviceProviderIDs},
+			"status":            "active",
+		})
+		if err == nil {
+			defer cursor.Close(ctx)
+			if err := cursor.All(ctx, &serviceProviderSubscriptions); err != nil {
+				log.Printf("Failed to decode service provider subscriptions: %v", err)
+			} else {
+				log.Printf("Found %d active service provider subscriptions", len(serviceProviderSubscriptions))
+			}
+		} else {
+			log.Printf("Error fetching active service provider subscriptions: %v", err)
 		}
 	}
 
@@ -3739,7 +3779,7 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
-	// Create a map to link active subscriptions to their original requests (for payment method info)
+	// Create maps to link active subscriptions to their original requests (for payment method info)
 	// Use branchID + planID as key to handle cases where a branch might have multiple requests
 	requestByBranchAndPlan := make(map[string]models.BranchSubscriptionRequest)
 	requestByBranchID := make(map[primitive.ObjectID]models.BranchSubscriptionRequest)
@@ -3749,6 +3789,28 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		// Also keep a simple branchID map for quick lookup
 		if _, exists := requestByBranchID[req.BranchID]; !exists {
 			requestByBranchID[req.BranchID] = req
+		}
+	}
+
+	// Create maps for wholesaler branch requests
+	wholesalerRequestByBranchAndPlan := make(map[string]models.WholesalerBranchSubscriptionRequest)
+	wholesalerRequestByBranchID := make(map[primitive.ObjectID]models.WholesalerBranchSubscriptionRequest)
+	for _, req := range wholesalerBranchRequests {
+		key := fmt.Sprintf("%s_%s", req.BranchID.Hex(), req.PlanID.Hex())
+		wholesalerRequestByBranchAndPlan[key] = req
+		if _, exists := wholesalerRequestByBranchID[req.BranchID]; !exists {
+			wholesalerRequestByBranchID[req.BranchID] = req
+		}
+	}
+
+	// Create maps for service provider requests
+	serviceProviderRequestByIDAndPlan := make(map[string]models.SubscriptionRequest)
+	serviceProviderRequestByID := make(map[primitive.ObjectID]models.SubscriptionRequest)
+	for _, req := range serviceProviderRequests {
+		key := fmt.Sprintf("%s_%s", req.ServiceProviderID.Hex(), req.PlanID.Hex())
+		serviceProviderRequestByIDAndPlan[key] = req
+		if _, exists := serviceProviderRequestByID[req.ServiceProviderID]; !exists {
+			serviceProviderRequestByID[req.ServiceProviderID] = req
 		}
 	}
 
@@ -3768,9 +3830,19 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			planIDSet[req.PlanID] = struct{}{}
 		}
 	}
+	for _, sub := range wholesalerBranchSubscriptions {
+		if sub.PlanID != primitive.NilObjectID {
+			planIDSet[sub.PlanID] = struct{}{}
+		}
+	}
 	for _, req := range serviceProviderRequests {
 		if req.PlanID != primitive.NilObjectID {
 			planIDSet[req.PlanID] = struct{}{}
+		}
+	}
+	for _, sub := range serviceProviderSubscriptions {
+		if sub.PlanID != primitive.NilObjectID {
+			planIDSet[sub.PlanID] = struct{}{}
 		}
 	}
 
@@ -4001,11 +4073,15 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 	}
 
 	wholesalerPayments := make([]WholesalerSubscriptionPayment, 0)
+	wholesalerBranchesProcessed := make(map[primitive.ObjectID]bool)
+
+	// First, process subscription requests
 	for _, req := range wholesalerBranchRequests {
 		meta, ok := wholesalerBranchLookup[req.BranchID]
 		if !ok {
 			continue
 		}
+		wholesalerBranchesProcessed[req.BranchID] = true
 		var paidAt *time.Time
 		if !req.PaidAt.IsZero() {
 			paid := req.PaidAt
@@ -4044,6 +4120,59 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			Salesperson:      salespersonInfo,
 			SubscriptionType: "plan",
 		})
+	}
+
+	// Process active subscriptions for wholesaler branches
+	for _, sub := range wholesalerBranchSubscriptions {
+		meta, ok := wholesalerBranchLookup[sub.BranchID]
+		if !ok {
+			continue
+		}
+		// Skip if we already processed this branch from a request
+		if wholesalerBranchesProcessed[sub.BranchID] {
+			continue
+		}
+		wholesalerBranchesProcessed[sub.BranchID] = true
+
+		plan, planExists := planMap[sub.PlanID]
+		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		// Get payment method from subscription (now saved permanently)
+		paymentMethod := sub.PaymentMethod
+		if paymentMethod == "" {
+			// Fallback: try to find from original request if subscription doesn't have it
+			key := fmt.Sprintf("%s_%s", sub.BranchID.Hex(), sub.PlanID.Hex())
+			originalRequest, hasRequest := wholesalerRequestByBranchAndPlan[key]
+			if !hasRequest {
+				originalRequest, hasRequest = wholesalerRequestByBranchID[sub.BranchID]
+			}
+			if hasRequest {
+				paymentMethod = originalRequest.PaymentMethod
+			}
+			if paymentMethod == "" {
+				paymentMethod = "unknown"
+			}
+		}
+
+		payment := WholesalerSubscriptionPayment{
+			WholesalerID:     meta.wholesalerID,
+			WholesalerName:   meta.wholesalerName,
+			BranchID:         sub.BranchID,
+			BranchName:       meta.branch.Name,
+			PlanID:           sub.PlanID,
+			PaymentMethod:    paymentMethod,
+			Status:           "active",
+			RequestedAt:      sub.CreatedAt,
+			Salesperson:      salespersonInfo,
+			SubscriptionType: "plan",
+		}
+
+		if planExists {
+			payment.PlanTitle = plan.Title
+			payment.PlanPrice = plan.Price
+		}
+
+		wholesalerPayments = append(wholesalerPayments, payment)
 	}
 
 	// Process sponsorship subscription requests for wholesaler branches
@@ -4100,11 +4229,15 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 	}
 
 	serviceProviderPayments := make([]ServiceProviderSubscriptionPayment, 0)
+	serviceProvidersProcessed := make(map[primitive.ObjectID]bool)
+
+	// First, process subscription requests
 	for _, req := range serviceProviderRequests {
 		meta, ok := serviceProviderLookup[req.ServiceProviderID]
 		if !ok {
 			continue
 		}
+		serviceProvidersProcessed[req.ServiceProviderID] = true
 		var paidAt *time.Time
 		if !req.PaidAt.IsZero() {
 			paid := req.PaidAt
@@ -4145,6 +4278,57 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			Salesperson:       salespersonInfo,
 			SubscriptionType:  "plan",
 		})
+	}
+
+	// Process active subscriptions for service providers
+	for _, sub := range serviceProviderSubscriptions {
+		meta, ok := serviceProviderLookup[sub.ServiceProviderID]
+		if !ok {
+			continue
+		}
+		// Skip if we already processed this service provider from a request
+		if serviceProvidersProcessed[sub.ServiceProviderID] {
+			continue
+		}
+		serviceProvidersProcessed[sub.ServiceProviderID] = true
+
+		plan, planExists := planMap[sub.PlanID]
+		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		// Get payment method from subscription (now saved permanently)
+		paymentMethod := sub.PaymentMethod
+		if paymentMethod == "" {
+			// Fallback: try to find from original request if subscription doesn't have it
+			key := fmt.Sprintf("%s_%s", sub.ServiceProviderID.Hex(), sub.PlanID.Hex())
+			originalRequest, hasRequest := serviceProviderRequestByIDAndPlan[key]
+			if !hasRequest {
+				originalRequest, hasRequest = serviceProviderRequestByID[sub.ServiceProviderID]
+			}
+			if hasRequest {
+				paymentMethod = originalRequest.PaymentMethod
+			}
+			if paymentMethod == "" {
+				paymentMethod = "unknown"
+			}
+		}
+
+		payment := ServiceProviderSubscriptionPayment{
+			ServiceProviderID: sub.ServiceProviderID,
+			BusinessName:      meta.businessName,
+			PlanID:            sub.PlanID,
+			PaymentMethod:     paymentMethod,
+			Status:            "active",
+			RequestedAt:       sub.CreatedAt,
+			Salesperson:       salespersonInfo,
+			SubscriptionType:  "plan",
+		}
+
+		if planExists {
+			payment.PlanTitle = plan.Title
+			payment.PlanPrice = plan.Price
+		}
+
+		serviceProviderPayments = append(serviceProviderPayments, payment)
 	}
 
 	// Process sponsorship subscription requests for service providers
