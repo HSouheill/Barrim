@@ -3382,6 +3382,8 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		})
 	}
 
+	log.Printf("Found %d companies created by salesperson %s", len(companies), salespersonID.Hex())
+
 	wholesalerCursor, err := ac.DB.Collection("wholesalers").Find(ctx, entityFilter)
 	if err != nil {
 		log.Printf("Failed to fetch wholesalers: %v", err)
@@ -3545,8 +3547,10 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		serviceProviderIDs = append(serviceProviderIDs, sp.ID)
 	}
 
+	// Fetch subscription requests for company branches (all statuses, not just pending)
 	var companyBranchRequests []models.BranchSubscriptionRequest
 	if len(companyBranchIDs) > 0 {
+		log.Printf("Looking for subscription requests for %d company branches", len(companyBranchIDs))
 		cursor, err := ac.DB.Collection("branch_subscription_requests").Find(ctx, bson.M{"branchId": bson.M{"$in": companyBranchIDs}})
 		if err != nil {
 			log.Printf("Failed to fetch company branch subscription requests: %v", err)
@@ -3562,6 +3566,27 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 				Status:  http.StatusInternalServerError,
 				Message: "Failed to decode branch subscription requests",
 			})
+		}
+		log.Printf("Found %d company branch subscription requests", len(companyBranchRequests))
+	}
+
+	// Also fetch active subscriptions for company branches
+	var companyBranchSubscriptions []models.BranchSubscription
+	if len(companyBranchIDs) > 0 {
+		log.Printf("Looking for active subscriptions for %d company branches", len(companyBranchIDs))
+		cursor, err := ac.DB.Collection("branch_subscriptions").Find(ctx, bson.M{
+			"branchId": bson.M{"$in": companyBranchIDs},
+			"status":   "active",
+		})
+		if err == nil {
+			defer cursor.Close(ctx)
+			if err := cursor.All(ctx, &companyBranchSubscriptions); err != nil {
+				log.Printf("Failed to decode company branch subscriptions: %v", err)
+			} else {
+				log.Printf("Found %d active company branch subscriptions", len(companyBranchSubscriptions))
+			}
+		} else {
+			log.Printf("Error fetching active subscriptions: %v", err)
 		}
 	}
 
@@ -3605,10 +3630,28 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
+	// Create a map to link active subscriptions to their original requests (for payment method info)
+	// Use branchID + planID as key to handle cases where a branch might have multiple requests
+	requestByBranchAndPlan := make(map[string]models.BranchSubscriptionRequest)
+	requestByBranchID := make(map[primitive.ObjectID]models.BranchSubscriptionRequest)
+	for _, req := range companyBranchRequests {
+		key := fmt.Sprintf("%s_%s", req.BranchID.Hex(), req.PlanID.Hex())
+		requestByBranchAndPlan[key] = req
+		// Also keep a simple branchID map for quick lookup
+		if _, exists := requestByBranchID[req.BranchID]; !exists {
+			requestByBranchID[req.BranchID] = req
+		}
+	}
+
 	planIDSet := make(map[primitive.ObjectID]struct{})
 	for _, req := range companyBranchRequests {
 		if req.PlanID != primitive.NilObjectID {
 			planIDSet[req.PlanID] = struct{}{}
+		}
+	}
+	for _, sub := range companyBranchSubscriptions {
+		if sub.PlanID != primitive.NilObjectID {
+			planIDSet[sub.PlanID] = struct{}{}
 		}
 	}
 	for _, req := range wholesalerBranchRequests {
@@ -3650,35 +3693,127 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
-	// Build response arrays
+	// Build response arrays - include all branches from companies created by salesperson
 	companyPayments := make([]CompanySubscriptionPayment, 0)
+	branchesProcessed := make(map[primitive.ObjectID]bool)
+
+	// First, process subscription requests
 	for _, req := range companyBranchRequests {
 		meta, ok := companyBranchLookup[req.BranchID]
 		if !ok {
 			continue
 		}
+		branchesProcessed[req.BranchID] = true
 		var paidAt *time.Time
 		if !req.PaidAt.IsZero() {
 			paid := req.PaidAt
 			paidAt = &paid
 		}
-		plan := planMap[req.PlanID]
+		plan, planExists := planMap[req.PlanID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
-		companyPayments = append(companyPayments, CompanySubscriptionPayment{
+
+		payment := CompanySubscriptionPayment{
 			CompanyID:     meta.companyID,
 			CompanyName:   meta.companyName,
 			BranchID:      req.BranchID,
 			BranchName:    meta.branch.Name,
 			PlanID:        req.PlanID,
-			PlanTitle:     plan.Title,
-			PlanPrice:     plan.Price,
 			PaymentMethod: req.PaymentMethod,
 			PaymentStatus: req.PaymentStatus,
 			Status:        req.Status,
 			RequestedAt:   req.RequestedAt,
 			PaidAt:        paidAt,
 			Salesperson:   salespersonInfo,
-		})
+		}
+
+		if planExists {
+			payment.PlanTitle = plan.Title
+			payment.PlanPrice = plan.Price
+		}
+
+		companyPayments = append(companyPayments, payment)
+	}
+
+	// Process active subscriptions (may not have a request if it was approved directly)
+	for _, sub := range companyBranchSubscriptions {
+		meta, ok := companyBranchLookup[sub.BranchID]
+		if !ok {
+			continue
+		}
+		// Skip if we already processed this branch from a request
+		if branchesProcessed[sub.BranchID] {
+			continue
+		}
+		branchesProcessed[sub.BranchID] = true
+
+		// Try to find the original request for payment method info
+		// First try to match by both branchID and planID
+		key := fmt.Sprintf("%s_%s", sub.BranchID.Hex(), sub.PlanID.Hex())
+		originalRequest, hasRequest := requestByBranchAndPlan[key]
+		if !hasRequest {
+			// Fallback to just branchID if no exact match
+			originalRequest, hasRequest = requestByBranchID[sub.BranchID]
+		}
+		plan, planExists := planMap[sub.PlanID]
+		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		payment := CompanySubscriptionPayment{
+			CompanyID:   meta.companyID,
+			CompanyName: meta.companyName,
+			BranchID:    sub.BranchID,
+			BranchName:  meta.branch.Name,
+			PlanID:      sub.PlanID,
+			Status:      "active",
+			RequestedAt: sub.CreatedAt,
+			Salesperson: salespersonInfo,
+		}
+
+		if planExists {
+			payment.PlanTitle = plan.Title
+			payment.PlanPrice = plan.Price
+		}
+
+		if hasRequest {
+			payment.PaymentMethod = originalRequest.PaymentMethod
+			payment.PaymentStatus = originalRequest.PaymentStatus
+			if !originalRequest.PaidAt.IsZero() {
+				paid := originalRequest.PaidAt
+				payment.PaidAt = &paid
+			}
+		}
+
+		companyPayments = append(companyPayments, payment)
+	}
+
+	// Add branches without any subscriptions
+	for _, company := range companies {
+		if company.CreatedBy != salespersonID {
+			continue
+		}
+		for _, branch := range company.Branches {
+			if branch.ID.IsZero() {
+				continue
+			}
+			if branchesProcessed[branch.ID] {
+				continue
+			}
+			salespersonInfo := salespersonMap[company.CreatedBy]
+			companyPayments = append(companyPayments, CompanySubscriptionPayment{
+				CompanyID:     company.ID,
+				CompanyName:   company.BusinessName,
+				BranchID:      branch.ID,
+				BranchName:    branch.Name,
+				PlanID:        primitive.NilObjectID,
+				PlanTitle:     "",
+				PlanPrice:     0,
+				PaymentMethod: "",
+				PaymentStatus: "",
+				Status:        "no_subscription",
+				RequestedAt:   time.Time{},
+				PaidAt:        nil,
+				Salesperson:   salespersonInfo,
+			})
+		}
 	}
 
 	wholesalerPayments := make([]WholesalerSubscriptionPayment, 0)
@@ -3748,6 +3883,9 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		Wholesalers:      wholesalerPayments,
 		ServiceProviders: serviceProviderPayments,
 	}
+
+	log.Printf("Returning %d company payments, %d wholesaler payments, %d service provider payments for salesperson %s",
+		len(companyPayments), len(wholesalerPayments), len(serviceProviderPayments), salespersonID.Hex())
 
 	return c.JSON(http.StatusOK, models.Response{
 		Status:  http.StatusOK,
