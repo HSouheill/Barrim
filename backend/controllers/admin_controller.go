@@ -900,36 +900,44 @@ type EntitySalespersonInfo struct {
 
 // CompanySubscriptionPayment describes a single branch subscription request and its payment metadata
 type CompanySubscriptionPayment struct {
-	CompanyID     primitive.ObjectID     `json:"companyId"`
-	CompanyName   string                 `json:"companyName"`
-	BranchID      primitive.ObjectID     `json:"branchId"`
-	BranchName    string                 `json:"branchName"`
-	PlanID        primitive.ObjectID     `json:"planId"`
-	PlanTitle     string                 `json:"planTitle"`
-	PlanPrice     float64                `json:"planPrice"`
-	PaymentMethod string                 `json:"paymentMethod,omitempty"`
-	PaymentStatus string                 `json:"paymentStatus,omitempty"`
-	Status        string                 `json:"status"`
-	RequestedAt   time.Time              `json:"requestedAt"`
-	PaidAt        *time.Time             `json:"paidAt,omitempty"`
-	Salesperson   *EntitySalespersonInfo `json:"salesperson,omitempty"`
+	CompanyID        primitive.ObjectID     `json:"companyId"`
+	CompanyName      string                 `json:"companyName"`
+	BranchID         primitive.ObjectID     `json:"branchId"`
+	BranchName       string                 `json:"branchName"`
+	PlanID           primitive.ObjectID     `json:"planId"`
+	PlanTitle        string                 `json:"planTitle"`
+	PlanPrice        float64                `json:"planPrice"`
+	PaymentMethod    string                 `json:"paymentMethod,omitempty"`
+	PaymentStatus    string                 `json:"paymentStatus,omitempty"`
+	Status           string                 `json:"status"`
+	RequestedAt      time.Time              `json:"requestedAt"`
+	PaidAt           *time.Time             `json:"paidAt,omitempty"`
+	Salesperson      *EntitySalespersonInfo `json:"salesperson,omitempty"`
+	SubscriptionType string                 `json:"subscriptionType"` // "plan" or "sponsorship"
+	SponsorshipID    *primitive.ObjectID    `json:"sponsorshipId,omitempty"`
+	SponsorshipTitle string                 `json:"sponsorshipTitle,omitempty"`
+	SponsorshipPrice float64                `json:"sponsorshipPrice,omitempty"`
 }
 
 // WholesalerSubscriptionPayment describes a wholesaler branch subscription request and its payment metadata
 type WholesalerSubscriptionPayment struct {
-	WholesalerID   primitive.ObjectID     `json:"wholesalerId"`
-	WholesalerName string                 `json:"wholesalerName"`
-	BranchID       primitive.ObjectID     `json:"branchId"`
-	BranchName     string                 `json:"branchName"`
-	PlanID         primitive.ObjectID     `json:"planId"`
-	PlanTitle      string                 `json:"planTitle"`
-	PlanPrice      float64                `json:"planPrice"`
-	PaymentMethod  string                 `json:"paymentMethod,omitempty"`
-	PaymentStatus  string                 `json:"paymentStatus,omitempty"`
-	Status         string                 `json:"status"`
-	RequestedAt    time.Time              `json:"requestedAt"`
-	PaidAt         *time.Time             `json:"paidAt,omitempty"`
-	Salesperson    *EntitySalespersonInfo `json:"salesperson,omitempty"`
+	WholesalerID     primitive.ObjectID     `json:"wholesalerId"`
+	WholesalerName   string                 `json:"wholesalerName"`
+	BranchID         primitive.ObjectID     `json:"branchId"`
+	BranchName       string                 `json:"branchName"`
+	PlanID           primitive.ObjectID     `json:"planId"`
+	PlanTitle        string                 `json:"planTitle"`
+	PlanPrice        float64                `json:"planPrice"`
+	PaymentMethod    string                 `json:"paymentMethod,omitempty"`
+	PaymentStatus    string                 `json:"paymentStatus,omitempty"`
+	Status           string                 `json:"status"`
+	RequestedAt      time.Time              `json:"requestedAt"`
+	PaidAt           *time.Time             `json:"paidAt,omitempty"`
+	Salesperson      *EntitySalespersonInfo `json:"salesperson,omitempty"`
+	SubscriptionType string                 `json:"subscriptionType"` // "plan" or "sponsorship"
+	SponsorshipID    *primitive.ObjectID    `json:"sponsorshipId,omitempty"`
+	SponsorshipTitle string                 `json:"sponsorshipTitle,omitempty"`
+	SponsorshipPrice float64                `json:"sponsorshipPrice,omitempty"`
 }
 
 // ServiceProviderSubscriptionPayment describes a service provider subscription request and its payment metadata
@@ -945,6 +953,10 @@ type ServiceProviderSubscriptionPayment struct {
 	RequestedAt       time.Time              `json:"requestedAt"`
 	PaidAt            *time.Time             `json:"paidAt,omitempty"`
 	Salesperson       *EntitySalespersonInfo `json:"salesperson,omitempty"`
+	SubscriptionType  string                 `json:"subscriptionType"` // "plan" or "sponsorship"
+	SponsorshipID     *primitive.ObjectID    `json:"sponsorshipId,omitempty"`
+	SponsorshipTitle  string                 `json:"sponsorshipTitle,omitempty"`
+	SponsorshipPrice  float64                `json:"sponsorshipPrice,omitempty"`
 }
 
 // SalespersonCreatedEntitiesResponse contains all entities created by salespersons with their subscription payments
@@ -3630,6 +3642,103 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		}
 	}
 
+	// Fetch sponsorship subscription requests for company branches
+	var companyBranchSponsorshipRequests []models.SponsorshipSubscriptionRequest
+	if len(companyBranchIDs) > 0 {
+		cursor, err := ac.DB.Collection("sponsorship_subscription_requests").Find(ctx, bson.M{
+			"entityType": "company_branch",
+			"entityId":   bson.M{"$in": companyBranchIDs},
+		})
+		if err != nil {
+			log.Printf("Failed to fetch company branch sponsorship requests: %v", err)
+		} else {
+			defer cursor.Close(ctx)
+			if err := cursor.All(ctx, &companyBranchSponsorshipRequests); err != nil {
+				log.Printf("Failed to decode company branch sponsorship requests: %v", err)
+			} else {
+				log.Printf("Found %d company branch sponsorship requests", len(companyBranchSponsorshipRequests))
+			}
+		}
+	}
+
+	// Fetch sponsorship subscription requests for wholesaler branches
+	var wholesalerBranchSponsorshipRequests []models.SponsorshipSubscriptionRequest
+	if len(wholesalerBranchIDs) > 0 {
+		cursor, err := ac.DB.Collection("sponsorship_subscription_requests").Find(ctx, bson.M{
+			"entityType": "wholesaler_branch",
+			"entityId":   bson.M{"$in": wholesalerBranchIDs},
+		})
+		if err != nil {
+			log.Printf("Failed to fetch wholesaler branch sponsorship requests: %v", err)
+		} else {
+			defer cursor.Close(ctx)
+			if err := cursor.All(ctx, &wholesalerBranchSponsorshipRequests); err != nil {
+				log.Printf("Failed to decode wholesaler branch sponsorship requests: %v", err)
+			} else {
+				log.Printf("Found %d wholesaler branch sponsorship requests", len(wholesalerBranchSponsorshipRequests))
+			}
+		}
+	}
+
+	// Fetch sponsorship subscription requests for service providers
+	var serviceProviderSponsorshipRequests []models.SponsorshipSubscriptionRequest
+	if len(serviceProviderIDs) > 0 {
+		cursor, err := ac.DB.Collection("sponsorship_subscription_requests").Find(ctx, bson.M{
+			"entityType": "service_provider",
+			"entityId":   bson.M{"$in": serviceProviderIDs},
+		})
+		if err != nil {
+			log.Printf("Failed to fetch service provider sponsorship requests: %v", err)
+		} else {
+			defer cursor.Close(ctx)
+			if err := cursor.All(ctx, &serviceProviderSponsorshipRequests); err != nil {
+				log.Printf("Failed to decode service provider sponsorship requests: %v", err)
+			} else {
+				log.Printf("Found %d service provider sponsorship requests", len(serviceProviderSponsorshipRequests))
+			}
+		}
+	}
+
+	// Fetch sponsorship details
+	sponsorshipIDSet := make(map[primitive.ObjectID]struct{})
+	for _, req := range companyBranchSponsorshipRequests {
+		if req.SponsorshipID != primitive.NilObjectID {
+			sponsorshipIDSet[req.SponsorshipID] = struct{}{}
+		}
+	}
+	for _, req := range wholesalerBranchSponsorshipRequests {
+		if req.SponsorshipID != primitive.NilObjectID {
+			sponsorshipIDSet[req.SponsorshipID] = struct{}{}
+		}
+	}
+	for _, req := range serviceProviderSponsorshipRequests {
+		if req.SponsorshipID != primitive.NilObjectID {
+			sponsorshipIDSet[req.SponsorshipID] = struct{}{}
+		}
+	}
+
+	sponsorshipMap := make(map[primitive.ObjectID]models.Sponsorship)
+	if len(sponsorshipIDSet) > 0 {
+		sponsorshipIDs := make([]primitive.ObjectID, 0, len(sponsorshipIDSet))
+		for id := range sponsorshipIDSet {
+			sponsorshipIDs = append(sponsorshipIDs, id)
+		}
+		cursor, err := ac.DB.Collection("sponsorships").Find(ctx, bson.M{"_id": bson.M{"$in": sponsorshipIDs}})
+		if err != nil {
+			log.Printf("Failed to fetch sponsorships: %v", err)
+		} else {
+			defer cursor.Close(ctx)
+			var sponsorships []models.Sponsorship
+			if err := cursor.All(ctx, &sponsorships); err != nil {
+				log.Printf("Failed to decode sponsorships: %v", err)
+			} else {
+				for _, sponsorship := range sponsorships {
+					sponsorshipMap[sponsorship.ID] = sponsorship
+				}
+			}
+		}
+	}
+
 	// Create a map to link active subscriptions to their original requests (for payment method info)
 	// Use branchID + planID as key to handle cases where a branch might have multiple requests
 	requestByBranchAndPlan := make(map[string]models.BranchSubscriptionRequest)
@@ -3713,17 +3822,18 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		salespersonInfo := salespersonMap[meta.salespersonID]
 
 		payment := CompanySubscriptionPayment{
-			CompanyID:     meta.companyID,
-			CompanyName:   meta.companyName,
-			BranchID:      req.BranchID,
-			BranchName:    meta.branch.Name,
-			PlanID:        req.PlanID,
-			PaymentMethod: req.PaymentMethod,
-			PaymentStatus: req.PaymentStatus,
-			Status:        req.Status,
-			RequestedAt:   req.RequestedAt,
-			PaidAt:        paidAt,
-			Salesperson:   salespersonInfo,
+			CompanyID:        meta.companyID,
+			CompanyName:      meta.companyName,
+			BranchID:         req.BranchID,
+			BranchName:       meta.branch.Name,
+			PlanID:           req.PlanID,
+			PaymentMethod:    req.PaymentMethod,
+			PaymentStatus:    req.PaymentStatus,
+			Status:           req.Status,
+			RequestedAt:      req.RequestedAt,
+			PaidAt:           paidAt,
+			Salesperson:      salespersonInfo,
+			SubscriptionType: "plan",
 		}
 
 		if planExists {
@@ -3758,14 +3868,15 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		salespersonInfo := salespersonMap[meta.salespersonID]
 
 		payment := CompanySubscriptionPayment{
-			CompanyID:   meta.companyID,
-			CompanyName: meta.companyName,
-			BranchID:    sub.BranchID,
-			BranchName:  meta.branch.Name,
-			PlanID:      sub.PlanID,
-			Status:      "active",
-			RequestedAt: sub.CreatedAt,
-			Salesperson: salespersonInfo,
+			CompanyID:        meta.companyID,
+			CompanyName:      meta.companyName,
+			BranchID:         sub.BranchID,
+			BranchName:       meta.branch.Name,
+			PlanID:           sub.PlanID,
+			Status:           "active",
+			RequestedAt:      sub.CreatedAt,
+			Salesperson:      salespersonInfo,
+			SubscriptionType: "plan",
 		}
 
 		if planExists {
@@ -3785,6 +3896,47 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		companyPayments = append(companyPayments, payment)
 	}
 
+	// Process sponsorship subscription requests for company branches
+	for _, req := range companyBranchSponsorshipRequests {
+		meta, ok := companyBranchLookup[req.EntityID]
+		if !ok {
+			continue
+		}
+		// Mark branch as processed for sponsorship
+		branchesProcessed[req.EntityID] = true
+		var paidAt *time.Time
+		if !req.PaidAt.IsZero() {
+			paid := req.PaidAt
+			paidAt = &paid
+		}
+		sponsorship, sponsorshipExists := sponsorshipMap[req.SponsorshipID]
+		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		payment := CompanySubscriptionPayment{
+			CompanyID:        meta.companyID,
+			CompanyName:      meta.companyName,
+			BranchID:         req.EntityID,
+			BranchName:       meta.branch.Name,
+			PlanID:           primitive.NilObjectID,
+			PaymentMethod:    req.PaymentMethod,
+			PaymentStatus:    req.PaymentStatus,
+			Status:           req.Status,
+			RequestedAt:      req.RequestedAt,
+			PaidAt:           paidAt,
+			Salesperson:      salespersonInfo,
+			SubscriptionType: "sponsorship",
+		}
+
+		if sponsorshipExists {
+			sponsorshipID := sponsorship.ID
+			payment.SponsorshipID = &sponsorshipID
+			payment.SponsorshipTitle = sponsorship.Title
+			payment.SponsorshipPrice = sponsorship.Price
+		}
+
+		companyPayments = append(companyPayments, payment)
+	}
+
 	// Add branches without any subscriptions
 	for _, company := range companies {
 		if company.CreatedBy != salespersonID {
@@ -3799,19 +3951,20 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			}
 			salespersonInfo := salespersonMap[company.CreatedBy]
 			companyPayments = append(companyPayments, CompanySubscriptionPayment{
-				CompanyID:     company.ID,
-				CompanyName:   company.BusinessName,
-				BranchID:      branch.ID,
-				BranchName:    branch.Name,
-				PlanID:        primitive.NilObjectID,
-				PlanTitle:     "",
-				PlanPrice:     0,
-				PaymentMethod: "",
-				PaymentStatus: "",
-				Status:        "no_subscription",
-				RequestedAt:   time.Time{},
-				PaidAt:        nil,
-				Salesperson:   salespersonInfo,
+				CompanyID:        company.ID,
+				CompanyName:      company.BusinessName,
+				BranchID:         branch.ID,
+				BranchName:       branch.Name,
+				PlanID:           primitive.NilObjectID,
+				PlanTitle:        "",
+				PlanPrice:        0,
+				PaymentMethod:    "",
+				PaymentStatus:    "",
+				Status:           "no_subscription",
+				RequestedAt:      time.Time{},
+				PaidAt:           nil,
+				Salesperson:      salespersonInfo,
+				SubscriptionType: "plan",
 			})
 		}
 	}
@@ -3830,20 +3983,60 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 		plan := planMap[req.PlanID]
 		salespersonInfo := salespersonMap[meta.salespersonID]
 		wholesalerPayments = append(wholesalerPayments, WholesalerSubscriptionPayment{
-			WholesalerID:   meta.wholesalerID,
-			WholesalerName: meta.wholesalerName,
-			BranchID:       req.BranchID,
-			BranchName:     meta.branch.Name,
-			PlanID:         req.PlanID,
-			PlanTitle:      plan.Title,
-			PlanPrice:      plan.Price,
-			PaymentMethod:  req.PaymentMethod,
-			PaymentStatus:  req.PaymentStatus,
-			Status:         req.Status,
-			RequestedAt:    req.RequestedAt,
-			PaidAt:         paidAt,
-			Salesperson:    salespersonInfo,
+			WholesalerID:     meta.wholesalerID,
+			WholesalerName:   meta.wholesalerName,
+			BranchID:         req.BranchID,
+			BranchName:       meta.branch.Name,
+			PlanID:           req.PlanID,
+			PlanTitle:        plan.Title,
+			PlanPrice:        plan.Price,
+			PaymentMethod:    req.PaymentMethod,
+			PaymentStatus:    req.PaymentStatus,
+			Status:           req.Status,
+			RequestedAt:      req.RequestedAt,
+			PaidAt:           paidAt,
+			Salesperson:      salespersonInfo,
+			SubscriptionType: "plan",
 		})
+	}
+
+	// Process sponsorship subscription requests for wholesaler branches
+	for _, req := range wholesalerBranchSponsorshipRequests {
+		meta, ok := wholesalerBranchLookup[req.EntityID]
+		if !ok {
+			continue
+		}
+		var paidAt *time.Time
+		if !req.PaidAt.IsZero() {
+			paid := req.PaidAt
+			paidAt = &paid
+		}
+		sponsorship, sponsorshipExists := sponsorshipMap[req.SponsorshipID]
+		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		payment := WholesalerSubscriptionPayment{
+			WholesalerID:     meta.wholesalerID,
+			WholesalerName:   meta.wholesalerName,
+			BranchID:         req.EntityID,
+			BranchName:       meta.branch.Name,
+			PlanID:           primitive.NilObjectID,
+			PaymentMethod:    req.PaymentMethod,
+			PaymentStatus:    req.PaymentStatus,
+			Status:           req.Status,
+			RequestedAt:      req.RequestedAt,
+			PaidAt:           paidAt,
+			Salesperson:      salespersonInfo,
+			SubscriptionType: "sponsorship",
+		}
+
+		if sponsorshipExists {
+			sponsorshipID := sponsorship.ID
+			payment.SponsorshipID = &sponsorshipID
+			payment.SponsorshipTitle = sponsorship.Title
+			payment.SponsorshipPrice = sponsorship.Price
+		}
+
+		wholesalerPayments = append(wholesalerPayments, payment)
 	}
 
 	serviceProviderPayments := make([]ServiceProviderSubscriptionPayment, 0)
@@ -3875,7 +4068,45 @@ func (ac *AdminController) GetSalespersonSubscriptionPayments(c echo.Context) er
 			RequestedAt:       req.RequestedAt,
 			PaidAt:            paidAt,
 			Salesperson:       salespersonInfo,
+			SubscriptionType:  "plan",
 		})
+	}
+
+	// Process sponsorship subscription requests for service providers
+	for _, req := range serviceProviderSponsorshipRequests {
+		meta, ok := serviceProviderLookup[req.EntityID]
+		if !ok {
+			continue
+		}
+		var paidAt *time.Time
+		if !req.PaidAt.IsZero() {
+			paid := req.PaidAt
+			paidAt = &paid
+		}
+		sponsorship, sponsorshipExists := sponsorshipMap[req.SponsorshipID]
+		salespersonInfo := salespersonMap[meta.salespersonID]
+
+		payment := ServiceProviderSubscriptionPayment{
+			ServiceProviderID: req.EntityID,
+			BusinessName:      meta.businessName,
+			PlanID:            primitive.NilObjectID,
+			PaymentMethod:     req.PaymentMethod,
+			PaymentStatus:     req.PaymentStatus,
+			Status:            req.Status,
+			RequestedAt:       req.RequestedAt,
+			PaidAt:            paidAt,
+			Salesperson:       salespersonInfo,
+			SubscriptionType:  "sponsorship",
+		}
+
+		if sponsorshipExists {
+			sponsorshipID := sponsorship.ID
+			payment.SponsorshipID = &sponsorshipID
+			payment.SponsorshipTitle = sponsorship.Title
+			payment.SponsorshipPrice = sponsorship.Price
+		}
+
+		serviceProviderPayments = append(serviceProviderPayments, payment)
 	}
 
 	response := SalespersonCreatedEntitiesResponse{
