@@ -15,6 +15,7 @@ import '../../models/company_model.dart';
 import '../../models/subscription.dart';
 import 'sales_manager_details.dart';
 import '../../models/salesperson_model.dart'; // Fixed import path for Salesperson
+import 'salesperson_details_screen.dart';
 
 // Custom input formatter for commission fields to only allow numbers and decimal points
 class CommissionInputFormatter extends TextInputFormatter {
@@ -600,6 +601,23 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
         builder: (context) => SalesManagerDetailsScreen(
           salesManagerId: salesManager.id,
           salesManagerName: salesManager.fullName,
+        ),
+      ),
+    );
+  }
+
+  void _showSalespersonDetails(Salesperson salesperson) {
+    if (salesperson.id == null || salesperson.id!.isEmpty) {
+      _showErrorSnackBar('Salesperson record is missing an ID');
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SalespersonDetailsScreen(
+          salespersonId: salesperson.id!,
+          salespersonName: salesperson.fullName,
+          salespersonEmail: salesperson.email,
+          salespersonPhone: salesperson.phoneNumber,
         ),
       ),
     );
@@ -1643,6 +1661,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
                                     salesperson: salesperson,
                                     onEdit: () => _showEditSalespersonDialog(salesperson),
                                     onDelete: () => _showDeleteSalespersonConfirmationDialog(salesperson),
+                                    onTap: () => _showSalespersonDetails(salesperson),
                                   );
                                 },
                               ),
@@ -1825,12 +1844,14 @@ class SalespersonListTile extends StatelessWidget {
   final Salesperson salesperson;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onTap;
 
   const SalespersonListTile({
     super.key,
     required this.salesperson,
     required this.onEdit,
     required this.onDelete,
+    this.onTap,
   });
 
   @override
@@ -1846,22 +1867,25 @@ class SalespersonListTile extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.green,
-          radius: 20,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.green,
+            radius: 20,
+            child: Text(
+              initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-        ),
-        title: Text(
-          salesperson.fullName,
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
+          onTap: onTap,
+          title: Text(
+            salesperson.fullName,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1917,20 +1941,21 @@ class SalespersonListTile extends StatelessWidget {
               ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: onEdit,
-              color: Colors.blue,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: onDelete,
-              color: Colors.red,
-            ),
-          ],
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: onEdit,
+                color: Colors.blue,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: onDelete,
+                color: Colors.red,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -594,4 +594,28 @@ class AdminService {
       };
     }
   }
+
+  // Get Salesperson Subscription Payments
+  Future<Map<String, dynamic>> getSalespersonSubscriptionPayments({required String salespersonId}) async {
+    final response = await _makeRequest(
+      'get',
+      '$secureBaseUrl/api/admin/salespersons/$salespersonId/subscription-payments',
+      headers: await _getHeaders(),
+    );
+
+    final responseData = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return {
+        'success': true,
+        'message': responseData['message'] ?? 'Subscription payments retrieved successfully',
+        'data': responseData['data'],
+      };
+    } else {
+      return {
+        'success': false,
+        'message': responseData['message'] ?? 'Failed to fetch subscription payments',
+      };
+    }
+  }
 }

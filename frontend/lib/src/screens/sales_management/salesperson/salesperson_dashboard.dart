@@ -2957,6 +2957,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               value: _selectedIndustry.isNotEmpty ? _selectedIndustry : null,
+                              isExpanded: true,
                               decoration: InputDecoration(
                                 hintText: 'Select Industry Category',
                                 hintStyle: TextStyle(color: Colors.grey[400]),
@@ -2974,7 +2975,10 @@ class _AddNewDialogState extends State<AddNewDialog> {
                                   ? getCategoryNames().map((categoryName) {
                                       return DropdownMenuItem(
                                         value: categoryName,
-                                        child: Text(categoryName),
+                                        child: Text(
+                                          categoryName,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       );
                                     }).toList()
                                   : [
@@ -3005,6 +3009,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 value: _selectedSubcategory.isNotEmpty ? _selectedSubcategory : null,
+                                isExpanded: true,
                                 decoration: InputDecoration(
                                   hintText: 'Select Subcategory (Optional)',
                                   hintStyle: TextStyle(color: Colors.grey[400]),
@@ -3021,7 +3026,10 @@ class _AddNewDialogState extends State<AddNewDialog> {
                                 items: getSubcategoriesForCategory(_selectedIndustry).map((subcategory) {
                                   return DropdownMenuItem(
                                     value: subcategory,
-                                    child: Text(subcategory),
+                                    child: Text(
+                                      subcategory,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   );
                                 }).toList(),
                                 onChanged: (value) {
@@ -3592,6 +3600,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: _selectedCountry,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           hintText: 'Select Country',
                           hintStyle: TextStyle(color: Colors.grey[400]),
@@ -3608,7 +3617,10 @@ class _AddNewDialogState extends State<AddNewDialog> {
                         items: LocationService.getCountries().map((country) {
                           return DropdownMenuItem(
                             value: country,
-                            child: Text(country),
+                            child: Text(
+                              country,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           );
                         }).toList(),
                         onChanged: (value) {
@@ -3646,6 +3658,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: _selectedDistrict,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           hintText: _selectedCountry != null && LocationService.usesGovernorateStructure(_selectedCountry!)
                               ? 'Select Governorate'
@@ -3666,13 +3679,19 @@ class _AddNewDialogState extends State<AddNewDialog> {
                                 ? LocationService.getGovernorates(_selectedCountry!).map((governorate) {
                                     return DropdownMenuItem(
                                       value: governorate,
-                                      child: Text(governorate),
+                                      child: Text(
+                                        governorate,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     );
                                   }).toList()
                                 : LocationService.getDistricts(_selectedCountry!).map((district) {
                                     return DropdownMenuItem(
                                       value: district,
-                                      child: Text(district),
+                                      child: Text(
+                                        district,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     );
                                   }).toList())
                             : [],
@@ -3710,6 +3729,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: _selectedCity,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           hintText: _selectedCountry != null && LocationService.usesGovernorateStructure(_selectedCountry!)
                               ? 'Select District'
@@ -3730,13 +3750,19 @@ class _AddNewDialogState extends State<AddNewDialog> {
                                 ? LocationService.getDistrictsByGovernorate(_selectedCountry!, _selectedDistrict!).map((district) {
                                     return DropdownMenuItem(
                                       value: district,
-                                      child: Text(district),
+                                      child: Text(
+                                        district,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     );
                                   }).toList()
                                 : LocationService.getCities(_selectedCountry!, _selectedDistrict!).map((city) {
                                     return DropdownMenuItem(
                                       value: city,
-                                      child: Text(city),
+                                      child: Text(
+                                        city,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     );
                                   }).toList())
                             : [],
@@ -3766,6 +3792,7 @@ class _AddNewDialogState extends State<AddNewDialog> {
                 // Governorate Dropdown
                 DropdownButtonFormField<String>(
                   value: _selectedGovernorate,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     hintText: _selectedCountry != null && LocationService.usesGovernorateStructure(_selectedCountry!)
                         ? 'Select Street/Area'
@@ -3786,13 +3813,19 @@ class _AddNewDialogState extends State<AddNewDialog> {
                           ? LocationService.getStreetsByGovernorate(_selectedCountry!, _selectedDistrict!, _selectedCity!).map((street) {
                               return DropdownMenuItem(
                                 value: street,
-                                child: Text(street),
+                                child: Text(
+                                  street,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList()
                           : LocationService.getGovernoratesLegacy(_selectedCountry!, _selectedDistrict!, _selectedCity!).map((governorate) {
                               return DropdownMenuItem(
                                 value: governorate,
-                                child: Text(governorate),
+                                child: Text(
+                                  governorate,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList())
                       : [],
