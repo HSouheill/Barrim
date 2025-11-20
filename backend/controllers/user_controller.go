@@ -2145,6 +2145,32 @@ func (uc *UserController) UploadProfilePicture(c echo.Context) error {
 	// Get user ID from context
 	userID := c.Get("user_id").(string)
 
+	// Fetch existing profile picture for cleanup after successful update
+	var existingProfile struct {
+		ProfilePicture string `bson:"profile_picture"`
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	userObjID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"message": "Invalid user ID",
+		})
+	}
+
+	usersCollection := config.GetCollection(uc.DB, "users")
+	if err := usersCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&existingProfile); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"message": "User not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"message": "Failed to retrieve user",
+		})
+	}
+
 	// Get file from request
 	file, err := c.FormFile("profile_picture")
 	if err != nil {
@@ -2231,6 +2257,15 @@ func (uc *UserController) UploadProfilePicture(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"message": "Error updating profile picture",
 		})
+	}
+
+	// Delete old profile picture if it exists and is different from the new one
+	oldProfilePath := strings.TrimPrefix(existingProfile.ProfilePicture, "/")
+	newProfilePath := filepath.Join(uploadDir, secureFilename)
+	if oldProfilePath != "" && oldProfilePath != newProfilePath {
+		if err := os.Remove(oldProfilePath); err != nil && !os.IsNotExist(err) {
+			log.Printf("Failed to delete old profile picture %s: %v", oldProfilePath, err)
+		}
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
