@@ -2034,6 +2034,49 @@ func (cc *CompanyController) CreateBranchComment(c echo.Context) error {
 		})
 	}
 
+	// Notify the company owner about the new comment (in-app + FCM)
+	companiesCollection := config.GetCollection(cc.DB, "companies")
+	var company models.Company
+	if err := companiesCollection.FindOne(ctx, bson.M{"branches._id": branchObjectID}).Decode(&company); err != nil {
+		log.Printf("Failed to fetch company for branch comment notification: %v", err)
+	} else if company.UserID != primitive.NilObjectID {
+		var branchName string
+		for _, branch := range company.Branches {
+			if branch.ID == branchObjectID {
+				branchName = branch.Name
+				break
+			}
+		}
+		commentPreview := commentText
+		if len(commentPreview) > 120 {
+			commentPreview = commentPreview[:120] + "..."
+		}
+
+		go func(ownerID, companyID, branchID, commentID, commenterID primitive.ObjectID, commenterName, branchName, commentPreview string) {
+			targetName := branchName
+			if strings.TrimSpace(targetName) == "" {
+				targetName = "your branch"
+			}
+
+			title := "New comment on your branch"
+			message := fmt.Sprintf("%s commented on %s: %s", commenterName, targetName, commentPreview)
+			data := map[string]interface{}{
+				"companyId":   companyID.Hex(),
+				"branchId":    branchID.Hex(),
+				"commentId":   commentID.Hex(),
+				"commenterId": commenterID.Hex(),
+				"type":        "branch_comment",
+			}
+
+			if err := utils.SaveNotification(cc.DB, ownerID, title, message, "branch_comment", data); err != nil {
+				log.Printf("Failed to save branch comment notification: %v", err)
+			}
+			if err := utils.SendFCMNotificationToUser(cc.DB, ownerID, title, message, data); err != nil {
+				log.Printf("Failed to send FCM for branch comment: %v", err)
+			}
+		}(company.UserID, company.ID, branchObjectID, comment.ID, userID, user.FullName, branchName, commentPreview)
+	}
+
 	return c.JSON(http.StatusCreated, models.Response{
 		Status:  http.StatusCreated,
 		Message: "Comment posted successfully",
@@ -2226,6 +2269,40 @@ func (cc *CompanyController) ReplyToBranchComment(c echo.Context) error {
 			Message: "Failed to get updated comment",
 		})
 	}
+
+	// Notify the original commenter about the new reply (in-app + FCM)
+	go func(commenterID, companyID, branchID, commentID, replyID primitive.ObjectID, companyName, replyText string) {
+		if commenterID == primitive.NilObjectID {
+			return
+		}
+
+		replyPreview := replyText
+		if len(replyPreview) > 120 {
+			replyPreview = replyPreview[:120] + "..."
+		}
+
+		displayName := strings.TrimSpace(companyName)
+		if displayName == "" {
+			displayName = "The company"
+		}
+
+		title := "New reply to your branch comment"
+		message := fmt.Sprintf("%s replied: %s", displayName, replyPreview)
+		data := map[string]interface{}{
+			"companyId": companyID.Hex(),
+			"branchId":  branchID.Hex(),
+			"commentId": commentID.Hex(),
+			"replyId":   replyID.Hex(),
+			"type":      "branch_comment_reply",
+		}
+
+		if err := utils.SaveNotification(cc.DB, commenterID, title, message, "branch_comment_reply", data); err != nil {
+			log.Printf("Failed to save branch comment reply notification: %v", err)
+		}
+		if err := utils.SendFCMNotificationToUser(cc.DB, commenterID, title, message, data); err != nil {
+			log.Printf("Failed to send FCM for branch comment reply: %v", err)
+		}
+	}(updatedComment.UserID, company.ID, updatedComment.BranchID, updatedComment.ID, reply.ID, company.BusinessName, replyRequest.Reply)
 
 	return c.JSON(http.StatusCreated, models.Response{
 		Status:  http.StatusCreated,
