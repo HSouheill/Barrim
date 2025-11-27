@@ -12,9 +12,18 @@ import (
 
 var FirebaseApp *firebase.App
 
+func getFirebaseProjectID() string {
+	if projectID := os.Getenv("FIREBASE_PROJECT_ID"); projectID != "" {
+		return projectID
+	}
+	// Default to the mobile app project (barrimapp-abd32)
+	return "barrimapp-abd32"
+}
+
 // InitFirebase initializes the Firebase Admin SDK
 func InitFirebase() {
 	ctx := context.Background()
+	projectID := getFirebaseProjectID()
 
 	// Check for base64 encoded credentials first
 	if base64Creds := os.Getenv("FIREBASE_CREDENTIALS_BASE64"); base64Creds != "" {
@@ -26,7 +35,7 @@ func InitFirebase() {
 
 		opt := option.WithCredentialsJSON(decoded)
 		config := &firebase.Config{
-			ProjectID: "barrim-93482",
+			ProjectID: projectID,
 		}
 
 		app, err := firebase.NewApp(ctx, config, opt)
@@ -42,9 +51,11 @@ func InitFirebase() {
 	if credFile == "" {
 		// Try multiple possible locations
 		possiblePaths := []string{
-			"barrim-93482-firebase-adminsdk-fbsvc-4ee236d155.json",
-			"../barrim-93482-firebase-adminsdk-fbsvc-4ee236d155.json",
-			"./barrim-93482-firebase-adminsdk-fbsvc-4ee236d155.json",
+			"barrimapp-abd32-firebase-adminsdk-fbsvc-8b71de8fde.json",
+			"../barrimapp-abd32-firebase-adminsdk-fbsvc-8b71de8fde.json",
+			"./barrimapp-abd32-firebase-adminsdk-fbsvc-8b71de8fde.json",
+			// fallbacks for legacy credentials
+
 		}
 
 		for _, path := range possiblePaths {
@@ -64,7 +75,7 @@ func InitFirebase() {
 
 	// Create Firebase config with project ID
 	config := &firebase.Config{
-		ProjectID: "barrim-93482",
+		ProjectID: projectID,
 	}
 
 	app, err := firebase.NewApp(ctx, config, opt)
