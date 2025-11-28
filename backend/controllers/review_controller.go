@@ -764,10 +764,47 @@ func (rc *ReviewController) GetAllReviewsAndRepliesForAdmin(c echo.Context) erro
 	var enrichedReviews []map[string]interface{}
 	for _, review := range reviews {
 		// Get service provider information
-		var serviceProvider models.User
-		err := rc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": review.ServiceProviderID}).Decode(&serviceProvider)
-		if err != nil {
-			log.Printf("Error fetching service provider info for review %s: %v", review.ID.Hex(), err)
+		// Try unified approach first: check if ServiceProviderID is a user ID
+		var serviceProviderUser models.User
+		var serviceProviderRecord models.ServiceProvider
+		serviceProviderName := ""
+		serviceProviderEmail := ""
+		serviceProviderPhone := ""
+		
+		err := rc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": review.ServiceProviderID, "userType": "serviceProvider"}).Decode(&serviceProviderUser)
+		if err == nil {
+			// Found user directly (unified approach)
+			serviceProviderName = serviceProviderUser.FullName
+			serviceProviderEmail = serviceProviderUser.Email
+			serviceProviderPhone = serviceProviderUser.Phone
+		} else {
+			// Try legacy approach: get service provider from serviceProviders collection
+			err = rc.db.Database("barrim").Collection("serviceProviders").FindOne(ctx, bson.M{"_id": review.ServiceProviderID}).Decode(&serviceProviderRecord)
+			if err == nil {
+				// Use business name from service provider record
+				serviceProviderName = serviceProviderRecord.BusinessName
+				serviceProviderEmail = serviceProviderRecord.Email
+				serviceProviderPhone = serviceProviderRecord.Phone
+				
+				// Try to get the user associated with this service provider for additional info
+				if serviceProviderRecord.UserID != primitive.NilObjectID {
+					err = rc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": serviceProviderRecord.UserID}).Decode(&serviceProviderUser)
+					if err == nil {
+						// Prefer user's full name if available, otherwise use business name
+						if serviceProviderUser.FullName != "" {
+							serviceProviderName = serviceProviderUser.FullName
+						}
+						if serviceProviderEmail == "" {
+							serviceProviderEmail = serviceProviderUser.Email
+						}
+						if serviceProviderPhone == "" {
+							serviceProviderPhone = serviceProviderUser.Phone
+						}
+					}
+				}
+			} else {
+				log.Printf("Error fetching service provider info for review %s: %v", review.ID.Hex(), err)
+			}
 		}
 
 		// Get user information
@@ -777,14 +814,11 @@ func (rc *ReviewController) GetAllReviewsAndRepliesForAdmin(c echo.Context) erro
 			log.Printf("Error fetching user info for review %s: %v", review.ID.Hex(), err)
 		}
 
-		// Get service provider name (use FullName from user)
-		serviceProviderName := serviceProvider.FullName
-
 		// Get company branch name if service provider is associated with a company
 		var companyBranchName string
-		if serviceProvider.CompanyID != nil {
+		if serviceProviderUser.CompanyID != nil {
 			var company models.Company
-			err := rc.db.Database("barrim").Collection("companies").FindOne(ctx, bson.M{"_id": *serviceProvider.CompanyID}).Decode(&company)
+			err := rc.db.Database("barrim").Collection("companies").FindOne(ctx, bson.M{"_id": *serviceProviderUser.CompanyID}).Decode(&company)
 			if err == nil && len(company.Branches) > 0 {
 				// Get the first branch name (or you could get all branch names)
 				companyBranchName = company.Branches[0].Name
@@ -795,9 +829,9 @@ func (rc *ReviewController) GetAllReviewsAndRepliesForAdmin(c echo.Context) erro
 
 		// Get wholesaler branch name if service provider is associated with a wholesaler
 		var wholesalerBranchName string
-		if serviceProvider.WholesalerID != nil {
+		if serviceProviderUser.WholesalerID != nil {
 			var wholesaler models.Wholesaler
-			err := rc.db.Database("barrim").Collection("wholesalers").FindOne(ctx, bson.M{"_id": *serviceProvider.WholesalerID}).Decode(&wholesaler)
+			err := rc.db.Database("barrim").Collection("wholesalers").FindOne(ctx, bson.M{"_id": *serviceProviderUser.WholesalerID}).Decode(&wholesaler)
 			if err == nil && len(wholesaler.Branches) > 0 {
 				// Get the first branch name (or you could get all branch names)
 				wholesalerBranchName = wholesaler.Branches[0].Name
@@ -809,11 +843,11 @@ func (rc *ReviewController) GetAllReviewsAndRepliesForAdmin(c echo.Context) erro
 		enrichedReview := map[string]interface{}{
 			"review": review,
 			"serviceProvider": map[string]interface{}{
-				"id":       serviceProvider.ID,
-				"fullName": serviceProvider.FullName,
+				"id":       review.ServiceProviderID,
+				"fullName": serviceProviderName,
 				"name":     serviceProviderName,
-				"email":    serviceProvider.Email,
-				"phone":    serviceProvider.Phone,
+				"email":    serviceProviderEmail,
+				"phone":    serviceProviderPhone,
 			},
 			"user": map[string]interface{}{
 				"id":       user.ID,
