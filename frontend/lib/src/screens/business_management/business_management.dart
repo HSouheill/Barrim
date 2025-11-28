@@ -447,7 +447,7 @@ class _SalesManagementPageState extends State<SalesManagementPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
                       HeaderComponent(
               logoPath: _logoPath,
               scaffoldKey: _scaffoldKey,
@@ -470,7 +470,7 @@ class _SalesManagementPageState extends State<SalesManagementPage> {
             elevation: 0,
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               children: [
                 const Text(

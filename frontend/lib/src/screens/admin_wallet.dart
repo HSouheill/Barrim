@@ -78,7 +78,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 30),
+                  const SizedBox(height: 10),
                               HeaderComponent(
               logoPath: _logoPath,
               scaffoldKey: _scaffoldKey,
@@ -87,7 +87,7 @@ class _AdminWalletScreenState extends State<AdminWalletScreen> {
               },
             ),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Text(
                       'Admin Wallet',
                       style: TextStyle(

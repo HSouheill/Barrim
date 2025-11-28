@@ -363,8 +363,8 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Add 50px of empty space before the header
-                  SizedBox(height: 30),
+                  // Add spacing before the header
+                  const SizedBox(height: 10),
                   // Use the new HeaderComponent instead of _buildHeader()
                   HeaderComponent(
                     logoPath: _logoPath,
@@ -374,7 +374,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     },
                   ),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Text(
                       'Homepage',
                       style: TextStyle(
@@ -478,7 +478,7 @@ class _DashboardPageState extends State<DashboardPage> {
         
         // Enhanced search bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -536,7 +536,7 @@ class _DashboardPageState extends State<DashboardPage> {
                        ],
                      ),
                      border: InputBorder.none,
-                     contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                     contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                    ),
                    onChanged: (value) {
                      _debouncedSearch(value);
@@ -856,7 +856,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final regularUsersCount = _allUsers.where((user) => user.userType.toLowerCase() == 'user').length;
     
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -1168,7 +1168,7 @@ class _DashboardPageState extends State<DashboardPage> {
         
         // Enhanced search bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -1240,7 +1240,7 @@ class _DashboardPageState extends State<DashboardPage> {
         
         // Enhanced search bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -1312,7 +1312,7 @@ class _DashboardPageState extends State<DashboardPage> {
         
         // Enhanced search bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -1416,7 +1416,7 @@ class _DashboardPageState extends State<DashboardPage> {
         
         // Enhanced search bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,

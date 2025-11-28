@@ -1507,7 +1507,7 @@ class _SalesAdminDashboardState extends State<SalesAdminDashboard> with SingleTi
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 30),
+          const SizedBox(height: 10),
                       HeaderComponent(
               logoPath: _logoPath,
               scaffoldKey: _scaffoldKey,

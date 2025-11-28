@@ -21,7 +21,7 @@ class HeaderComponent extends StatelessWidget {
     return Center(
       child: Container(
         width: 360,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(8),
@@ -40,14 +40,14 @@ class HeaderComponent extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 60,
-                  height: 70,
+                  width: 50,
+                  height: 50,
                   decoration: const BoxDecoration(
                     color: Color(0x00000000),
                     shape: BoxShape.circle,
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(12.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: Image.asset(
                       logoPath,
                       fit: BoxFit.contain,
@@ -64,22 +64,22 @@ class HeaderComponent extends StatelessWidget {
                     onTap: onMenuPressed,
                     child: isLogoutButton
                         ? Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.red.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.red.withOpacity(0.3)),
                             ),
-                            child: const Icon(Icons.logout, color: Colors.red, size: 20),
+                            child: const Icon(Icons.logout, color: Colors.red, size: 18),
                           )
                         : Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.white.withOpacity(0.3)),
                             ),
-                            child: const Icon(Icons.menu, color: Colors.white, size: 20),
+                            child: const Icon(Icons.menu, color: Colors.white, size: 18),
                           ),
                   ),
               ],

@@ -116,7 +116,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 30),
+          const SizedBox(height: 10),
           HeaderComponent(
             logoPath: _logoPath,
             scaffoldKey: _scaffoldKey,
@@ -125,7 +125,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           // White section with title and add button
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

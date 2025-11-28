@@ -629,7 +629,7 @@ class _SalesManagerDashboardState extends State<SalesManagerDashboard> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 30),
+          const SizedBox(height: 10),
           HeaderComponent(
             logoPath: _logoPath,
             scaffoldKey: _scaffoldKey,
@@ -637,7 +637,7 @@ class _SalesManagerDashboardState extends State<SalesManagerDashboard> {
           ),
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

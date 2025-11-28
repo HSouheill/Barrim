@@ -265,7 +265,7 @@ class _MembershipPlansScreenState extends State<MembershipPlansScreen> with Tick
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 10),
                               HeaderComponent(
               logoPath: _logoPath,
               scaffoldKey: _scaffoldKey,
@@ -274,7 +274,7 @@ class _MembershipPlansScreenState extends State<MembershipPlansScreen> with Tick
               },
             ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       children: [
                         IconButton(

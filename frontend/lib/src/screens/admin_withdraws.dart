@@ -354,7 +354,7 @@ class _AdminWithdrawsScreenState extends State<AdminWithdrawsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 10),
                               HeaderComponent(
               logoPath: _logoPath,
               scaffoldKey: _scaffoldKey,
@@ -363,7 +363,7 @@ class _AdminWithdrawsScreenState extends State<AdminWithdrawsScreen> {
               },
             ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [

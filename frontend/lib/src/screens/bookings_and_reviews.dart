@@ -913,7 +913,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 10),
                   HeaderComponent(
                     logoPath: 'assets/logo/logo.png',
                     scaffoldKey: _scaffoldKey,
@@ -922,7 +922,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
                     },
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       children: [
                         IconButton(
@@ -934,8 +934,10 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
                             );
                           },
                           tooltip: 'Back to Dashboard',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 8),
                         const Text(
                           'Bookings & Reviews Management',
                           style: TextStyle(
@@ -970,6 +972,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
                         color: Theme.of(context).primaryColor,
                         borderRadius: BorderRadius.circular(8),
                       ),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       tabs: [
                         Tab(text: 'Reviews (${_totalReviewCount})'),
                         Tab(text: 'Bookings (${_totalBookingCount})'),
@@ -977,7 +980,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   // Content Area
                   Expanded(
                     child: TabBarView(
@@ -1008,7 +1011,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
         children: [
           // Filters and Actions
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
@@ -1025,28 +1028,30 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
               children: [
                 ElevatedButton.icon(
                   onPressed: _showReviewFilters,
-                  icon: const Icon(Icons.filter_list),
+                  icon: const Icon(Icons.filter_list, size: 18),
                   label: const Text('Filters'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _loadReviews,
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
               ],
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           
           // Reviews List
           Expanded(
@@ -1095,7 +1100,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
         children: [
           // Filters and Actions
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
@@ -1112,28 +1117,30 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
               children: [
                 ElevatedButton.icon(
                   onPressed: _showBookingFilters,
-                  icon: const Icon(Icons.filter_list),
+                  icon: const Icon(Icons.filter_list, size: 18),
                   label: const Text('Filters'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _loadBookings,
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
               ],
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           
           
           // Bookings List
@@ -1183,7 +1190,7 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
         children: [
           // Filters and Actions
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
@@ -1200,28 +1207,30 @@ class _BookingsAndReviewsScreenState extends State<BookingsAndReviewsScreen>
               children: [
                 ElevatedButton.icon(
                   onPressed: _showCommentFilters,
-                  icon: const Icon(Icons.filter_list),
+                  icon: const Icon(Icons.filter_list, size: 18),
                   label: const Text('Filters'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _loadBranchComments,
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
               ],
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           
           // Comments List
           Expanded(

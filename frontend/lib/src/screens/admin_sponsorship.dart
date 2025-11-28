@@ -524,7 +524,7 @@ class _AdminSponsorshipScreenState extends State<AdminSponsorshipScreen> with Ti
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 10),
                   HeaderComponent(
                     logoPath: _logoPath,
                     scaffoldKey: _scaffoldKey,
@@ -533,7 +533,7 @@ class _AdminSponsorshipScreenState extends State<AdminSponsorshipScreen> with Ti
                     },
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       children: [
                         IconButton(
