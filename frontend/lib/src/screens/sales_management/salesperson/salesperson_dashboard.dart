@@ -2081,142 +2081,75 @@ class _AddNewDialogState extends State<AddNewDialog> {
   // Method to find the nearest location from coordinates using reverse geocoding
   Future<Map<String, String?>> _findNearestLocation(double lat, double lng) async {
     try {
-      // Use reverse geocoding to get the actual location information
-      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
-      
-      if (placemarks.isNotEmpty) {
-        Placemark place = placemarks[0];
-        
-        final List<String> availableCountries = LocationService.getCountries();
-        final String fallbackCountry = availableCountries.isNotEmpty ? availableCountries.first : 'Lebanon';
-
-        final String matchedCountry = _matchLocationValue(place.country, availableCountries) ?? fallbackCountry;
-        final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(matchedCountry);
-
-        final List<String> firstLevelOptions = usesGovernorateStructure
-            ? LocationService.getGovernorates(matchedCountry)
-            : LocationService.getDistricts(matchedCountry);
-
-        String? matchedDistrict;
-        for (final candidate in [
-          place.administrativeArea,
-          place.subAdministrativeArea,
-          place.locality,
-          place.subLocality,
-        ]) {
-          matchedDistrict = _matchLocationValue(candidate, firstLevelOptions);
-          if (matchedDistrict != null) break;
-        }
-        matchedDistrict ??= _getDefaultFirstLevel(matchedCountry);
-
-        List<String> secondLevelOptions = [];
-        if (matchedDistrict != null) {
-          secondLevelOptions = usesGovernorateStructure
-              ? LocationService.getDistrictsByGovernorate(matchedCountry, matchedDistrict)
-              : LocationService.getCities(matchedCountry, matchedDistrict);
-        }
-
-        String? matchedCity;
-        for (final candidate in [
-          place.locality,
-          place.subLocality,
-          place.street,
-          place.thoroughfare,
-          place.name,
-        ]) {
-          matchedCity = _matchLocationValue(candidate, secondLevelOptions);
-          if (matchedCity != null) break;
-        }
-        if (matchedCity == null && secondLevelOptions.isNotEmpty) {
-          matchedCity = secondLevelOptions.first;
-        }
-
-        List<String> thirdLevelOptions = [];
-        if (matchedCity != null && matchedDistrict != null) {
-          thirdLevelOptions = usesGovernorateStructure
-              ? LocationService.getStreetsByGovernorate(matchedCountry, matchedDistrict, matchedCity)
-              : LocationService.getGovernoratesLegacy(matchedCountry, matchedDistrict, matchedCity);
-        }
-
-        String? matchedGovernorate;
-        for (final candidate in [
-          place.street,
-          place.subLocality,
-          place.thoroughfare,
-          place.name,
-        ]) {
-          matchedGovernorate = _matchLocationValue(candidate, thirdLevelOptions);
-          if (matchedGovernorate != null) break;
-        }
-        if (matchedGovernorate == null && matchedCity != null && matchedDistrict != null) {
-          matchedGovernorate = _getDefaultThirdLevel(matchedCountry, matchedDistrict, matchedCity);
-        }
-        
-        return {
-          'country': matchedCountry,
-          'district': matchedDistrict ?? _getDefaultFirstLevel(matchedCountry) ?? matchedCountry,
-          'city': matchedCity ??
-              (matchedDistrict != null
-                  ? _getDefaultSecondLevel(matchedCountry, matchedDistrict) ?? matchedDistrict
-                  : matchedCountry),
-          'governorate': matchedGovernorate,
-        };
+      final placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isEmpty) {
+        return {};
       }
+
+      final place = placemarks.first;
+
+      final country = place.country?.trim();
+      final governorate = place.administrativeArea?.trim();
+      final district = place.subAdministrativeArea?.trim();
+      final locality = place.locality?.trim();
+      final subLocality = place.subLocality?.trim();
+      final street = place.street?.trim();
+      final name = place.name?.trim();
+
+      final city = locality?.isNotEmpty == true
+          ? locality
+          : subLocality?.isNotEmpty == true
+              ? subLocality
+              : street?.isNotEmpty == true
+                  ? street
+                  : name;
+
+      return {
+        'country': country,
+        'governorate': governorate,
+        'district': district,
+        'city': city,
+      };
     } catch (e) {
       print('Error in reverse geocoding: $e');
+      return {};
     }
-    
-    // Fallback to default values if geocoding fails
-    return {
-      'country': 'Lebanon',
-      'district': 'Beirut',
-      'city': 'Beirut',
-      'governorate': null,
-    };
   }
 
   // Helper method to validate location values against available dropdown items
-  Map<String, String?> _validateLocationValues(String? country, String? district, String? city, String? governorate) {
-    // Validate country
-    final availableCountries = LocationService.getCountries();
-    String? validatedCountry = availableCountries.contains(country) ? country : null;
-    if (validatedCountry == null && availableCountries.isNotEmpty) {
-      validatedCountry = availableCountries.first;
-    }
+  Map<String, String?> _validateLocationValues(
+    String? country,
+    String? district,
+    String? city,
+    String? governorate,
+  ) {
+    final countries = LocationService.getCountries();
+    String? validatedCountry = _matchLocationValue(country, countries);
 
-    // Validate district/governorate
-    String? validatedDistrict;
-    if (validatedCountry != null) {
-      final availableDistricts = LocationService.getGovernorates(validatedCountry);
-      validatedDistrict = availableDistricts.contains(district) ? district : null;
-      if (validatedDistrict == null && availableDistricts.isNotEmpty) {
-        validatedDistrict = availableDistricts.first;
-      }
-    }
+    final bool usesGovernorateStructure =
+        validatedCountry != null && LocationService.usesGovernorateStructure(validatedCountry);
 
-    // Validate city
-    String? validatedCity;
-    if (validatedCountry != null && validatedDistrict != null) {
-      final availableCities = LocationService.getDistrictsByGovernorate(validatedCountry, validatedDistrict);
-      validatedCity = availableCities.contains(city) ? city : null;
-      if (validatedCity == null && availableCities.isNotEmpty) {
-        validatedCity = availableCities.first;
-      }
-    }
+    final List<String> firstLevelOptions = validatedCountry == null
+        ? const []
+        : (usesGovernorateStructure
+            ? LocationService.getGovernorates(validatedCountry)
+            : LocationService.getDistricts(validatedCountry));
+    String? validatedDistrict = _matchLocationValue(district, firstLevelOptions);
 
-    // Validate governorate/street
-    String? validatedGovernorate;
-    if (validatedCountry != null && validatedDistrict != null && validatedCity != null) {
-      final bool usesGovernorateStructure = LocationService.usesGovernorateStructure(validatedCountry);
-      final List<String> availableGovernorates = usesGovernorateStructure
-          ? LocationService.getStreetsByGovernorate(validatedCountry, validatedDistrict, validatedCity)
-          : LocationService.getGovernoratesLegacy(validatedCountry, validatedDistrict, validatedCity);
-      if (availableGovernorates.contains(governorate)) {
-        validatedGovernorate = governorate;
-      } else if (availableGovernorates.isNotEmpty) {
-        validatedGovernorate = availableGovernorates.first;
-      }
-    }
+    final List<String> secondLevelOptions = (validatedCountry != null && validatedDistrict != null)
+        ? (usesGovernorateStructure
+            ? LocationService.getDistrictsByGovernorate(validatedCountry, validatedDistrict)
+            : LocationService.getCities(validatedCountry, validatedDistrict))
+        : const [];
+    String? validatedCity = _matchLocationValue(city, secondLevelOptions);
+
+    final List<String> thirdLevelOptions =
+        (validatedCountry != null && validatedDistrict != null && validatedCity != null)
+            ? (usesGovernorateStructure
+                ? LocationService.getStreetsByGovernorate(validatedCountry, validatedDistrict, validatedCity)
+                : LocationService.getGovernoratesLegacy(validatedCountry, validatedDistrict, validatedCity))
+            : const [];
+    String? validatedGovernorate = _matchLocationValue(governorate, thirdLevelOptions);
 
     return {
       'country': validatedCountry,
@@ -3795,8 +3728,8 @@ class _AddNewDialogState extends State<AddNewDialog> {
                   isExpanded: true,
                   decoration: InputDecoration(
                     hintText: _selectedCountry != null && LocationService.usesGovernorateStructure(_selectedCountry!)
-                        ? 'Select Street/Area'
-                        : 'Select Governorate',
+                        ? 'Select City'
+                        : 'Select Area/Street',
                     hintStyle: TextStyle(color: Colors.grey[400]),
                     border: UnderlineInputBorder(
                       borderSide: BorderSide(color: Colors.grey[300]!),

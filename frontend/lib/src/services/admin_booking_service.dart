@@ -94,7 +94,8 @@ class AdminBookingService {
                 // Merge the data for the Booking.fromJson method
                 final bookingJson = Map<String, dynamic>.from(bookingData);
                 bookingJson['userName'] = userData['fullName'];
-                bookingJson['serviceProviderName'] = serviceProviderData['fullName'];
+                // Backend returns 'name' not 'fullName' for service provider
+                bookingJson['serviceProviderName'] = serviceProviderData['name'] ?? serviceProviderData['fullName'] ?? serviceProviderData['businessName'];
                 
                 return bookingJson;
               }).toList();

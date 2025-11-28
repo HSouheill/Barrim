@@ -13,6 +13,13 @@ class Review {
   // Additional fields that might be populated
   final String? userName;
   final String? serviceProviderName;
+  final String? reply; // Reply from service provider
+  final String? userEmail;
+  final String? userPhone;
+  final String? serviceProviderEmail;
+  final String? serviceProviderPhone;
+  final String? companyBranchName;
+  final String? wholesalerBranchName;
 
   Review({
     required this.id,
@@ -27,6 +34,13 @@ class Review {
     required this.updatedAt,
     this.userName,
     this.serviceProviderName,
+    this.reply,
+    this.userEmail,
+    this.userPhone,
+    this.serviceProviderEmail,
+    this.serviceProviderPhone,
+    this.companyBranchName,
+    this.wholesalerBranchName,
   });
 
   factory Review.fromJson(Map<String, dynamic> json) {
@@ -47,6 +61,13 @@ class Review {
           : DateTime.now(),
       userName: json['userName'],
       serviceProviderName: json['serviceProviderName'],
+      reply: json['reply'],
+      userEmail: json['userEmail'],
+      userPhone: json['userPhone'],
+      serviceProviderEmail: json['serviceProviderEmail'],
+      serviceProviderPhone: json['serviceProviderPhone'],
+      companyBranchName: json['companyBranchName'],
+      wholesalerBranchName: json['wholesalerBranchName'],
     );
   }
 
@@ -64,6 +85,13 @@ class Review {
       'updatedAt': updatedAt.toIso8601String(),
       'userName': userName,
       'serviceProviderName': serviceProviderName,
+      'reply': reply,
+      'userEmail': userEmail,
+      'userPhone': userPhone,
+      'serviceProviderEmail': serviceProviderEmail,
+      'serviceProviderPhone': serviceProviderPhone,
+      'companyBranchName': companyBranchName,
+      'wholesalerBranchName': wholesalerBranchName,
     };
   }
 
@@ -80,6 +108,13 @@ class Review {
     DateTime? updatedAt,
     String? userName,
     String? serviceProviderName,
+    String? reply,
+    String? userEmail,
+    String? userPhone,
+    String? serviceProviderEmail,
+    String? serviceProviderPhone,
+    String? companyBranchName,
+    String? wholesalerBranchName,
   }) {
     return Review(
       id: id ?? this.id,
@@ -94,6 +129,13 @@ class Review {
       updatedAt: updatedAt ?? this.updatedAt,
       userName: userName ?? this.userName,
       serviceProviderName: serviceProviderName ?? this.serviceProviderName,
+      reply: reply ?? this.reply,
+      userEmail: userEmail ?? this.userEmail,
+      userPhone: userPhone ?? this.userPhone,
+      serviceProviderEmail: serviceProviderEmail ?? this.serviceProviderEmail,
+      serviceProviderPhone: serviceProviderPhone ?? this.serviceProviderPhone,
+      companyBranchName: companyBranchName ?? this.companyBranchName,
+      wholesalerBranchName: wholesalerBranchName ?? this.wholesalerBranchName,
     );
   }
 }

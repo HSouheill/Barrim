@@ -32,26 +32,52 @@ class Booking {
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
+    // Helper function to parse DateTime safely
+    DateTime? _parseDateTime(dynamic value) {
+      if (value == null) return null;
+      if (value is DateTime) return value;
+      try {
+        final str = value.toString();
+        // Handle ISO 8601 format
+        if (str.contains('T') || str.contains('Z')) {
+          return DateTime.parse(str);
+        }
+        // Handle MongoDB date format
+        if (value is Map && value['\$date'] != null) {
+          return DateTime.fromMillisecondsSinceEpoch(value['\$date'] as int);
+        }
+        // Try parsing as string
+        return DateTime.parse(str);
+      } catch (e) {
+        print('Error parsing DateTime: $value, error: $e');
+        return null;
+      }
+    }
+    
+    // Helper function to extract string from ObjectID or value
+    String _extractString(dynamic value, String defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is String) return value;
+      if (value is Map) {
+        return value['\$oid']?.toString() ?? value.toString();
+      }
+      return value.toString();
+    }
+    
     return Booking(
-      id: json['_id'] ?? json['id'] ?? '',
-      userId: json['userId'] ?? '',
-      serviceProviderId: json['serviceProviderId'] ?? '',
-      serviceId: json['serviceId'] ?? '',
-      bookingDate: json['bookingDate'] != null 
-          ? DateTime.parse(json['bookingDate'].toString())
-          : DateTime.now(),
-      status: json['status'] ?? 'pending',
+      id: _extractString(json['_id'] ?? json['id'], ''),
+      userId: _extractString(json['userId'], ''),
+      serviceProviderId: _extractString(json['serviceProviderId'], ''),
+      serviceId: _extractString(json['serviceId'] ?? '', ''), // Default to empty string if missing
+      bookingDate: _parseDateTime(json['bookingDate']) ?? DateTime.now(),
+      status: json['status']?.toString() ?? 'pending',
       amount: (json['amount'] ?? 0.0).toDouble(),
-      notes: json['notes'],
-      createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt'].toString())
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null 
-          ? DateTime.parse(json['updatedAt'].toString())
-          : DateTime.now(),
-      userName: json['userName'],
-      serviceProviderName: json['serviceProviderName'],
-      serviceName: json['serviceName'],
+      notes: json['notes']?.toString() ?? json['details']?.toString(), // Handle 'details' field as well
+      createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
+      updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
+      userName: json['userName']?.toString(),
+      serviceProviderName: json['serviceProviderName']?.toString(),
+      serviceName: json['serviceName']?.toString(),
     );
   }
 

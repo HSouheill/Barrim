@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'api_constant.dart';
 import 'api_services.dart';
 
-class AdminReviewService {
+class AdminBranchCommentService {
   final String baseUrl;
 
-  AdminReviewService({required this.baseUrl});
+  AdminBranchCommentService({required this.baseUrl});
 
   String get secureBaseUrl {
     if (baseUrl.startsWith('https://')) {
@@ -16,15 +16,13 @@ class AdminReviewService {
     return 'https://$baseUrl';
   }
 
-
-  // Get all reviews for admin with pagination and filtering
-  Future<Map<String, dynamic>> getAllReviewsForAdmin({
+  // Get all branch comments for admin with pagination and filtering
+  Future<Map<String, dynamic>> getAllBranchCommentsForAdmin({
     int page = 1,
     int limit = 20,
-    String? serviceProviderId,
-    int? rating,
-    bool? verified,
+    String? branchType, // "company", "wholesaler", or null for all
     String? hasReply, // "true", "false", or null for all
+    int? rating, // 1-5 or null for all
   }) async {
     try {
       final queryParams = <String, String>{
@@ -32,42 +30,39 @@ class AdminReviewService {
         'limit': limit.toString(),
       };
 
-      if (serviceProviderId != null && serviceProviderId.isNotEmpty) {
-        queryParams['serviceProviderId'] = serviceProviderId;
-      }
-      if (rating != null) {
-        queryParams['rating'] = rating.toString();
-      }
-      if (verified != null) {
-        queryParams['isVerified'] = verified.toString(); // Backend uses isVerified
+      if (branchType != null && branchType.isNotEmpty) {
+        queryParams['branchType'] = branchType;
       }
       if (hasReply != null && hasReply.isNotEmpty) {
         queryParams['hasReply'] = hasReply;
       }
+      if (rating != null) {
+        queryParams['rating'] = rating.toString();
+      }
 
-      final uri = Uri.parse('$secureBaseUrl${ApiConstants.getAllReviewsForAdmin}')
+      final uri = Uri.parse('$secureBaseUrl${ApiConstants.getAllBranchCommentsForAdmin}')
           .replace(queryParameters: queryParams);
 
-      print('Making review request to: $uri');
+      print('Making branch comments request to: $uri');
 
       final response = await ApiService.makeAuthenticatedRequest(
         'get',
         uri.toString(),
       );
 
-      print('Review response status: ${response.statusCode}');
-      print('Review response body: ${response.body}');
+      print('Branch comments response status: ${response.statusCode}');
+      print('Branch comments response body: ${response.body}');
 
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        final reviewsData = responseData['data'];
+        final commentsData = responseData['data'];
         
         // Return the enriched structure as-is so UI can access all details
         return {
           'success': true,
           'message': responseData['message'],
-          'data': reviewsData, // Pass through enriched reviews structure
+          'data': commentsData, // Pass through enriched comments structure
         };
       } else if (response.statusCode == 403) {
         return {
@@ -84,22 +79,22 @@ class AdminReviewService {
       } else {
         return {
           'success': false,
-          'message': responseData['message'] ?? 'Failed to fetch reviews',
+          'message': responseData['message'] ?? 'Failed to fetch branch comments',
           'statusCode': response.statusCode,
         };
       }
     } catch (e) {
       return {
         'success': false,
-        'message': 'Error fetching reviews: $e',
+        'message': 'Error fetching branch comments: $e',
       };
     }
   }
 
-  // Delete a review
-  Future<Map<String, dynamic>> deleteReview(String reviewId) async {
+  // Delete a branch comment
+  Future<Map<String, dynamic>> deleteBranchComment(String commentId) async {
     try {
-      final uri = Uri.parse('$secureBaseUrl${ApiConstants.deleteReview}/$reviewId');
+      final uri = Uri.parse('$secureBaseUrl${ApiConstants.deleteBranchComment}/$commentId');
 
       final response = await ApiService.makeAuthenticatedRequest(
         'delete',
@@ -112,6 +107,7 @@ class AdminReviewService {
         return {
           'success': true,
           'message': responseData['message'],
+          'data': responseData['data'],
         };
       } else if (response.statusCode == 403) {
         return {
@@ -125,18 +121,25 @@ class AdminReviewService {
           'message': 'Unauthorized: Please log in',
           'statusCode': response.statusCode,
         };
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Comment not found',
+          'statusCode': response.statusCode,
+        };
       } else {
         return {
           'success': false,
-          'message': responseData['message'] ?? 'Failed to delete review',
+          'message': responseData['message'] ?? 'Failed to delete branch comment',
           'statusCode': response.statusCode,
         };
       }
     } catch (e) {
       return {
         'success': false,
-        'message': 'Error deleting review: $e',
+        'message': 'Error deleting branch comment: $e',
       };
     }
   }
 }
+
