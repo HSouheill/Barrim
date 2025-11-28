@@ -7746,8 +7746,8 @@ func (ac *AdminController) GetAllBranchCommentsForAdmin(c echo.Context) error {
 
 	// Get filter parameters
 	branchType := c.QueryParam("branchType") // "company", "wholesaler", or empty for all
-	hasReply := c.QueryParam("hasReply")      // "true", "false", or empty for all
-	rating := c.QueryParam("rating")          // specific rating (1-5) or empty for all
+	hasReply := c.QueryParam("hasReply")     // "true", "false", or empty for all
+	rating := c.QueryParam("rating")         // specific rating (1-5) or empty for all
 
 	// Create context
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -7817,7 +7817,7 @@ func (ac *AdminController) GetAllBranchCommentsForAdmin(c echo.Context) error {
 					usersCollection.FindOne(ctx, bson.M{"_id": comment.UserID}).Decode(&user)
 
 					enrichedComment := map[string]interface{}{
-						"comment": comment,
+						"comment":    comment,
 						"branchType": "company",
 						"branch": map[string]interface{}{
 							"id":   comment.BranchID,
@@ -7847,7 +7847,7 @@ func (ac *AdminController) GetAllBranchCommentsForAdmin(c echo.Context) error {
 		// Check if wholesaler branch comments use the same collection or a different one
 		// For now, we'll check if there's a separate collection
 		wholesalerCommentsCollection := ac.DB.Collection("wholesaler_branch_comments")
-		
+
 		filter := bson.M{}
 
 		// Filter by reply status
@@ -7908,7 +7908,7 @@ func (ac *AdminController) GetAllBranchCommentsForAdmin(c echo.Context) error {
 					usersCollection.FindOne(ctx, bson.M{"_id": comment.UserID}).Decode(&user)
 
 					enrichedComment := map[string]interface{}{
-						"comment": comment,
+						"comment":    comment,
 						"branchType": "wholesaler",
 						"branch": map[string]interface{}{
 							"id":   comment.BranchID,
@@ -7997,9 +7997,97 @@ func (ac *AdminController) GetAllBranchCommentsForAdmin(c echo.Context) error {
 			},
 			"filters": map[string]interface{}{
 				"branchType": branchType,
-				"hasReply":    hasReply,
-				"rating":      rating,
+				"hasReply":   hasReply,
+				"rating":     rating,
 			},
 		},
+	})
+}
+
+// DeleteBranchCommentForAdmin allows admin to delete a branch comment (company or wholesaler)
+func (ac *AdminController) DeleteBranchCommentForAdmin(c echo.Context) error {
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
+	}
+
+	if claims.UserType != "admin" && claims.UserType != "super_admin" && claims.UserType != "manager" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins, super admins, and managers can delete branch comments",
+		})
+	}
+
+	commentID := c.Param("id")
+	if commentID == "" {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Comment ID is required",
+		})
+	}
+
+	objID, err := primitive.ObjectIDFromHex(commentID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, models.Response{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid comment ID format",
+		})
+	}
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Try to delete from company branch comments first
+	companyCommentsCollection := ac.DB.Collection("branch_comments")
+	result, err := companyCommentsCollection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error deleting comment",
+		})
+	}
+
+	// If found and deleted in company comments, return success
+	if result.DeletedCount > 0 {
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Company branch comment deleted successfully",
+			Data: map[string]interface{}{
+				"commentId": commentID,
+				"type":      "company",
+			},
+		})
+	}
+
+	// If not found in company comments, try wholesaler branch comments
+	wholesalerCommentsCollection := ac.DB.Collection("wholesaler_branch_comments")
+	result, err = wholesalerCommentsCollection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, models.Response{
+			Status:  http.StatusInternalServerError,
+			Message: "Error deleting comment",
+		})
+	}
+
+	if result.DeletedCount > 0 {
+		return c.JSON(http.StatusOK, models.Response{
+			Status:  http.StatusOK,
+			Message: "Wholesaler branch comment deleted successfully",
+			Data: map[string]interface{}{
+				"commentId": commentID,
+				"type":      "wholesaler",
+			},
+		})
+	}
+
+	// Comment not found in either collection
+	return c.JSON(http.StatusNotFound, models.Response{
+		Status:  http.StatusNotFound,
+		Message: "Comment not found",
 	})
 }

@@ -196,6 +196,7 @@ func RegisterAdminRoutes(e *echo.Echo, db *mongo.Database, hub *websocket.Hub) {
 
 	// Branch comments management routes
 	protected.GET("/branch-comments", adminController.GetAllBranchCommentsForAdmin)
+	protected.DELETE("/branch-comments/:id", adminController.DeleteBranchCommentForAdmin)
 
 	// Delete entity by ID
 	protected.DELETE("/entities/:entityType/:id", adminController.DeleteEntity)
