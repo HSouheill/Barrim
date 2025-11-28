@@ -1403,10 +1403,44 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 		}
 
 		// Get service provider information
+		// Try unified approach first: check if ServiceProviderID is a user ID
+		var serviceProviderUser models.User
 		var serviceProvider models.ServiceProvider
-		err = bc.db.Database("barrim").Collection("serviceProviders").FindOne(ctx, bson.M{"_id": booking.ServiceProviderID}).Decode(&serviceProvider)
-		if err != nil {
-			log.Printf("Error fetching service provider info for booking %s: %v", booking.ID.Hex(), err)
+		serviceProviderName := ""
+
+		err = bc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": booking.ServiceProviderID, "userType": "serviceProvider"}).Decode(&serviceProviderUser)
+		if err == nil {
+			// Found user directly (unified approach)
+			serviceProviderName = serviceProviderUser.FullName
+		} else {
+			// Try legacy approach: get service provider from serviceProviders collection
+			err = bc.db.Database("barrim").Collection("serviceProviders").FindOne(ctx, bson.M{"_id": booking.ServiceProviderID}).Decode(&serviceProvider)
+			if err == nil && serviceProvider.UserID != primitive.NilObjectID {
+				// Get the user associated with this service provider
+				err = bc.db.Database("barrim").Collection("users").FindOne(ctx, bson.M{"_id": serviceProvider.UserID}).Decode(&serviceProviderUser)
+				if err == nil {
+					serviceProviderName = serviceProviderUser.FullName
+				} else {
+					log.Printf("Error fetching service provider user info for booking %s: %v", booking.ID.Hex(), err)
+				}
+			} else if err != nil {
+				log.Printf("Error fetching service provider info for booking %s: %v", booking.ID.Hex(), err)
+			}
+		}
+
+		serviceProviderData := map[string]interface{}{
+			"id":   booking.ServiceProviderID,
+			"name": serviceProviderName,
+		}
+
+		// Add service provider details if available
+		if serviceProvider.ID != primitive.NilObjectID {
+			serviceProviderData["businessName"] = serviceProvider.BusinessName
+			serviceProviderData["email"] = serviceProvider.Email
+			serviceProviderData["phone"] = serviceProvider.Phone
+			serviceProviderData["contactPerson"] = serviceProvider.ContactPerson
+			serviceProviderData["category"] = serviceProvider.Category
+			serviceProviderData["status"] = serviceProvider.Status
 		}
 
 		enrichedBooking := map[string]interface{}{
@@ -1418,15 +1452,7 @@ func (bc *BookingController) GetAllBookingsForAdmin(c echo.Context) error {
 				"phone":    user.Phone,
 				"userType": user.UserType,
 			},
-			"serviceProvider": map[string]interface{}{
-				"id":            serviceProvider.ID,
-				"businessName":  serviceProvider.BusinessName,
-				"email":         serviceProvider.Email,
-				"phone":         serviceProvider.Phone,
-				"contactPerson": serviceProvider.ContactPerson,
-				"category":      serviceProvider.Category,
-				"status":        serviceProvider.Status,
-			},
+			"serviceProvider": serviceProviderData,
 		}
 
 		enrichedBookings = append(enrichedBookings, enrichedBooking)
