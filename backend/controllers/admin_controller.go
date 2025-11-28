@@ -7715,3 +7715,291 @@ func (ac *AdminController) GetWhishPaymentDetails(c echo.Context) error {
 		},
 	})
 }
+
+// GetAllBranchCommentsForAdmin retrieves all company and wholesaler branch comments for admin dashboard
+func (ac *AdminController) GetAllBranchCommentsForAdmin(c echo.Context) error {
+	// Check if user is admin
+	claims := middleware.GetUserFromToken(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, models.Response{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized",
+		})
+	}
+
+	if claims.UserType != "admin" && claims.UserType != "super_admin" && claims.UserType != "manager" {
+		return c.JSON(http.StatusForbidden, models.Response{
+			Status:  http.StatusForbidden,
+			Message: "Only admins, super admins, and managers can access this resource",
+		})
+	}
+
+	// Get pagination parameters
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	// Get filter parameters
+	branchType := c.QueryParam("branchType") // "company", "wholesaler", or empty for all
+	hasReply := c.QueryParam("hasReply")      // "true", "false", or empty for all
+	rating := c.QueryParam("rating")          // specific rating (1-5) or empty for all
+
+	// Create context
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get company branch comments
+	var companyComments []map[string]interface{}
+	if branchType == "" || branchType == "company" {
+		companyCommentsCollection := ac.DB.Collection("branch_comments")
+		filter := bson.M{}
+
+		// Filter by reply status
+		if hasReply == "true" {
+			filter["replies"] = bson.M{"$exists": true, "$ne": bson.A{}}
+		} else if hasReply == "false" {
+			filter["$or"] = []bson.M{
+				{"replies": bson.M{"$exists": false}},
+				{"replies": bson.A{}},
+			}
+		}
+
+		// Filter by rating
+		if rating != "" {
+			ratingInt, err := strconv.Atoi(rating)
+			if err == nil && ratingInt >= 1 && ratingInt <= 5 {
+				filter["rating"] = ratingInt
+			}
+		}
+
+		// Calculate skip for pagination
+		skip := (page - 1) * limit
+
+		findOptions := options.Find().
+			SetSort(bson.D{{Key: "createdAt", Value: -1}}).
+			SetSkip(int64(skip)).
+			SetLimit(int64(limit))
+
+		cursor, err := companyCommentsCollection.Find(ctx, filter, findOptions)
+		if err == nil {
+			defer cursor.Close(ctx)
+
+			var comments []models.BranchComment
+			if err := cursor.All(ctx, &comments); err == nil {
+				// Enrich comments with branch and company information
+				for _, comment := range comments {
+					// Find which company this branch belongs to
+					companiesCollection := ac.DB.Collection("companies")
+					var company models.Company
+					var branchName string
+					var companyName string
+
+					err := companiesCollection.FindOne(ctx, bson.M{"branches._id": comment.BranchID}).Decode(&company)
+					if err == nil {
+						companyName = company.BusinessName
+						// Find the specific branch
+						for _, branch := range company.Branches {
+							if branch.ID == comment.BranchID {
+								branchName = branch.Name
+								break
+							}
+						}
+					}
+
+					// Get user information
+					var user models.User
+					usersCollection := ac.DB.Collection("users")
+					usersCollection.FindOne(ctx, bson.M{"_id": comment.UserID}).Decode(&user)
+
+					enrichedComment := map[string]interface{}{
+						"comment": comment,
+						"branchType": "company",
+						"branch": map[string]interface{}{
+							"id":   comment.BranchID,
+							"name": branchName,
+						},
+						"company": map[string]interface{}{
+							"id":   company.ID,
+							"name": companyName,
+						},
+						"user": map[string]interface{}{
+							"id":       user.ID,
+							"fullName": user.FullName,
+							"email":    user.Email,
+							"phone":    user.Phone,
+						},
+					}
+
+					companyComments = append(companyComments, enrichedComment)
+				}
+			}
+		}
+	}
+
+	// Get wholesaler branch comments (if they exist in a separate collection)
+	var wholesalerComments []map[string]interface{}
+	if branchType == "" || branchType == "wholesaler" {
+		// Check if wholesaler branch comments use the same collection or a different one
+		// For now, we'll check if there's a separate collection
+		wholesalerCommentsCollection := ac.DB.Collection("wholesaler_branch_comments")
+		
+		filter := bson.M{}
+
+		// Filter by reply status
+		if hasReply == "true" {
+			filter["replies"] = bson.M{"$exists": true, "$ne": bson.A{}}
+		} else if hasReply == "false" {
+			filter["$or"] = []bson.M{
+				{"replies": bson.M{"$exists": false}},
+				{"replies": bson.A{}},
+			}
+		}
+
+		// Filter by rating
+		if rating != "" {
+			ratingInt, err := strconv.Atoi(rating)
+			if err == nil && ratingInt >= 1 && ratingInt <= 5 {
+				filter["rating"] = ratingInt
+			}
+		}
+
+		// Calculate skip for pagination
+		skip := (page - 1) * limit
+
+		findOptions := options.Find().
+			SetSort(bson.D{{Key: "createdAt", Value: -1}}).
+			SetSkip(int64(skip)).
+			SetLimit(int64(limit))
+
+		cursor, err := wholesalerCommentsCollection.Find(ctx, filter, findOptions)
+		if err == nil {
+			defer cursor.Close(ctx)
+
+			var comments []models.BranchComment
+			if err := cursor.All(ctx, &comments); err == nil {
+				// Enrich comments with branch and wholesaler information
+				for _, comment := range comments {
+					// Find which wholesaler this branch belongs to
+					wholesalersCollection := ac.DB.Collection("wholesalers")
+					var wholesaler models.Wholesaler
+					var branchName string
+					var wholesalerName string
+
+					err := wholesalersCollection.FindOne(ctx, bson.M{"branches._id": comment.BranchID}).Decode(&wholesaler)
+					if err == nil {
+						wholesalerName = wholesaler.BusinessName
+						// Find the specific branch
+						for _, branch := range wholesaler.Branches {
+							if branch.ID == comment.BranchID {
+								branchName = branch.Name
+								break
+							}
+						}
+					}
+
+					// Get user information
+					var user models.User
+					usersCollection := ac.DB.Collection("users")
+					usersCollection.FindOne(ctx, bson.M{"_id": comment.UserID}).Decode(&user)
+
+					enrichedComment := map[string]interface{}{
+						"comment": comment,
+						"branchType": "wholesaler",
+						"branch": map[string]interface{}{
+							"id":   comment.BranchID,
+							"name": branchName,
+						},
+						"wholesaler": map[string]interface{}{
+							"id":   wholesaler.ID,
+							"name": wholesalerName,
+						},
+						"user": map[string]interface{}{
+							"id":       user.ID,
+							"fullName": user.FullName,
+							"email":    user.Email,
+							"phone":    user.Phone,
+						},
+					}
+
+					wholesalerComments = append(wholesalerComments, enrichedComment)
+				}
+			}
+		}
+	}
+
+	// Combine and sort all comments by creation date
+	allComments := append(companyComments, wholesalerComments...)
+
+	// Sort by createdAt (most recent first)
+	// Since we're already sorting in the queries, we just need to merge them
+	// For simplicity, we'll keep them separate in the response
+
+	// Get total counts
+	companyCommentsCollection := ac.DB.Collection("branch_comments")
+	companyFilter := bson.M{}
+	if hasReply == "true" {
+		companyFilter["replies"] = bson.M{"$exists": true, "$ne": bson.A{}}
+	} else if hasReply == "false" {
+		companyFilter["$or"] = []bson.M{
+			{"replies": bson.M{"$exists": false}},
+			{"replies": bson.A{}},
+		}
+	}
+	if rating != "" {
+		ratingInt, err := strconv.Atoi(rating)
+		if err == nil && ratingInt >= 1 && ratingInt <= 5 {
+			companyFilter["rating"] = ratingInt
+		}
+	}
+
+	totalCompanyComments, _ := companyCommentsCollection.CountDocuments(ctx, companyFilter)
+
+	wholesalerCommentsCollection := ac.DB.Collection("wholesaler_branch_comments")
+	wholesalerFilter := bson.M{}
+	if hasReply == "true" {
+		wholesalerFilter["replies"] = bson.M{"$exists": true, "$ne": bson.A{}}
+	} else if hasReply == "false" {
+		wholesalerFilter["$or"] = []bson.M{
+			{"replies": bson.M{"$exists": false}},
+			{"replies": bson.A{}},
+		}
+	}
+	if rating != "" {
+		ratingInt, err := strconv.Atoi(rating)
+		if err == nil && ratingInt >= 1 && ratingInt <= 5 {
+			wholesalerFilter["rating"] = ratingInt
+		}
+	}
+
+	totalWholesalerComments, _ := wholesalerCommentsCollection.CountDocuments(ctx, wholesalerFilter)
+	totalCount := totalCompanyComments + totalWholesalerComments
+
+	return c.JSON(http.StatusOK, models.Response{
+		Status:  http.StatusOK,
+		Message: "Branch comments retrieved successfully",
+		Data: map[string]interface{}{
+			"comments": allComments,
+			"pagination": map[string]interface{}{
+				"page":       page,
+				"limit":      limit,
+				"totalCount": totalCount,
+				"totalPages": int(math.Ceil(float64(totalCount) / float64(limit))),
+			},
+			"statistics": map[string]interface{}{
+				"totalCompanyComments":    totalCompanyComments,
+				"totalWholesalerComments": totalWholesalerComments,
+				"totalComments":           totalCount,
+			},
+			"filters": map[string]interface{}{
+				"branchType": branchType,
+				"hasReply":    hasReply,
+				"rating":      rating,
+			},
+		},
+	})
+}
