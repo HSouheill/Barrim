@@ -777,11 +777,41 @@ func (rc *ReviewController) GetAllReviewsAndRepliesForAdmin(c echo.Context) erro
 			log.Printf("Error fetching user info for review %s: %v", review.ID.Hex(), err)
 		}
 
+		// Get service provider name (use FullName from user)
+		serviceProviderName := serviceProvider.FullName
+
+		// Get company branch name if service provider is associated with a company
+		var companyBranchName string
+		if serviceProvider.CompanyID != nil {
+			var company models.Company
+			err := rc.db.Database("barrim").Collection("companies").FindOne(ctx, bson.M{"_id": *serviceProvider.CompanyID}).Decode(&company)
+			if err == nil && len(company.Branches) > 0 {
+				// Get the first branch name (or you could get all branch names)
+				companyBranchName = company.Branches[0].Name
+			} else if err != nil {
+				log.Printf("Error fetching company info for review %s: %v", review.ID.Hex(), err)
+			}
+		}
+
+		// Get wholesaler branch name if service provider is associated with a wholesaler
+		var wholesalerBranchName string
+		if serviceProvider.WholesalerID != nil {
+			var wholesaler models.Wholesaler
+			err := rc.db.Database("barrim").Collection("wholesalers").FindOne(ctx, bson.M{"_id": *serviceProvider.WholesalerID}).Decode(&wholesaler)
+			if err == nil && len(wholesaler.Branches) > 0 {
+				// Get the first branch name (or you could get all branch names)
+				wholesalerBranchName = wholesaler.Branches[0].Name
+			} else if err != nil {
+				log.Printf("Error fetching wholesaler info for review %s: %v", review.ID.Hex(), err)
+			}
+		}
+
 		enrichedReview := map[string]interface{}{
 			"review": review,
 			"serviceProvider": map[string]interface{}{
 				"id":       serviceProvider.ID,
 				"fullName": serviceProvider.FullName,
+				"name":     serviceProviderName,
 				"email":    serviceProvider.Email,
 				"phone":    serviceProvider.Phone,
 			},
@@ -791,6 +821,8 @@ func (rc *ReviewController) GetAllReviewsAndRepliesForAdmin(c echo.Context) erro
 				"email":    user.Email,
 				"phone":    user.Phone,
 			},
+			"companyBranchName":    companyBranchName,
+			"wholesalerBranchName": wholesalerBranchName,
 		}
 
 		enrichedReviews = append(enrichedReviews, enrichedReview)
